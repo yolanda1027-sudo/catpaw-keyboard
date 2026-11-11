@@ -106,9 +106,54 @@ class CatKeyboardView(
         val kr = pressed ?: return@Runnable
         longFired = true
         haptics.perform(this, prefs)
-        kr.key.sub?.let { previewLabel = it }
-        listener?.onKey(kr.key, true)
+        val opts = popupOptionsFor(kr.key)
+        if (opts != null) {
+            // 跳出長按選單，手指左右滑來選，放開就打出來
+            popup = opts
+            popupSel = opts.default
+            popupRect = popupRectFor(kr, opts)
+            previewLabel = null
+        } else {
+            listener?.onKey(kr.key, true)
+        }
         invalidate()
+    }
+
+    // ---------- 長按選單（像 Google 注音：O ㄟ o） ----------
+
+    /** @param main 選項裡哪一個是「原本的注音」（選它就跟一般點一下一樣） */
+    private class PopupOptions(val items: List<String>, val default: Int, val main: Int)
+
+    private var popup: PopupOptions? = null
+    private var popupSel = 0
+    private var popupRect = RectF()
+
+    private fun popupOptionsFor(key: Key): PopupOptions? {
+        val sub = key.sub ?: return null
+        if (key.act != Act.ZHUYIN && key.act != Act.TEXT) return null
+        return if (sub.length == 1 && sub[0].isLetter() && sub[0].code < 128) {
+            // 英文字母：大寫、注音、小寫，預設停在注音
+            PopupOptions(listOf(sub.uppercase(), key.label, sub.lowercase()), default = 1, main = 1)
+        } else {
+            // 數字、符號：預設停在數字／符號（長按放開＝打數字，跟以前一樣）
+            PopupOptions(listOf(sub, key.label), default = 0, main = 1)
+        }
+    }
+
+    private fun popupRectFor(kr: KeyRect, o: PopupOptions): RectF {
+        val optW = kr.rect.width()
+        val w = optW * o.items.size
+        // 預設的選項剛好在按鍵正上方
+        var left = kr.rect.centerX() - optW * (o.default + 0.5f)
+        left = left.coerceIn(0f, max(0f, width - w))
+        val bottom = kr.rect.top + keyH * 0.45f
+        val top = max(-floatH, bottom - keyH * 1.15f)
+        return RectF(left, top, left + w, top + keyH * 1.15f)
+    }
+
+    private fun drawPopup(c: Canvas) {
+        val o = popup ?: return
+        theme.drawPopup(c, popupRect, o.items, popupSel, keyH)
     }
     private val repeatRunnable = object : Runnable {
         override fun run() {
@@ -320,6 +365,7 @@ class CatKeyboardView(
     }
 
     private fun drawPreview(c: Canvas, w: Float) {
+        if (popup != null) { drawPopup(c); return }
         val kr = pressed ?: return
         if (!prefs.preview) return
         val label = previewLabel ?: return
@@ -359,7 +405,7 @@ class CatKeyboardView(
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 // 兩隻手指快速輪流打：前一顆還沒放開就先送出
-                if (pressed != null) release(fire = !longFired)
+                if (pressed != null) release(cancel = false)
                 val i = e.actionIndex
                 val x = e.getX(i)
                 val y = e.getY(i)
@@ -372,9 +418,22 @@ class CatKeyboardView(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                if (e.getPointerId(e.actionIndex) == pressedPointer) release(fire = !longFired)
+                if (e.getPointerId(e.actionIndex) == pressedPointer) release(cancel = false)
             }
-            MotionEvent.ACTION_CANCEL -> release(fire = false)
+            MotionEvent.ACTION_MOVE -> {
+                val o = popup
+                val i = e.findPointerIndex(pressedPointer)
+                if (o != null && i >= 0) {
+                    val optW = popupRect.width() / o.items.size
+                    val sel = ((e.getX(i) - popupRect.left) / optW).toInt().coerceIn(0, o.items.size - 1)
+                    if (sel != popupSel) {
+                        popupSel = sel
+                        haptics.perform(this, prefs)
+                        invalidate()
+                    }
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> release(cancel = true)
         }
         return true
     }
@@ -470,15 +529,25 @@ class CatKeyboardView(
         invalidate()
     }
 
-    private fun release(fire: Boolean) {
+    private fun release(cancel: Boolean) {
         handler.removeCallbacks(longPressRunnable)
         handler.removeCallbacks(repeatRunnable)
         val kr = pressed
+        val o = popup
         pressed = null
         pressedPointer = -1
         previewLabel = null
+        popup = null
         invalidate()
-        if (fire && kr != null) listener?.onKey(kr.key, false)
+        if (cancel || kr == null) return
+        when {
+            o != null -> {
+                // 長按選單：選原本的注音＝一般點一下；選其他的就直接打出那個字
+                if (popupSel == o.main) listener?.onKey(kr.key, false)
+                else listener?.onKey(Key(o.items[popupSel], Act.TEXT), false)
+            }
+            !longFired -> listener?.onKey(kr.key, false)
+        }
     }
 
     override fun onDetachedFromWindow() {

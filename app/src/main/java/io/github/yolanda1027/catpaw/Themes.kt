@@ -79,6 +79,26 @@ abstract class KbTheme(protected val dp: Float) {
         drawTextLeft(c, s, 10 * dp, h / 2 + 1 * dp, size, readingText)
     }
 
+    /** 長按選單的配色 */
+    open val popupBg get() = previewBg
+    open val popupText get() = previewText
+    open val popupSelBg = Color.parseColor("#80CBC4")
+    open val popupSelText = Color.WHITE
+
+    /** 長按選單：一排選項，選到的那格換顏色 */
+    open fun drawPopup(c: Canvas, r: RectF, items: List<String>, sel: Int, rowH: Float) {
+        val optW = r.width() / items.size
+        fill.shader = null
+        fill.color = popupBg
+        c.drawRoundRect(r, 8 * dp, 8 * dp, fill)
+        val s = RectF(r.left + optW * sel, r.top, r.left + optW * (sel + 1), r.bottom)
+        fill.color = popupSelBg
+        c.drawRoundRect(s, 8 * dp, 8 * dp, fill)
+        items.forEachIndexed { i, t ->
+            drawText(c, t, r.left + optW * (i + 0.5f), r.centerY(), rowH * 0.5f, if (i == sel) popupSelText else popupText)
+        }
+    }
+
     open fun drawPreview(c: Canvas, r: RectF, label: String) {
         fill.color = previewBg
         c.drawRoundRect(r, 8 * dp, 8 * dp, fill)
@@ -241,6 +261,8 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
     private val pad = Color.parseColor("#FFD3DC")
     override val readingText = Color.parseColor("#6B4A3A")
     override val readingBorder = Color.parseColor("#FFB3C4")
+    override val popupBg get() = Color.WHITE
+    override val popupSelBg = Color.parseColor("#FF9EB5")
     private val padPressed = Color.parseColor("#FFB3C4")
     private val bean = Color.parseColor("#FFB3C4")
     private val beanPressed = Color.parseColor("#FF8FA9")
@@ -337,6 +359,15 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
     private val shadow = Color.parseColor("#E7A0B5")
     override val readingText = Color.parseColor("#E0688E")
     override val readingBorder = Color.parseColor("#EC8FA9")
+    override val popupSelBg = Color.parseColor("#F4A3BA")
+
+    override fun drawPopup(c: Canvas, r: RectF, items: List<String>, sel: Int, rowH: Float) {
+        super.drawPopup(c, r, items, sel, rowH)
+        stroke.color = border
+        stroke.strokeWidth = 2.5f * dp
+        stroke.pathEffect = null
+        c.drawRoundRect(r, 8 * dp, 8 * dp, stroke)
+    }
     private val white = Color.parseColor("#FFFBFC")
     private val pinkFill = Color.parseColor("#FAC9D6")
     private val pressedFill = Color.parseColor("#F7AFC3")

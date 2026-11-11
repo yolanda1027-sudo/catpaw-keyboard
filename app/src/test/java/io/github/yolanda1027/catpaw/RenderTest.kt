@@ -27,6 +27,7 @@ class RenderTest {
         theme: String, layout: List<List<Key>>, name: String,
         pressAt: Pair<Float, Float>? = null, composing: String = "",
         candidates: List<String> = emptyList(), expand: Boolean = false, reading: String = "",
+        longPress: Boolean = false, slideToX: Float? = null,
     ) {
         val ctx = RuntimeEnvironment.getApplication()
         val prefs = Prefs(ctx)
@@ -48,6 +49,12 @@ class RenderTest {
         if (pressAt != null) {
             val t = SystemClock.uptimeMillis()
             v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, pressAt.first, pressAt.second, 0))
+            if (longPress) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper(600, java.util.concurrent.TimeUnit.MILLISECONDS)
+            }
+            if (slideToX != null) {
+                v.dispatchTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_MOVE, slideToX, pressAt.second, 0))
+            }
         }
         val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
         v.draw(Canvas(bmp))
@@ -66,6 +73,16 @@ class RenderTest {
             if (c == ' ') e.typeTone("") else if (c == 'ˋ') e.typeTone("ˋ") else e.typeSymbol(c)
         }
         e.candidates().map { it.text }
+    }
+
+    @Test
+    fun renderLongPressPopup() {
+        // ㄟ 在第二排第 9 顆；420dpi 下：透明區 89px + 上方列 105px + 留白 16px + 1.5 排 × 118px
+        val y = 89f + 105f + 16f + 118f * 1.5f
+        for (t in listOf("classic", "stitch")) {
+            render(t, Layouts.ZHUYIN, "$t-popup", pressAt = 918f to y, longPress = true, slideToX = 810f)
+            render(t, Layouts.ZHUYIN, "$t-popup-digit", pressAt = 54f to y - 118f, longPress = true)
+        }
     }
 
     @Test
