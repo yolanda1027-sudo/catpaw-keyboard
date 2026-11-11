@@ -352,7 +352,8 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
     override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
         val n = seed(key, r)
         val sink = if (pressed) 1.5f * dp else 0f // 按下去會往下沉一點
-        val box = RectF(r.left + 3f * dp, r.top + 3.5f * dp + sink, r.right - 3f * dp, r.bottom - 5f * dp + sink)
+        // 鍵與鍵之間只留一點點縫，讓按鍵本體盡量大
+        val box = RectF(r.left + 1.5f * dp, r.top + 2f * dp + sink, r.right - 1.5f * dp, r.bottom - 3.5f * dp + sink)
         val rad = 9 * dp
 
         val solid = key.style == Style.FUNC || key.style == Style.ENTER || (key.style == Style.CHAR && n % 3 == 0)
@@ -378,12 +379,12 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
         // 立體陰影 → 底色 → 外框
         if (!pressed) {
             fill.color = shadow
-            c.drawRoundRect(RectF(box.left, box.top + 2.5f * dp, box.right, box.bottom + 2.5f * dp), rad, rad, fill)
+            c.drawRoundRect(RectF(box.left, box.top + 2f * dp, box.right, box.bottom + 2f * dp), rad, rad, fill)
         }
         fill.color = face
         c.drawRoundRect(box, rad, rad, fill)
         stroke.color = border
-        stroke.strokeWidth = 2.5f * dp
+        stroke.strokeWidth = 2f * dp
         stroke.pathEffect = null
         c.drawRoundRect(box, rad, rad, stroke)
 
@@ -391,7 +392,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
         if (!solid) {
             stroke.pathEffect = dash
             stroke.strokeWidth = 1.4f * dp
-            val inner = RectF(box.left + 4 * dp, box.top + 4 * dp, box.right - 4 * dp, box.bottom - 4 * dp)
+            val inner = RectF(box.left + 3 * dp, box.top + 3 * dp, box.right - 3 * dp, box.bottom - 3 * dp)
             c.drawRoundRect(inner, rad * 0.6f, rad * 0.6f, stroke)
             stroke.pathEffect = null
         }
@@ -399,16 +400,16 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
         val content = RectF(box)
         when (key.style) {
             Style.CHAR -> {
-                // 字縮小一點、往中間收，才不會壓到縫線
+                // 字的大小跟經典版一樣
                 val sub = key.sub
                 if (sub != null && key.act == Act.ZHUYIN) {
-                    drawText(c, label, content.centerX(), content.centerY() - rowH * 0.1f, rowH * 0.3f, text)
-                    drawText(c, sub, content.centerX(), content.centerY() + rowH * 0.15f, rowH * 0.17f, if (solid) text else textDim, bold = true)
+                    drawText(c, label, content.centerX(), content.centerY() - rowH * 0.13f, rowH * 0.38f, text)
+                    drawText(c, sub, content.centerX(), content.centerY() + rowH * 0.18f, rowH * 0.22f, if (solid) text else textDim, bold = true)
                 } else {
-                    drawLabels(c, key, label, content.centerX(), content.centerY(), rowH * 0.8f, text, textDim)
+                    drawLabels(c, key, label, content.centerX(), content.centerY(), rowH, text, textDim)
                 }
             }
-            Style.FUNC, Style.ENTER -> drawFuncContent(c, key, label, content, shift, rowH * 0.9f, Color.WHITE)
+            Style.FUNC, Style.ENTER -> drawFuncContent(c, key, label, content, shift, rowH, Color.WHITE)
             Style.SPACE -> {
                 drawText(c, label, content.centerX(), content.centerY(), rowH * 0.22f, textDim)
                 drawFish(c, content.left + content.width() * 0.18f, content.centerY() - 3 * dp, 7 * dp, false)
