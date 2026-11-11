@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 貓爪圖示：一個大肉球 + 四個小肉球 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FF8FA9"
+        android:pathData="M39,64 a15,12 0 1,0 30,0 a15,12 0 1,0 -30,0 Z" />
+    <path android:fillColor="#FF8FA9"
+        android:pathData="M31,47 a6,7 0 1,0 12,0 a6,7 0 1,0 -12,0 Z" />
+    <path android:fillColor="#FF8FA9"
+        android:pathData="M42,39 a6,7 0 1,0 12,0 a6,7 0 1,0 -12,0 Z" />
+    <path android:fillColor="#FF8FA9"
+        android:pathData="M54,39 a6,7 0 1,0 12,0 a6,7 0 1,0 -12,0 Z" />
+    <path android:fillColor="#FF8FA9"
+        android:pathData="M65,47 a6,7 0 1,0 12,0 a6,7 0 1,0 -12,0 Z" />
+</vector>

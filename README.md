@@ -1,0 +1,31 @@
+# 🐾 貓爪鍵盤 CatPaw Keyboard
+
+一個 Android 注音輸入法。手感照著 Google 注音輸入法做（按鍵大小、排列、微震動），外觀可以自訂，例如換成貓爪肉球。
+
+| 經典深色（Google 注音風） | 貓爪肉球（試做版） |
+|---|---|
+| ![classic](docs/classic-zhuyin.png) | ![catpaw](docs/catpaw-zhuyin.png) |
+
+## 安裝到手機
+
+1. 打開 [Releases 頁面](../../releases)，下載「最新測試版」裡的 `catpaw-keyboard.apk`
+2. 在手機上點開 APK 安裝（第一次安裝時，手機會要求你允許「安裝未知應用程式」）
+3. 打開「貓爪鍵盤」App：
+   - 按 ① 到系統設定啟用「貓爪鍵盤」
+   - 按 ② 切換成貓爪鍵盤
+4. 在 App 裡的「試打區」打字，一邊調震動和按鍵高度
+
+之後有新版本時，下載新的 APK 直接安裝，就會覆蓋更新，不用先移除舊版。
+
+## 開發進度
+
+- [x] **第一階段：手感原型**：照 Google 注音排的鍵盤、可調震動（清脆／輕點／自訂／系統）、可調按鍵高度、按鍵放大提示、長按打數字、英文／符號／表情符號鍵盤
+- [ ] **第二階段：能打中文**：接上注音引擎（libchewing），可以選字
+- [ ] **第三階段：造型自由**：用圖片自訂按鍵、按鍵動畫、多套主題
+
+## 給開發者
+
+- 每次 push，GitHub Actions 會自動建置 APK，並更新 Releases 的「最新測試版」
+- 本機建置：`./gradlew assembleDebug`
+- 畫面截圖測試：`./gradlew testDebugUnitTest`，用 Robolectric 把鍵盤畫成 PNG，存到 `app/build/renders/`
+- `keystore/catpaw-debug.jks` 是測試用的簽章，讓每次建置出來的 APK 簽章都一樣，手機才能直接覆蓋更新。這個簽章是公開的，請只安裝從這個 repo 的 Releases 下載的 APK。
