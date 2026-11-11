@@ -33,6 +33,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
+        prefs.migrate()
         haptics = Haptics(this)
         chinese = prefs.chinese
         prefs.sp.registerOnSharedPreferenceChangeListener(this)

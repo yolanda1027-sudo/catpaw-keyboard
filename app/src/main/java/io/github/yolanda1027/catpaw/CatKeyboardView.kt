@@ -54,7 +54,10 @@ class CatKeyboardView(
     private val dp = resources.displayMetrics.density
     private var theme: KbTheme = Themes.byName(prefs.theme, dp)
     private var keyH = prefs.keyHeightDp * dp
-    private val topH = 37 * dp
+    // 這些比例是照 Google 注音截圖量的：上方列 40dp，按鍵區上面留 6dp、下面留 10dp
+    private val topH = 40 * dp
+    private val padTop = 6 * dp
+    private val padBottom = 10 * dp
     private val keyRects = ArrayList<KeyRect>()
 
     private var pressed: KeyRect? = null
@@ -91,7 +94,7 @@ class CatKeyboardView(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val h = (topH + keyH * rows.size).toInt()
+        val h = (topH + padTop + keyH * rows.size + padBottom).toInt()
         setMeasuredDimension(w, h)
     }
 
@@ -106,7 +109,7 @@ class CatKeyboardView(
         rows.forEachIndexed { ri, row ->
             val total = row.sumOf { it.weight.toDouble() }.toFloat()
             val unit = w / total
-            val top = topH + ri * keyH
+            val top = topH + padTop + ri * keyH
             var x = 0f
             for (k in row) {
                 val kw = unit * k.weight
@@ -144,12 +147,17 @@ class CatKeyboardView(
             theme.drawTextLeft(c, composing, 16 * dp, topH / 2, topH * 0.5f, theme.text)
             return
         }
-        val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        fill.color = theme.tabSelected
         val selLeft = if (isChinese) 0f else tabW
-        c.drawRect(selLeft, 0f, selLeft + tabW, topH, fill)
-        theme.drawText(c, "中", tabW / 2, topH / 2, topH * 0.55f, if (isChinese) theme.text else theme.textDim)
-        theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.45f, if (isChinese) theme.textDim else theme.text)
+        theme.drawTabHighlight(c, RectF(selLeft, 0f, selLeft + tabW, topH))
+        val zhColor = if (isChinese) theme.text else theme.textDim
+        theme.drawText(c, "中", tabW / 2, topH / 2, topH * 0.52f, zhColor)
+        // 「中」右下角的小三角形（跟原版一樣）
+        val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = zhColor }
+        val tx = tabW / 2 + topH * 0.33f
+        val ty = topH / 2 + topH * 0.24f
+        val ts = topH * 0.1f
+        c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
+        theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) theme.textDim else theme.text)
         // 右邊的 ▽：收起鍵盤
         val cx = w - tabW * 0.4f
         val cy = topH / 2
@@ -205,7 +213,9 @@ class CatKeyboardView(
                 if (y < topH) {
                     onTopBarTap(x)
                 } else {
-                    keyAt(x, y)?.let { press(it, e.getPointerId(i)) }
+                    val firstTop = topH + padTop
+                    val lastBottom = firstTop + keyH * rows.size - 1f
+                    keyAt(x, y.coerceIn(firstTop, lastBottom))?.let { press(it, e.getPointerId(i)) }
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {

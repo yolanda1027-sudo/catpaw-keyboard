@@ -10,12 +10,12 @@ class Prefs(context: Context) {
 
     /** click / tick / custom / system / off */
     var hapticMode: String
-        get() = sp.getString("haptic_mode", "click") ?: "click"
+        get() = sp.getString("haptic_mode", "custom") ?: "custom"
         set(v) = sp.edit().putString("haptic_mode", v).apply()
 
     /** 震動強度 1–100 */
     var strength: Int
-        get() = sp.getInt("strength", 60)
+        get() = sp.getInt("strength", 70)
         set(v) = sp.edit().putInt("strength", v).apply()
 
     /** 自訂模式的震動長度（毫秒） */
@@ -28,7 +28,7 @@ class Prefs(context: Context) {
         get() = sp.getInt("key_height_dp", 45)
         set(v) = sp.edit().putInt("key_height_dp", v).apply()
 
-    /** classic / catpaw */
+    /** classic / catpaw / stitch */
     var theme: String
         get() = sp.getString("theme", "classic") ?: "classic"
         set(v) = sp.edit().putString("theme", v).apply()
@@ -41,6 +41,16 @@ class Prefs(context: Context) {
     var preview: Boolean
         get() = sp.getBoolean("preview", true)
         set(v) = sp.edit().putBoolean("preview", v).apply()
+
+    /**
+     * 第 2 版重新照原版量了字的比例，按鍵高度回到 45dp 才會跟原版一樣高。
+     * 舊版為了「按鍵看起來太小」而調高的設定，在這裡重設一次。
+     */
+    fun migrate() {
+        if (sp.getInt("layout_version", 1) < 2) {
+            sp.edit().putInt("key_height_dp", 45).putInt("layout_version", 2).apply()
+        }
+    }
 
     /** 上次用的是中文還是英文 */
     var chinese: Boolean

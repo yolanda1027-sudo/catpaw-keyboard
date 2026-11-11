@@ -20,7 +20,7 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w384dp-h832dp-450dpi")
+@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
 class RenderTest {
 
     private fun render(theme: String, layout: List<List<Key>>, name: String, pressAt: Pair<Float, Float>? = null, composing: String = "") {
@@ -47,9 +47,9 @@ class RenderTest {
 
     @Test
     fun renderAll() {
-        for (t in listOf("classic", "catpaw")) {
+        for (t in listOf("classic", "stitch", "catpaw")) {
             render(t, Layouts.ZHUYIN, "$t-zhuyin")
-            render(t, Layouts.ZHUYIN, "$t-zhuyin-pressed", pressAt = 270f to 330f, composing = "ㄇㄠ")
+            render(t, Layouts.ZHUYIN, "$t-zhuyin-pressed", pressAt = 270f to 420f, composing = "ㄇㄠ")
             render(t, Layouts.ENGLISH, "$t-english")
             render(t, Layouts.SYMBOLS, "$t-symbols")
             render(t, Layouts.EMOJI, "$t-emoji")

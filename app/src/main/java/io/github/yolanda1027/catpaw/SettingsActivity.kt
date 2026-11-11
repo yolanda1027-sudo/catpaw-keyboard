@@ -31,6 +31,7 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        prefs.migrate()
         haptics = Haptics(this)
 
         root = LinearLayout(this).apply {
@@ -61,9 +62,9 @@ class SettingsActivity : Activity() {
 
         section("震動手感")
         val modes = listOf(
-            "click" to "清脆（推薦先試這個）",
+            "click" to "清脆",
             "tick" to "輕點（更短更輕）",
-            "custom" to "自訂長度（傳統震動）",
+            "custom" to "自訂長度（最像 Google 注音：強度 70、12 毫秒）",
             "system" to "跟隨系統設定",
             "off" to "關閉震動",
         )
@@ -79,7 +80,11 @@ class SettingsActivity : Activity() {
 
         section("外觀")
         radios(
-            listOf("classic" to "經典深色（Google 注音風）", "catpaw" to "貓爪肉球（試做版）"),
+            listOf(
+                "classic" to "經典深色（Google 注音風）",
+                "stitch" to "粉紅縫線（新！）",
+                "catpaw" to "貓爪肉球",
+            ),
             prefs.theme,
         ) { prefs.theme = it }
         slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（Google 注音約 45）") { prefs.keyHeightDp = it }

@@ -2,9 +2,13 @@
 
 一個 Android 注音輸入法。手感照著 Google 注音輸入法做（按鍵大小、排列、微震動），外觀可以自訂，例如換成貓爪肉球。
 
-| 經典深色（Google 注音風） | 貓爪肉球（試做版） |
-|---|---|
-| ![classic](docs/classic-zhuyin.png) | ![catpaw](docs/catpaw-zhuyin.png) |
+| 經典深色（Google 注音風） | 粉紅縫線 | 貓爪肉球 |
+|---|---|---|
+| ![classic](docs/classic-zhuyin.png) | ![stitch](docs/stitch-zhuyin.png) | ![catpaw](docs/catpaw-zhuyin.png) |
+
+和原版 Google 注音的比對（左：原版截圖，右：貓爪鍵盤經典版）：
+
+![compare](docs/compare-google.png)
 
 ## 安裝到手機
 
@@ -19,7 +23,8 @@
 
 ## 開發進度
 
-- [x] **第一階段：手感原型**：照 Google 注音排的鍵盤、可調震動（清脆／輕點／自訂／系統）、可調按鍵高度、按鍵放大提示、長按打數字、英文／符號／表情符號鍵盤
+- [x] **第一階段：手感原型**（v0.2：字的比例照原版重新量過，新增「粉紅縫線」主題）
+  ：照 Google 注音排的鍵盤、可調震動（清脆／輕點／自訂／系統）、可調按鍵高度、按鍵放大提示、長按打數字、英文／符號／表情符號鍵盤
 - [ ] **第二階段：能打中文**：接上注音引擎（libchewing），可以選字
 - [ ] **第三階段：造型自由**：用圖片自訂按鍵、按鍵動畫、多套主題
 
