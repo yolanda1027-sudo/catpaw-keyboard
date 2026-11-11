@@ -23,7 +23,11 @@ import java.io.File
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
 class RenderTest {
 
-    private fun render(theme: String, layout: List<List<Key>>, name: String, pressAt: Pair<Float, Float>? = null, composing: String = "") {
+    private fun render(
+        theme: String, layout: List<List<Key>>, name: String,
+        pressAt: Pair<Float, Float>? = null, composing: String = "",
+        candidates: List<String> = emptyList(), expand: Boolean = false,
+    ) {
         val ctx = RuntimeEnvironment.getApplication()
         val prefs = Prefs(ctx)
         prefs.theme = theme
@@ -31,8 +35,15 @@ class RenderTest {
         v.rows = layout
         v.isChinese = layout === Layouts.ZHUYIN
         v.composing = composing
+        v.candidates = candidates
         v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        if (expand) {
+            val t = SystemClock.uptimeMillis()
+            val x = v.measuredWidth - 40f
+            v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, 40f, 0))
+            v.dispatchTouchEvent(MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, x, 40f, 0))
+        }
         if (pressAt != null) {
             val t = SystemClock.uptimeMillis()
             v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, pressAt.first, pressAt.second, 0))
@@ -43,6 +54,25 @@ class RenderTest {
         val f = File(dir, "$name.png")
         f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         assertTrue(f.length() > 0)
+    }
+
+    private val sampleCandidates: List<String> by lazy {
+        val dict = java.io.File("src/main/assets/zhuyin.dict").inputStream().use {
+            io.github.yolanda1027.catpaw.engine.ZhuyinDict.load(it)
+        }
+        val e = io.github.yolanda1027.catpaw.engine.ZhuyinEngine(dict, io.github.yolanda1027.catpaw.engine.UserScores(null))
+        "ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ".forEach { c ->
+            if (c == ' ') e.typeTone("") else if (c == 'ˋ') e.typeTone("ˋ") else e.typeSymbol(c)
+        }
+        e.candidates().map { it.text }
+    }
+
+    @Test
+    fun renderCandidates() {
+        for (t in listOf("classic", "stitch")) {
+            render(t, Layouts.ZHUYIN, "$t-candidates", candidates = sampleCandidates)
+            render(t, Layouts.ZHUYIN, "$t-candidates-expanded", candidates = sampleCandidates, expand = true)
+        }
     }
 
     @Test

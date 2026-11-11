@@ -28,6 +28,7 @@ class CatKeyboardView(
         fun onTabChinese()
         fun onTabEnglish()
         fun onHide()
+        fun onCandidate(index: Int)
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -50,6 +51,30 @@ class CatKeyboardView(
         set(v) { field = v; invalidate() }
     var composing = ""
         set(v) { field = v; invalidate() }
+
+    /** 選字列的內容（空的時候顯示「中 / En」） */
+    var candidates: List<String> = emptyList()
+        set(v) {
+            field = v
+            candScroll = 0f
+            panelScroll = 0f
+            stripCache = null
+            panelCache = null
+            if (v.isEmpty()) expanded = false
+            invalidate()
+        }
+    private var expanded = false
+    private var candScroll = 0f
+    private var panelScroll = 0f
+    private var stripCache: List<RectF>? = null
+    private var panelCache: List<RectF>? = null
+    private val candPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    // 拖曳選字列／展開面板
+    private var dragMode = 0 // 0 = 沒有、1 = 選字列左右滑、2 = 展開面板上下滑
+    private var dragStart = 0f
+    private var dragScrollStart = 0f
+    private var dragMoved = false
 
     private val dp = resources.displayMetrics.density
     private var theme: KbTheme = Themes.byName(prefs.theme, dp)
@@ -100,6 +125,8 @@ class CatKeyboardView(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         layoutKeys()
+        stripCache = null
+        panelCache = null
     }
 
     private fun layoutKeys() {
@@ -132,6 +159,10 @@ class CatKeyboardView(
         val w = width.toFloat()
         theme.drawBackground(c, w, height.toFloat(), topH)
         drawTopBar(c, w)
+        if (expanded) {
+            drawPanel(c, w)
+            return
+        }
         for (kr in keyRects) {
             if (kr.key.act == Act.GAP) continue
             theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, keyH)
@@ -139,9 +170,105 @@ class CatKeyboardView(
         drawPreview(c, w)
     }
 
+    // ---------- 選字列 ----------
+
+    private val expandW get() = 44 * dp
+    private val stripTextSize get() = topH * 0.48f
+    private val panelRowH get() = keyH * 0.95f
+
+    private fun textWidth(s: String, size: Float): Float {
+        candPaint.textSize = size
+        return candPaint.measureText(s)
+    }
+
+    /** 每個選項在選字列上的位置（還沒加上捲動） */
+    private fun stripLayout(): List<RectF> = stripCache ?: run {
+        var x = 6 * dp
+        candidates.map { t ->
+            val iw = max(textWidth(t, stripTextSize) + 26 * dp, 44 * dp)
+            RectF(x, 0f, x + iw, topH).also { x += iw }
+        }.also { stripCache = it }
+    }
+
+    /** 展開面板裡每個選項的位置（還沒加上捲動） */
+    private fun panelLayout(): List<RectF> = panelCache ?: run {
+        val w = width.toFloat()
+        val cell = w / 6f
+        val size = keyH * 0.42f
+        var x = 0f
+        var y = topH + 2 * dp
+        candidates.map { t ->
+            var iw = max(textWidth(t, size) + 24 * dp, cell)
+            iw = kotlin.math.ceil(iw / cell) * cell // 對齊格子，看起來比較整齊
+            if (iw > w) iw = w
+            if (x + iw > w + 1f) { x = 0f; y += panelRowH }
+            RectF(x, y, x + iw, y + panelRowH).also { x += iw }
+        }.also { panelCache = it }
+    }
+
+    private fun maxStripScroll(): Float {
+        val last = stripLayout().lastOrNull() ?: return 0f
+        return max(0f, last.right + 6 * dp - (width - expandW))
+    }
+
+    private fun maxPanelScroll(): Float {
+        val last = panelLayout().lastOrNull() ?: return 0f
+        return max(0f, last.bottom - height)
+    }
+
+    private fun drawCandidateStrip(c: Canvas, w: Float) {
+        val items = stripLayout()
+        c.save()
+        c.clipRect(0f, 0f, w - expandW, topH)
+        items.forEachIndexed { i, r0 ->
+            val r = RectF(r0.left - candScroll, r0.top, r0.right - candScroll, r0.bottom)
+            if (r.right < 0 || r.left > w) return@forEachIndexed
+            if (i == 0) theme.drawTabHighlight(c, r) // 第一個（最推薦的）有底色
+            theme.drawText(c, candidates[i], r.centerX(), r.centerY(), stripTextSize, theme.text)
+        }
+        c.restore()
+        // 右邊的展開／收起箭頭
+        val cx = w - expandW / 2
+        val cy = topH / 2
+        val s = topH * 0.13f
+        val d = if (expanded) -1f else 1f
+        val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 2f * dp
+            color = theme.textDim
+            strokeCap = android.graphics.Paint.Cap.ROUND
+            strokeJoin = android.graphics.Paint.Join.ROUND
+        }
+        c.drawPath(Path().apply {
+            moveTo(cx - s * 1.3f, cy - s * 0.6f * d)
+            lineTo(cx, cy + s * 0.6f * d)
+            lineTo(cx + s * 1.3f, cy - s * 0.6f * d)
+        }, stroke)
+    }
+
+    private fun drawPanel(c: Canvas, w: Float) {
+        val items = panelLayout()
+        val line = android.graphics.Paint().apply { color = theme.textDim; alpha = 50; strokeWidth = 1 * dp }
+        c.save()
+        c.clipRect(0f, topH, w, height.toFloat())
+        val size = keyH * 0.42f
+        items.forEachIndexed { i, r0 ->
+            val r = RectF(r0.left, r0.top - panelScroll, r0.right, r0.bottom - panelScroll)
+            if (r.bottom < topH || r.top > height) return@forEachIndexed
+            theme.drawText(c, candidates[i], r.centerX(), r.centerY(), size, theme.text)
+            c.drawLine(r.left, r.bottom, r.right, r.bottom, line)
+            if (r.right < w - 1f) c.drawLine(r.right, r.top + 8 * dp, r.right, r.bottom - 8 * dp, line)
+        }
+        c.restore()
+    }
+
     private val tabW get() = width * 0.2f
 
     private fun drawTopBar(c: Canvas, w: Float) {
+        if (candidates.isNotEmpty()) {
+            drawCandidateStrip(c, w)
+            return
+        }
         if (composing.isNotEmpty()) {
             // 打注音時，上面這列先顯示打了什麼（之後會變成選字列）
             theme.drawTextLeft(c, composing, 16 * dp, topH / 2, topH * 0.5f, theme.text)
@@ -203,6 +330,7 @@ class CatKeyboardView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (handleCandidateTouch(e)) return true
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 // 兩隻手指快速輪流打：前一顆還沒放開就先送出
@@ -224,6 +352,73 @@ class CatKeyboardView(
             MotionEvent.ACTION_CANCEL -> release(fire = false)
         }
         return true
+    }
+
+    /** 選字列和展開面板的觸控：滑動捲動、點一下選字。回傳 true 代表已經處理 */
+    private fun handleCandidateTouch(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                if (candidates.isEmpty()) return false
+                val x = e.x
+                val y = e.y
+                dragMode = when {
+                    y < topH && x >= width - expandW -> 3 // 展開箭頭
+                    y < topH -> 1
+                    expanded -> 2
+                    else -> 0
+                }
+                if (dragMode == 0) return false
+                dragStart = if (dragMode == 2) y else x
+                dragScrollStart = if (dragMode == 2) panelScroll else candScroll
+                dragMoved = false
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (dragMode == 0) return false
+                if (dragMode == 3) return true
+                val pos = if (dragMode == 2) e.y else e.x
+                val delta = pos - dragStart
+                if (kotlin.math.abs(delta) > 8 * dp) dragMoved = true
+                if (dragMoved) {
+                    if (dragMode == 1) candScroll = (dragScrollStart - delta).coerceIn(0f, maxStripScroll())
+                    else panelScroll = (dragScrollStart - delta).coerceIn(0f, maxPanelScroll())
+                    invalidate()
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (dragMode == 0) return false
+                val mode = dragMode
+                dragMode = 0
+                if (dragMoved) return true
+                when (mode) {
+                    3 -> {
+                        haptics.perform(this, prefs)
+                        expanded = !expanded
+                        panelScroll = 0f
+                        invalidate()
+                    }
+                    1 -> stripLayout().indexOfFirst { e.x + candScroll in it.left..it.right }
+                        .takeIf { it >= 0 }?.let { pick(it) }
+                    2 -> panelLayout().indexOfFirst { it.contains(e.x, e.y + panelScroll) }
+                        .takeIf { it >= 0 }?.let { pick(it) }
+                }
+                return true
+            }
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> return dragMode != 0
+            MotionEvent.ACTION_CANCEL -> {
+                val was = dragMode != 0
+                dragMode = 0
+                return was
+            }
+        }
+        return false
+    }
+
+    private fun pick(index: Int) {
+        haptics.perform(this, prefs)
+        expanded = false
+        listener?.onCandidate(index)
     }
 
     private fun onTopBarTap(x: Float) {

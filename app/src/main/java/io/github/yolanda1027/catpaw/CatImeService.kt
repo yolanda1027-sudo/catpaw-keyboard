@@ -2,18 +2,23 @@ package io.github.yolanda1027.catpaw
 
 import android.content.SharedPreferences
 import android.inputmethodservice.InputMethodService
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import io.github.yolanda1027.catpaw.engine.Bpmf
+import io.github.yolanda1027.catpaw.engine.Candidate
+import io.github.yolanda1027.catpaw.engine.UserScores
+import io.github.yolanda1027.catpaw.engine.ZhuyinDict
+import io.github.yolanda1027.catpaw.engine.ZhuyinEngine
+import java.io.File
 
 /**
- * 輸入法本體。
- *
- * 第一階段：注音鍵會把符號放進「組字區」（底線那段），
- * 按空白或 Enter 送出。下一階段會在這裡接上注音引擎做選字。
+ * 輸入法本體：處理按鍵、把注音交給引擎轉成中文、管理選字列。
  */
 class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     SharedPreferences.OnSharedPreferenceChangeListener {
@@ -23,12 +28,22 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     private lateinit var prefs: Prefs
     private lateinit var haptics: Haptics
     private var kv: CatKeyboardView? = null
+    private val main = Handler(Looper.getMainLooper())
 
     private var chinese = true
     private var page = Page.MAIN
     private var shift = 0 // 0 = 小寫, 1 = 大寫一次, 2 = 大寫鎖定
     private var lastShiftTap = 0L
-    private val composing = StringBuilder()
+
+    /** 注音引擎（詞庫在背景載入，載好之前是 null） */
+    private var engine: ZhuyinEngine? = null
+    private var dict: ZhuyinDict? = null
+    /** 詞庫還沒載好時先記下打的注音，載好再補打 */
+    private val pending = StringBuilder()
+
+    private var candidates: List<Candidate> = emptyList()
+    /** 聯想詞（剛送出一個字之後，猜你接下來要打的） */
+    private var associated: List<String> = emptyList()
 
     override fun onCreate() {
         super.onCreate()
@@ -37,6 +52,23 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         haptics = Haptics(this)
         chinese = prefs.chinese
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
+        loadDictionary()
+    }
+
+    private fun loadDictionary() {
+        Thread {
+            val d = assets.open("zhuyin.dict").use { ZhuyinDict.load(it) }
+            val user = UserScores(File(filesDir, "user_scores.txt"))
+            main.post {
+                dict = d
+                engine = ZhuyinEngine(d, user)
+                if (pending.isNotEmpty()) {
+                    val keys = pending.toString()
+                    pending.setLength(0)
+                    keys.forEach { typeZhuyin(it) }
+                }
+            }
+        }.start()
     }
 
     override fun onDestroy() {
@@ -45,7 +77,16 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
-        if (key != "chinese") kv?.reloadPrefs()
+        when (key) {
+            "chinese" -> Unit
+            "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
+            else -> kv?.reloadPrefs()
+        }
+    }
+
+    private fun reloadUserScores() {
+        val d = dict ?: return
+        engine = ZhuyinEngine(d, UserScores(File(filesDir, "user_scores.txt")))
     }
 
     override fun onCreateInputView(): View {
@@ -58,7 +99,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        composing.clear()
+        resetComposing()
         shift = 0
         page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> Page.SYMBOL
@@ -71,19 +112,28 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onFinishInputView(finishingInput: Boolean) {
         currentInputConnection?.finishComposingText()
-        composing.clear()
+        resetComposing()
         super.onFinishInputView(finishingInput)
     }
+
+    private fun resetComposing() {
+        engine?.clear()
+        pending.setLength(0)
+        candidates = emptyList()
+        associated = emptyList()
+    }
+
+    private val isComposing get() = (engine?.isEmpty == false) || pending.isNotEmpty()
 
     override fun onUpdateSelection(
         oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
         candidatesStart: Int, candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        // 使用者自己把游標點去別的地方 → 放棄組字
-        if (composing.isNotEmpty() && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
-            composing.clear()
+        if (isComposing && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
+            // 你自己把游標點去別的地方 → 畫面上的字就這樣留著，不再組字
             currentInputConnection?.finishComposingText()
+            resetComposing()
             refresh()
         }
     }
@@ -105,7 +155,88 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
         v.isChinese = chinese
         v.shiftState = shift
-        v.composing = composing.toString()
+        v.composing = pending.toString()
+        v.candidates = if (candidates.isNotEmpty()) candidates.map { it.text } else associated
+    }
+
+    // ---------- 注音 ----------
+
+    private fun typeZhuyin(c: Char) {
+        val e = engine
+        if (e == null) {
+            pending.append(c)
+            currentInputConnection?.setComposingText(pending, 1)
+            refresh()
+            return
+        }
+        associated = emptyList()
+        if (Bpmf.isTone(c)) {
+            if (!e.typeTone(c.toString())) {
+                commitText(c.toString()) // 前面沒有注音，就直接打出聲調符號
+                return
+            }
+        } else {
+            e.typeSymbol(c)
+        }
+        updateComposing()
+    }
+
+    /** 把引擎目前的狀態更新到編輯區和選字列 */
+    private fun updateComposing() {
+        val e = engine ?: return
+        val ic = currentInputConnection
+        if (e.isEmpty) {
+            ic?.setComposingText("", 1)
+            ic?.finishComposingText()
+            candidates = emptyList()
+        } else {
+            ic?.setComposingText(e.composingText(), 1)
+            candidates = e.candidates().take(MAX_CANDIDATES)
+        }
+        refresh()
+    }
+
+    /** 把正在組的字全部轉成中文送出 */
+    private fun commitComposingAll() {
+        val e = engine
+        if (e != null && !e.isEmpty) {
+            val text = e.commitAll()
+            currentInputConnection?.commitText(text, 1)
+            candidates = emptyList()
+            showAssociated(text)
+        } else if (pending.isNotEmpty()) {
+            currentInputConnection?.commitText(pending, 1)
+            pending.setLength(0)
+        }
+        refresh()
+    }
+
+    private fun showAssociated(committed: String) {
+        val last = committed.lastOrNull()
+        associated = if (last != null) dict?.associated(last) ?: emptyList() else emptyList()
+    }
+
+    override fun onCandidate(index: Int) {
+        val ic = currentInputConnection ?: return
+        val e = engine ?: return
+        if (candidates.isNotEmpty()) {
+            val c = candidates.getOrNull(index) ?: return
+            val text = e.select(c)
+            // commitText 會把底線那段換成選的字；如果只選了前半段，後面的繼續組字
+            ic.commitText(text, 1)
+            if (e.isEmpty) {
+                candidates = emptyList()
+                showAssociated(text)
+                refresh()
+            } else {
+                updateComposing()
+            }
+        } else {
+            val text = associated.getOrNull(index) ?: return
+            ic.commitText(text, 1)
+            showAssociated(text)
+            refresh()
+        }
     }
 
     // ---------- 按鍵處理 ----------
@@ -120,11 +251,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             return
         }
         when (key.act) {
-            Act.ZHUYIN -> {
-                composing.append(key.text)
-                ic.setComposingText(composing, 1)
-                refresh()
-            }
+            Act.ZHUYIN -> typeZhuyin(key.text[0])
             Act.TEXT -> {
                 val upper = !chinese && page == Page.MAIN && shift > 0
                 commitText(if (upper) key.text.uppercase() else key.text)
@@ -133,16 +260,33 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                     refresh()
                 }
             }
-            Act.SPACE -> if (composing.isNotEmpty()) commitComposing() else commitText(" ")
-            Act.ENTER -> if (composing.isNotEmpty()) commitComposing() else sendKeyChar('\n')
+            Act.SPACE -> {
+                val e = engine
+                when {
+                    // 正在打的字 + 空白 = 一聲
+                    e != null && e.hasPartial -> { e.typeTone(""); updateComposing() }
+                    isComposing -> commitComposingAll()
+                    else -> commitText(" ")
+                }
+            }
+            Act.ENTER -> if (isComposing) commitComposingAll() else {
+                associated = emptyList()
+                refresh()
+                sendKeyChar('\n')
+            }
             Act.BACKSPACE -> {
-                if (composing.isNotEmpty()) {
-                    composing.deleteCharAt(composing.length - 1)
-                    ic.setComposingText(composing, 1)
-                    if (composing.isEmpty()) ic.finishComposingText()
-                    refresh()
-                } else {
-                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                val e = engine
+                when {
+                    e != null && !e.isEmpty -> { e.backspace(); updateComposing() }
+                    pending.isNotEmpty() -> {
+                        pending.setLength(pending.length - 1)
+                        ic.setComposingText(pending, 1)
+                        refresh()
+                    }
+                    else -> {
+                        if (associated.isNotEmpty()) { associated = emptyList(); refresh() }
+                        sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                    }
                 }
             }
             Act.SHIFT -> {
@@ -162,14 +306,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
     }
 
+    /** 送出一般文字（標點、英文、表情符號）：如果正在組字，先把組好的中文送出 */
     private fun commitText(t: String) {
-        if (composing.isNotEmpty()) commitComposing()
+        if (isComposing) commitComposingAll()
+        associated = emptyList()
         currentInputConnection?.commitText(t, 1)
-    }
-
-    private fun commitComposing() {
-        currentInputConnection?.commitText(composing, 1)
-        composing.clear()
         refresh()
     }
 
@@ -184,7 +325,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onTabEnglish() {
         if (chinese || page != Page.MAIN) {
-            if (composing.isNotEmpty()) commitComposing()
+            if (isComposing) commitComposingAll()
+            associated = emptyList()
             chinese = false
             prefs.chinese = false
             page = Page.MAIN
@@ -195,5 +337,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onHide() {
         requestHideSelf(0)
+    }
+
+    companion object {
+        /** 選字列最多放幾個（很常見的音可能有上千個字，太多會拖慢） */
+        private const val MAX_CANDIDATES = 400
     }
 }

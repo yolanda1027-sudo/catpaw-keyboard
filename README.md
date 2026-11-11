@@ -25,12 +25,18 @@
 
 - [x] **第一階段：手感原型**（v0.2：字的比例照原版重新量過，新增「粉紅縫線」主題）
   ：照 Google 注音排的鍵盤、可調震動（清脆／輕點／自訂／系統）、可調按鍵高度、按鍵放大提示、長按打數字、英文／符號／表情符號鍵盤
-- [ ] **第二階段：能打中文**：接上注音引擎（libchewing），可以選字
+- [x] **第二階段：能打中文**：整句智慧轉換、不打聲調也可以、聲母縮寫（ㄒㄒ → 謝謝）、選字列（可左右滑、可展開）、聯想詞、記住你選過的字
 - [ ] **第三階段：造型自由**：用圖片自訂按鍵、按鍵動畫、多套主題
+
+## 詞庫來源
+
+注音詞庫來自 [小麥注音 McBopomofo](https://github.com/openvanilla/McBopomofo)（MIT License），
+用 `tools/build_dict.py` 轉成 `app/src/main/assets/zhuyin.dict`。授權全文見 `third_party/McBopomofo-LICENSE.txt`。
 
 ## 給開發者
 
 - 每次 push，GitHub Actions 會自動建置 APK，並更新 Releases 的「最新測試版」
 - 本機建置：`./gradlew assembleDebug`
+- 注音引擎測試：`./gradlew testDebugUnitTest --tests '*ZhuyinEngineTest*'`
 - 畫面截圖測試：`./gradlew testDebugUnitTest`，用 Robolectric 把鍵盤畫成 PNG，存到 `app/build/renders/`
 - `keystore/catpaw-debug.jks` 是測試用的簽章，讓每次建置出來的 APK 簽章都一樣，手機才能直接覆蓋更新。這個簽章是公開的，請只安裝從這個 repo 的 Releases 下載的 APK。

@@ -42,7 +42,7 @@ class SettingsActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(root) })
 
         title("🐾 貓爪鍵盤")
-        note("第一階段：手感原型。現在注音鍵只會打出注音符號（按空白送出），選字功能會在下一階段加上。")
+        note("第二階段：可以打中文了！支援整句轉換、不打聲調、聲母縮寫（ㄒㄒ → 謝謝）和聯想詞。")
 
         section("開始使用")
         status = note("")
@@ -96,8 +96,16 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
 
+        section("選字")
+        note("你選過的字詞會被記住，下次排在比較前面（只存在這支手機裡）。")
+        button("清除學習紀錄") {
+            java.io.File(filesDir, "user_scores.txt").delete()
+            prefs.sp.edit().putLong("clear_learning", System.currentTimeMillis()).apply()
+            android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
+        }
+
         section("小提示")
-        note("・長按注音鍵可以打出右下角的數字／英文\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫")
+        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・長按注音鍵可以打出右下角的數字／英文\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫")
     }
 
     override fun onResume() {
