@@ -60,6 +60,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("inline_composing", false)
         set(v) = sp.edit().putBoolean("inline_composing", v).apply()
 
+    /** 最近用過的符號（用 \u0001 分隔） */
+    var recentSymbols: String
+        get() = sp.getString("recent_symbols", "") ?: ""
+        set(v) = sp.edit().putString("recent_symbols", v).apply()
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

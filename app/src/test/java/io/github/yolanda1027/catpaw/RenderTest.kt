@@ -85,6 +85,34 @@ class RenderTest {
         }
     }
 
+    private fun renderSymbols(theme: String, cat: Int, page: Int, name: String) {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        prefs.theme = theme
+        val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+        val c = Symbols.categories[cat]
+        v.rows = Symbols.rows(c.pages[page], c.wide)
+        v.symbolTabs = Symbols.categories.map { it.tab }
+        v.symbolTab = cat
+        v.symbolPageCount = c.pages.size
+        v.symbolPage = page
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+        v.draw(Canvas(bmp))
+        File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test
+    fun renderSymbolBoards() {
+        File("build/renders").mkdirs()
+        renderSymbols("classic", 1, 0, "classic-sym-common")
+        renderSymbols("classic", 2, 1, "classic-sym-brackets2")
+        renderSymbols("classic", 7, 0, "classic-sym-kaomoji")
+        renderSymbols("stitch", 6, 0, "stitch-sym-shapes")
+        renderSymbols("catpaw", 7, 0, "catpaw-sym-kaomoji")
+    }
+
     @Test
     fun renderCandidates() {
         for (t in listOf("classic", "stitch")) {

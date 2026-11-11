@@ -43,6 +43,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     /** 詞庫還沒載好時先記下打的注音，載好再補打 */
     private val pending = StringBuilder()
 
+    /** 符號鍵盤目前的分類和頁數 */
+    private var symCat = 1
+    private var symPage = 0
+
     private var candidates: List<Candidate> = emptyList()
     /** 聯想詞（剛送出一個字之後，猜你接下來要打的） */
     private var associated: List<String> = emptyList()
@@ -101,7 +105,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
-            "chinese" -> Unit
+            "chinese", "recent_symbols" -> Unit
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             else -> kv?.reloadPrefs()
         }
@@ -125,7 +129,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         resetComposing()
         shift = 0
         page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
-            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> Page.SYMBOL
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> {
+                symCat = 1 // 數字欄位：直接開有數字的那頁
+                symPage = 0
+                Page.SYMBOL
+            }
             else -> Page.MAIN
         }
         chinese = prefs.chinese && !isPassword(info)
@@ -174,8 +182,16 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         val v = kv ?: return
         v.rows = when (page) {
             Page.MAIN -> if (chinese) Layouts.ZHUYIN else Layouts.ENGLISH
-            Page.SYMBOL -> Layouts.SYMBOLS
+            Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
             Page.EMOJI -> Layouts.EMOJI
+        }
+        if (page == Page.SYMBOL) {
+            v.symbolTabs = Symbols.categories.map { it.tab }
+            v.symbolTab = symCat
+            v.symbolPageCount = symbolPageCount()
+            v.symbolPage = symPage
+        } else {
+            v.symbolTabs = null
         }
         v.isChinese = chinese
         v.shiftState = shift
@@ -285,6 +301,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         when (key.act) {
             Act.ZHUYIN -> typeZhuyin(key.text[0])
             Act.TEXT -> {
+                if (page == Page.SYMBOL) addRecentSymbol(key.text)
                 val upper = !chinese && page == Page.MAIN && shift > 0
                 commitText(if (upper) key.text.uppercase() else key.text)
                 if (shift == 1 && page == Page.MAIN) {
@@ -363,6 +380,38 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             prefs.chinese = false
             page = Page.MAIN
             shift = 0
+            refresh()
+        }
+    }
+
+    // ---------- 符號鍵盤 ----------
+
+    private fun recentSymbols(): List<String> =
+        prefs.recentSymbols.split('\u0001').filter { it.isNotEmpty() }
+
+    private fun addRecentSymbol(s: String) {
+        val list = listOf(s) + recentSymbols().filter { it != s }
+        prefs.recentSymbols = list.take(Symbols.PER_PAGE).joinToString("\u0001")
+    }
+
+    private fun symbolItems(): List<String> =
+        if (symCat == Symbols.RECENT) recentSymbols()
+        else Symbols.categories[symCat].pages.getOrElse(symPage) { emptyList() }
+
+    private fun symbolPageCount(): Int =
+        if (symCat == Symbols.RECENT) 1 else Symbols.categories[symCat].pages.size
+
+    override fun onSymbolTab(index: Int) {
+        symCat = index
+        symPage = 0
+        refresh()
+    }
+
+    override fun onSymbolSwipe(direction: Int) {
+        val next = (symPage + direction).coerceIn(0, symbolPageCount() - 1)
+        if (next != symPage) {
+            symPage = next
+            haptics.perform(kv, prefs)
             refresh()
         }
     }

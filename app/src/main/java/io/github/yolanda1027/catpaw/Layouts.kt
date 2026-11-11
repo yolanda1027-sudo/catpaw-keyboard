@@ -7,7 +7,7 @@ enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMO
 enum class Style { CHAR, FUNC, SPACE, ENTER }
 
 /** 用線條畫的圖示（不靠字型，免得不同手機顯示不一樣） */
-enum class Icon { BACKSPACE, ENTER, SHIFT, EMOJI }
+enum class Icon { BACKSPACE, ENTER, SHIFT, EMOJI, CLOCK }
 
 data class Key(
     val label: String,

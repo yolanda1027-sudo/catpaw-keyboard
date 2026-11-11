@@ -29,6 +29,8 @@ class CatKeyboardView(
         fun onTabEnglish()
         fun onHide()
         fun onCandidate(index: Int)
+        fun onSymbolTab(index: Int)
+        fun onSymbolSwipe(direction: Int)
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -91,6 +93,23 @@ class CatKeyboardView(
      */
     val floatH = 34 * dp
     private val kbH get() = height - floatH
+
+    /** 符號鍵盤的分類列（null = 不是符號鍵盤）；裡面的 null 代表「最近使用」的時鐘圖示 */
+    var symbolTabs: List<String?>? = null
+        set(v) { field = v; invalidate() }
+    var symbolTab = 0
+        set(v) { field = v; invalidate() }
+    var symbolPage = 0
+        set(v) { field = v; invalidate() }
+    var symbolPageCount = 1
+        set(v) { field = v; invalidate() }
+
+    /**
+     * 按鍵區永遠是 5 排的高度；符號鍵盤只有 4 排，就把每排拉高一點，
+     * 這樣切換時鍵盤不會忽高忽低（Google 注音也是這樣）。
+     */
+    private val keyAreaH get() = keyH * 5
+    private val rowH get() = keyAreaH / rows.size.coerceAtLeast(1)
 
     /** 正在打的注音（顯示在鍵盤左上方的小框框裡） */
     var reading = ""
@@ -175,7 +194,7 @@ class CatKeyboardView(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val h = (floatH + topH + padTop + keyH * rows.size + padBottom).toInt()
+        val h = (floatH + topH + padTop + keyAreaH + padBottom).toInt()
         setMeasuredDimension(w, h)
     }
 
@@ -192,11 +211,11 @@ class CatKeyboardView(
         rows.forEachIndexed { ri, row ->
             val total = row.sumOf { it.weight.toDouble() }.toFloat()
             val unit = w / total
-            val top = topH + padTop + ri * keyH
+            val top = topH + padTop + ri * rowH
             var x = 0f
             for (k in row) {
                 val kw = unit * k.weight
-                keyRects.add(KeyRect(k, RectF(x, top, x + kw, top + keyH)))
+                keyRects.add(KeyRect(k, RectF(x, top, x + kw, top + rowH)))
                 x += kw
             }
         }
@@ -225,6 +244,7 @@ class CatKeyboardView(
                 if (kr.key.act == Act.GAP) continue
                 theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, keyH)
             }
+            drawPageIndicator(c, w)
             drawPreview(c, w)
         }
         c.restore()
@@ -324,7 +344,35 @@ class CatKeyboardView(
 
     private val tabW get() = width * 0.2f
 
+    private var downX = 0f
+
+    /** 符號鍵盤：分類列 */
+    private fun drawSymbolTabs(c: Canvas, w: Float, tabs: List<String?>) {
+        val tw = w / tabs.size
+        tabs.forEachIndexed { i, label ->
+            val r = RectF(tw * i, 0f, tw * (i + 1), topH)
+            if (i == symbolTab) theme.drawTabHighlight(c, r)
+            val color = if (i == symbolTab) theme.text else theme.textDim
+            if (label == null) theme.drawIcon(c, Icon.CLOCK, r.centerX(), r.centerY(), topH * 0.6f, color)
+            else theme.drawText(c, label, r.centerX(), r.centerY(), if (label.length > 3) topH * 0.32f else topH * 0.4f, color)
+        }
+    }
+
+    /** 符號鍵盤：最後一排上面的小線，顯示目前在第幾頁 */
+    private fun drawPageIndicator(c: Canvas, w: Float) {
+        if (symbolTabs == null || symbolPageCount <= 1) return
+        val y = topH + padTop + rowH * (rows.size - 1) - 1.5f * dp
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 3 * dp }
+        p.color = theme.textDim
+        p.alpha = 60
+        c.drawLine(0f, y, w, y, p)
+        p.color = theme.popupSelBg
+        val seg = w / symbolPageCount
+        c.drawLine(seg * symbolPage, y, seg * (symbolPage + 1), y, p)
+    }
+
     private fun drawTopBar(c: Canvas, w: Float) {
+        symbolTabs?.let { drawSymbolTabs(c, w, it); return }
         if (candidates.isNotEmpty()) {
             drawCandidateStrip(c, w)
             return
@@ -413,7 +461,8 @@ class CatKeyboardView(
                     onTopBarTap(x)
                 } else {
                     val firstTop = topH + padTop
-                    val lastBottom = firstTop + keyH * rows.size - 1f
+                    val lastBottom = firstTop + keyAreaH - 1f
+                    downX = x
                     keyAt(x, y.coerceIn(firstTop, lastBottom))?.let { press(it, e.getPointerId(i)) }
                 }
             }
@@ -423,6 +472,15 @@ class CatKeyboardView(
             MotionEvent.ACTION_MOVE -> {
                 val o = popup
                 val i = e.findPointerIndex(pressedPointer)
+                // 符號鍵盤：左右滑換頁
+                if (o == null && i >= 0 && symbolTabs != null && pressed != null) {
+                    val dx = e.getX(i) - downX
+                    if (kotlin.math.abs(dx) > 40 * dp) {
+                        release(cancel = true)
+                        listener?.onSymbolSwipe(if (dx < 0) 1 else -1)
+                        return true
+                    }
+                }
                 if (o != null && i >= 0) {
                     val optW = popupRect.width() / o.items.size
                     val sel = ((e.getX(i) - popupRect.left) / optW).toInt().coerceIn(0, o.items.size - 1)
@@ -442,7 +500,7 @@ class CatKeyboardView(
     private fun handleCandidateTouch(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                if (candidates.isEmpty()) return false
+                if (candidates.isEmpty() || symbolTabs != null) return false
                 val x = e.x
                 val y = e.y
                 dragMode = when {
@@ -506,6 +564,12 @@ class CatKeyboardView(
     }
 
     private fun onTopBarTap(x: Float) {
+        symbolTabs?.let { tabs ->
+            val i = (x / (width.toFloat() / tabs.size)).toInt().coerceIn(0, tabs.size - 1)
+            haptics.perform(this, prefs)
+            listener?.onSymbolTab(i)
+            return
+        }
         if (composing.isNotEmpty()) return
         val l = listener ?: return
         when {

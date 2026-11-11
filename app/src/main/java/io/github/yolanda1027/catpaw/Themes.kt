@@ -122,7 +122,15 @@ abstract class KbTheme(protected val dp: Float) {
     private fun isLong(s: String) = s.codePointCount(0, s.length) > 2
 
     /** 主字＋小字（長按的字），或只有主字 */
-    protected fun drawLabels(c: Canvas, key: Key, label: String, cx: Float, cy: Float, rowH: Float, main: Int, dim: Int) {
+    /** 長的字（顏文字、按鍵上的詞）：盡量放大，但不超出按鍵寬度 */
+    protected fun fitSize(label: String, maxW: Float, desired: Float): Float {
+        textPaint.textSize = desired
+        textPaint.typeface = Typeface.DEFAULT
+        val w = textPaint.measureText(label)
+        return if (w <= maxW || w == 0f) desired else desired * maxW / w
+    }
+
+    protected fun drawLabels(c: Canvas, key: Key, label: String, cx: Float, cy: Float, rowH: Float, main: Int, dim: Int, maxW: Float = 0f) {
         val sub = key.sub
         when {
             sub != null && key.act == Act.ZHUYIN -> {
@@ -134,7 +142,14 @@ abstract class KbTheme(protected val dp: Float) {
                 drawText(c, sub, cx - rowH * 0.1f, cy - rowH * 0.16f, rowH * 0.26f, dim)
                 drawText(c, label, cx, cy + rowH * 0.04f, rowH * 0.38f, main)
             }
-            else -> drawText(c, label, cx, cy, if (isLong(label)) rowH * 0.24f else rowH * 0.38f, main)
+            else -> {
+                val size = when {
+                    !isLong(label) -> rowH * 0.38f
+                    maxW > 0f -> fitSize(label, maxW, rowH * 0.36f)
+                    else -> rowH * 0.24f
+                }
+                drawText(c, label, cx, cy, size, main)
+            }
         }
     }
 
@@ -195,6 +210,11 @@ abstract class KbTheme(protected val dp: Float) {
                 c.drawPath(path, if (shift > 0) fill else stroke)
                 if (shift == 2) c.drawLine(cx - s * 0.25f, cy + s * 0.48f, cx + s * 0.25f, cy + s * 0.48f, stroke)
             }
+            Icon.CLOCK -> {
+                c.drawCircle(cx, cy, s * 0.42f, stroke)
+                c.drawLine(cx, cy, cx, cy - s * 0.26f, stroke)
+                c.drawLine(cx, cy, cx + s * 0.18f, cy + s * 0.1f, stroke)
+            }
             Icon.EMOJI -> {
                 c.drawCircle(cx, cy, s * 0.42f, stroke)
                 c.drawCircle(cx - s * 0.15f, cy - s * 0.1f, s * 0.055f, fill)
@@ -223,7 +243,7 @@ class ClassicTheme(dp: Float) : KbTheme(dp) {
         when (key.style) {
             Style.CHAR -> {
                 if (pressed) pressedBox(c, r)
-                drawLabels(c, key, label, r.centerX(), r.centerY(), rowH, text, textDim)
+                drawLabels(c, key, label, r.centerX(), r.centerY(), rowH, text, textDim, maxW = r.width() * 0.9f)
             }
             Style.FUNC -> {
                 if (pressed) pressedBox(c, r)
@@ -302,7 +322,8 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
     private fun drawPaw(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, rowH: Float) {
         val s = if (pressed) 0.9f else 1f // 按下去肉球會縮一下
         val cx = r.centerX()
-        val w = min(r.width(), rowH * 1.1f) * s
+        // 一般鍵的肉球不要太寬；顏文字這種寬鍵就讓肉球跟著變寬
+        val w = (if (r.width() > rowH * 2) r.width() * 0.85f else min(r.width(), rowH * 1.1f)) * s
         val h = r.height() * s
         val top = r.centerY() - h / 2
 
@@ -318,7 +339,7 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
         fill.color = if (pressed) padPressed else pad
         val padRect = RectF(cx - w * 0.42f, top + h * 0.3f, cx + w * 0.42f, top + h * 0.97f)
         c.drawRoundRect(padRect, padRect.height() * 0.42f, padRect.height() * 0.42f, fill)
-        val size = if (label.codePointCount(0, label.length) > 2) rowH * 0.22f else rowH * 0.32f
+        val size = if (label.codePointCount(0, label.length) > 2) fitSize(label, padRect.width() * 0.9f, rowH * 0.3f) else rowH * 0.32f
         val sub = if (key.act == Act.ZHUYIN) key.sub else null
         if (sub != null) {
             // 主字稍微往左，長按的小字縮在掌心右下角
@@ -466,7 +487,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
                     drawText(c, label, content.centerX(), content.centerY() - rowH * 0.13f, rowH * 0.38f, text)
                     drawText(c, sub, content.centerX(), content.centerY() + rowH * 0.18f, rowH * 0.22f, if (solid) text else textDim, bold = true)
                 } else {
-                    drawLabels(c, key, label, content.centerX(), content.centerY(), rowH, text, textDim)
+                    drawLabels(c, key, label, content.centerX(), content.centerY(), rowH, text, textDim, maxW = content.width() - 10 * dp)
                 }
             }
             Style.FUNC, Style.ENTER -> drawFuncContent(c, key, label, content, shift, rowH, Color.WHITE)
