@@ -26,7 +26,7 @@ class RenderTest {
     private fun render(
         theme: String, layout: List<List<Key>>, name: String,
         pressAt: Pair<Float, Float>? = null, composing: String = "",
-        candidates: List<String> = emptyList(), expand: Boolean = false,
+        candidates: List<String> = emptyList(), expand: Boolean = false, reading: String = "",
     ) {
         val ctx = RuntimeEnvironment.getApplication()
         val prefs = Prefs(ctx)
@@ -36,6 +36,7 @@ class RenderTest {
         v.isChinese = layout === Layouts.ZHUYIN
         v.composing = composing
         v.candidates = candidates
+        v.reading = reading
         v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         v.layout(0, 0, v.measuredWidth, v.measuredHeight)
         if (expand) {
@@ -70,7 +71,7 @@ class RenderTest {
     @Test
     fun renderCandidates() {
         for (t in listOf("classic", "stitch")) {
-            render(t, Layouts.ZHUYIN, "$t-candidates", candidates = sampleCandidates)
+            render(t, Layouts.ZHUYIN, "$t-candidates", candidates = sampleCandidates, reading = "ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ")
             render(t, Layouts.ZHUYIN, "$t-candidates-expanded", candidates = sampleCandidates, expand = true)
         }
     }

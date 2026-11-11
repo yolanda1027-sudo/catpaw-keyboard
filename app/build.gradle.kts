@@ -13,7 +13,7 @@ android {
         targetSdk = 34
         // CI 每次建置的編號都會往上加，手機才能直接「更新」而不用先解除安裝
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.3.0"
+        versionName = "0.3.1"
     }
 
     signingConfigs {

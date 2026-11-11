@@ -134,6 +134,11 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
     /** 編輯區要顯示的字：已經結束的字轉成中文，正在打的那個字顯示注音 */
     fun composingText(): String = convert(done).joinToString("") { it.text } + current
 
+    /** 目前打的注音（顯示在鍵盤上方的小框框），音節之間空一格 */
+    fun readingText(): String =
+        (done.map { it.toString() } + if (current.isNotEmpty()) listOf(current.toString()) else emptyList())
+            .joinToString(" ")
+
     /** 全部轉成中文（按 Enter 或空白送出時用） */
     fun commitAll(): String {
         val segs = convert()

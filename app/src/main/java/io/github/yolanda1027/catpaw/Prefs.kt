@@ -52,6 +52,14 @@ class Prefs(context: Context) {
         }
     }
 
+    /**
+     * false（預設）＝像 Google 注音：注音顯示在鍵盤上方的小框框，選了字才送進輸入框
+     * true ＝ 注音直接顯示在輸入框裡（帶底線），即時轉成中文
+     */
+    var inlineComposing: Boolean
+        get() = sp.getBoolean("inline_composing", false)
+        set(v) = sp.edit().putBoolean("inline_composing", v).apply()
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

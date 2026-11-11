@@ -40,7 +40,10 @@ abstract class KbTheme(protected val dp: Float) {
     private val path = Path()
 
     open fun drawBackground(c: Canvas, w: Float, h: Float, topH: Float) {
-        c.drawColor(bg)
+        // 只塗鍵盤本體（不能用 drawColor，不然上方透明區也會被塗滿）
+        fill.shader = null
+        fill.color = bg
+        c.drawRect(0f, 0f, w, h, fill)
         fill.color = topBar
         c.drawRect(0f, 0f, w, topH, fill)
     }
@@ -53,6 +56,28 @@ abstract class KbTheme(protected val dp: Float) {
 
     /** rowH：一整排的高度，用來決定字的大小 */
     abstract fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float)
+
+    /** 「正在打的注音」小框框的配色（預設跟 Google 注音一樣：白底黑字） */
+    open val readingBg = Color.WHITE
+    open val readingText = Color.parseColor("#202124")
+    open val readingBorder = Color.parseColor("#DADCE0")
+
+    /** 在鍵盤左上方畫出正在打的注音，h = 透明區域的高度 */
+    fun drawReading(c: Canvas, s: String, h: Float) {
+        val size = h * 0.62f
+        textPaint.textSize = size
+        textPaint.typeface = Typeface.DEFAULT
+        val tw = textPaint.measureText(s)
+        val r = RectF(0f, 0f, tw + 20 * dp, h)
+        fill.color = readingBg
+        fill.shader = null
+        c.drawRoundRect(RectF(r.left - 8 * dp, r.top, r.right, r.bottom + 8 * dp), 6 * dp, 6 * dp, fill)
+        stroke.color = readingBorder
+        stroke.strokeWidth = 1 * dp
+        stroke.pathEffect = null
+        c.drawRoundRect(RectF(r.left - 8 * dp, r.top + 0.5f * dp, r.right - 0.5f * dp, r.bottom + 8 * dp), 6 * dp, 6 * dp, stroke)
+        drawTextLeft(c, s, 10 * dp, h / 2 + 1 * dp, size, readingText)
+    }
 
     open fun drawPreview(c: Canvas, r: RectF, label: String) {
         fill.color = previewBg
@@ -214,6 +239,8 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
     override val previewBg = Color.parseColor("#FFB3C4")
     override val previewText = Color.parseColor("#5A3A2E")
     private val pad = Color.parseColor("#FFD3DC")
+    override val readingText = Color.parseColor("#6B4A3A")
+    override val readingBorder = Color.parseColor("#FFB3C4")
     private val padPressed = Color.parseColor("#FFB3C4")
     private val bean = Color.parseColor("#FFB3C4")
     private val beanPressed = Color.parseColor("#FF8FA9")
@@ -308,6 +335,8 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
 
     private val border = Color.parseColor("#EC8FA9")
     private val shadow = Color.parseColor("#E7A0B5")
+    override val readingText = Color.parseColor("#E0688E")
+    override val readingBorder = Color.parseColor("#EC8FA9")
     private val white = Color.parseColor("#FFFBFC")
     private val pinkFill = Color.parseColor("#FAC9D6")
     private val pressedFill = Color.parseColor("#F7AFC3")

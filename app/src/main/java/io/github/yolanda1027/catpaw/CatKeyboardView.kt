@@ -85,6 +85,17 @@ class CatKeyboardView(
     private val padBottom = 10 * dp
     private val keyRects = ArrayList<KeyRect>()
 
+    /**
+     * 鍵盤上方的透明區域，用來放「正在打的注音」小框框（像 Google 注音）。
+     * 這塊不會擋到後面的 App，點下去也會穿過去（見 CatImeService.onComputeInsets）。
+     */
+    val floatH = 34 * dp
+    private val kbH get() = height - floatH
+
+    /** 正在打的注音（顯示在鍵盤左上方的小框框裡） */
+    var reading = ""
+        set(v) { field = v; invalidate() }
+
     private var pressed: KeyRect? = null
     private var pressedPointer = -1
     private var longFired = false
@@ -119,7 +130,7 @@ class CatKeyboardView(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val h = (topH + padTop + keyH * rows.size + padBottom).toInt()
+        val h = (floatH + topH + padTop + keyH * rows.size + padBottom).toInt()
         setMeasuredDimension(w, h)
     }
 
@@ -157,17 +168,21 @@ class CatKeyboardView(
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat()
-        theme.drawBackground(c, w, height.toFloat(), topH)
+        if (reading.isNotEmpty()) theme.drawReading(c, reading, floatH)
+        c.save()
+        c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
+        theme.drawBackground(c, w, kbH, topH)
         drawTopBar(c, w)
         if (expanded) {
             drawPanel(c, w)
-            return
+        } else {
+            for (kr in keyRects) {
+                if (kr.key.act == Act.GAP) continue
+                theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, keyH)
+            }
+            drawPreview(c, w)
         }
-        for (kr in keyRects) {
-            if (kr.key.act == Act.GAP) continue
-            theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, keyH)
-        }
-        drawPreview(c, w)
+        c.restore()
     }
 
     // ---------- 選字列 ----------
@@ -213,7 +228,7 @@ class CatKeyboardView(
 
     private fun maxPanelScroll(): Float {
         val last = panelLayout().lastOrNull() ?: return 0f
-        return max(0f, last.bottom - height)
+        return max(0f, last.bottom - kbH)
     }
 
     private fun drawCandidateStrip(c: Canvas, w: Float) {
@@ -250,11 +265,11 @@ class CatKeyboardView(
         val items = panelLayout()
         val line = android.graphics.Paint().apply { color = theme.textDim; alpha = 50; strokeWidth = 1 * dp }
         c.save()
-        c.clipRect(0f, topH, w, height.toFloat())
+        c.clipRect(0f, topH, w, kbH)
         val size = keyH * 0.42f
         items.forEachIndexed { i, r0 ->
             val r = RectF(r0.left, r0.top - panelScroll, r0.right, r0.bottom - panelScroll)
-            if (r.bottom < topH || r.top > height) return@forEachIndexed
+            if (r.bottom < topH || r.top > kbH) return@forEachIndexed
             theme.drawText(c, candidates[i], r.centerX(), r.centerY(), size, theme.text)
             c.drawLine(r.left, r.bottom, r.right, r.bottom, line)
             if (r.right < w - 1f) c.drawLine(r.right, r.top + 8 * dp, r.right, r.bottom - 8 * dp, line)
@@ -314,7 +329,7 @@ class CatKeyboardView(
         var left = r.centerX() - bw / 2
         left = min(max(0f, left), w - bw)
         val bottom = r.top + keyH * 0.15f
-        val top = max(0f, bottom - bh)
+        val top = max(-floatH, bottom - bh)
         theme.drawPreview(c, RectF(left, top, left + bw, top + bh), label)
     }
 
@@ -330,6 +345,16 @@ class CatKeyboardView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        // 換成「鍵盤本體」的座標（扣掉上方透明區域）
+        e.offsetLocation(0f, -floatH)
+        try {
+            return handleTouch(e)
+        } finally {
+            e.offsetLocation(0f, floatH)
+        }
+    }
+
+    private fun handleTouch(e: MotionEvent): Boolean {
         if (handleCandidateTouch(e)) return true
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {

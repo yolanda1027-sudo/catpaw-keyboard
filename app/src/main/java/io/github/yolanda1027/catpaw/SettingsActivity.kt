@@ -97,6 +97,12 @@ class SettingsActivity : Activity() {
         })
 
         section("選字")
+        root.addView(Switch(this).apply {
+            text = "注音直接顯示在輸入框裡（關掉＝像 Google 注音，顯示在鍵盤上方，選了字才送出）"
+            isChecked = prefs.inlineComposing
+            setOnCheckedChangeListener { _, b -> prefs.inlineComposing = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
         note("你選過的字詞會被記住，下次排在比較前面（只存在這支手機裡）。")
         button("清除學習紀錄") {
             java.io.File(filesDir, "user_scores.txt").delete()

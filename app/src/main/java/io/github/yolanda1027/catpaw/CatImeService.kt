@@ -1,6 +1,8 @@
 package io.github.yolanda1027.catpaw
 
 import android.content.SharedPreferences
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
@@ -52,7 +54,28 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         haptics = Haptics(this)
         chinese = prefs.chinese
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
+        // 讓鍵盤上方放注音小框框的那條區域是透明的
+        window.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         loadDictionary()
+    }
+
+    /** true = 注音直接打在輸入框（舊方式）；false = 像 Google 注音，放在鍵盤上方 */
+    private val inline get() = prefs.inlineComposing
+
+    /**
+     * 告訴系統：鍵盤真正的上緣在透明區域的下面。
+     * 這樣後面的 App 不會被往上推太多，點透明區域也會點到後面的 App。
+     */
+    override fun onComputeInsets(outInsets: Insets) {
+        super.onComputeInsets(outInsets)
+        val v = kv ?: return
+        if (isFullscreenMode || !v.isShown) return
+        val loc = IntArray(2)
+        v.getLocationInWindow(loc)
+        val top = loc[1] + v.floatH.toInt()
+        outInsets.contentTopInsets = top
+        outInsets.visibleTopInsets = top
+        outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_CONTENT
     }
 
     private fun loadDictionary() {
@@ -130,7 +153,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         candidatesStart: Int, candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        if (isComposing && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
+        // 只有「直接打在輸入框」模式需要：注音不在輸入框裡時，游標移動不影響組字
+        if (inline && isComposing && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
             // 你自己把游標點去別的地方 → 畫面上的字就這樣留著，不再組字
             currentInputConnection?.finishComposingText()
             resetComposing()
@@ -155,8 +179,14 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
         v.isChinese = chinese
         v.shiftState = shift
-        v.composing = pending.toString()
+        v.composing = if (inline) pending.toString() else ""
         v.candidates = if (candidates.isNotEmpty()) candidates.map { it.text } else associated
+        val e = engine
+        v.reading = when {
+            inline -> ""
+            e != null && !e.isEmpty -> e.readingText()
+            else -> pending.toString()
+        }
     }
 
     // ---------- 注音 ----------
@@ -165,7 +195,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         val e = engine
         if (e == null) {
             pending.append(c)
-            currentInputConnection?.setComposingText(pending, 1)
+            if (inline) currentInputConnection?.setComposingText(pending, 1)
             refresh()
             return
         }
@@ -186,11 +216,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         val e = engine ?: return
         val ic = currentInputConnection
         if (e.isEmpty) {
-            ic?.setComposingText("", 1)
-            ic?.finishComposingText()
+            if (inline) {
+                ic?.setComposingText("", 1)
+                ic?.finishComposingText()
+            }
             candidates = emptyList()
         } else {
-            ic?.setComposingText(e.composingText(), 1)
+            if (inline) ic?.setComposingText(e.composingText(), 1)
             candidates = e.candidates().take(MAX_CANDIDATES)
         }
         refresh()
@@ -222,7 +254,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         if (candidates.isNotEmpty()) {
             val c = candidates.getOrNull(index) ?: return
             val text = e.select(c)
-            // commitText 會把底線那段換成選的字；如果只選了前半段，後面的繼續組字
+            // 送出選的字（直接打在輸入框模式下，會換掉底線那段）；如果只選了前半段，後面的繼續組字
             ic.commitText(text, 1)
             if (e.isEmpty) {
                 candidates = emptyList()
@@ -280,7 +312,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                     e != null && !e.isEmpty -> { e.backspace(); updateComposing() }
                     pending.isNotEmpty() -> {
                         pending.setLength(pending.length - 1)
-                        ic.setComposingText(pending, 1)
+                        if (inline) ic.setComposingText(pending, 1)
                         refresh()
                     }
                     else -> {
