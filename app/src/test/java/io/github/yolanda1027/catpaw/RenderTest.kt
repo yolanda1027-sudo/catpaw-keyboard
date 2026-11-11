@@ -103,14 +103,34 @@ class RenderTest {
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    private fun renderKaomoji(theme: String, name: String) {
+        val ctx = RuntimeEnvironment.getApplication()
+        Symbols.loadKaomoji(File("src/main/assets/kaomoji.txt").readText())
+        val prefs = Prefs(ctx)
+        prefs.theme = theme
+        val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+        val cats = Symbols.kaomojiGroups[0].second
+        v.rows = Symbols.rows(cats.take(Symbols.PER_PAGE_WIDE), true)
+        v.symbolTabs = listOf("◁", null) + Symbols.kaomojiGroups.map { it.first }
+        v.symbolTab = 2
+        v.symbolPageCount = (cats.size + 8) / 9
+        v.symbolPage = 0
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+        v.draw(Canvas(bmp))
+        File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     @Test
     fun renderSymbolBoards() {
         File("build/renders").mkdirs()
         renderSymbols("classic", 1, 0, "classic-sym-common")
         renderSymbols("classic", 2, 1, "classic-sym-brackets2")
-        renderSymbols("classic", 7, 0, "classic-sym-kaomoji")
+
         renderSymbols("stitch", 6, 0, "stitch-sym-shapes")
-        renderSymbols("catpaw", 7, 0, "catpaw-sym-kaomoji")
+        renderKaomoji("classic", "classic-sym-kaomoji")
+        renderKaomoji("catpaw", "catpaw-sym-kaomoji")
     }
 
     @Test

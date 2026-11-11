@@ -65,6 +65,11 @@ class Prefs(context: Context) {
         get() = sp.getString("recent_symbols", "") ?: ""
         set(v) = sp.edit().putString("recent_symbols", v).apply()
 
+    /** 最近用過的顏文字（用 \u0001 分隔） */
+    var recentKaomoji: String
+        get() = sp.getString("recent_kaomoji", "") ?: ""
+        set(v) = sp.edit().putString("recent_kaomoji", v).apply()
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

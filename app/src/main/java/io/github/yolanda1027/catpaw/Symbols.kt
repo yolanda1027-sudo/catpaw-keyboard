@@ -18,6 +18,26 @@ object Symbols {
     const val PER_PAGE = 28
     const val PER_PAGE_WIDE = 9
     const val RECENT = 0
+    const val KAOMOJI = 7
+
+    /** 顏文字的小分類：(名稱, 顏文字列表) */
+    var kaomojiGroups: List<Pair<String, List<String>>> = emptyList()
+        private set
+
+    /** 讀 kaomoji.txt：[分類名稱] 開頭，下面一行一個 */
+    fun loadKaomoji(text: String) {
+        val groups = ArrayList<Pair<String, MutableList<String>>>()
+        for (raw in text.lineSequence()) {
+            val line = raw.trim()
+            if (line.isEmpty() || line.startsWith("#")) continue
+            if (line.startsWith("[") && line.endsWith("]")) {
+                groups.add(line.substring(1, line.length - 1) to ArrayList())
+            } else {
+                groups.lastOrNull()?.second?.add(line)
+            }
+        }
+        kaomojiGroups = groups.map { it.first to it.second.toList() }
+    }
 
     private fun page(s: String) = s.trim().split(Regex("\\s+"))
 
@@ -70,15 +90,8 @@ object Symbols {
                 page("▪ ▫ ◾ ◽ ▶ ◀ ▷ ◁ ► ◄  ⊿ ◢ ◣ ◤ ◥ ▣ ▤ ▥ ▦ ▧  ▨ ▩ ░ ▒ ▓ █ ▁ ▔"),
             ),
         ),
-        Category(
-            "^ω^",
-            listOf(
-                page("(=^･ω･^=)  ฅ^•ﻌ•^ฅ  (´・ω・`)  (≧▽≦)  (｡･ω･｡)  (๑•̀ㅂ•́)و✧  (´；ω；`)  (╯°□°）╯︵┻━┻  ┬─┬ノ(º_ºノ)"),
-                page("(＾▽＾)  (￣▽￣)ノ  ( ˘ω˘ )  (*´∀`*)  ヽ(✿ﾟ▽ﾟ)ノ  (￣ー￣)  (・∀・)  (；´Д`)  ＼(^o^)／"),
-                page("(´･_･`)  (ﾟДﾟ)  (*/ω＼*)  (♥ω♥*)  ٩(๑❛ᴗ❛๑)۶  ( ´ ▽ ` )ﾉ  (´-ω-`)  (=ↀωↀ=)  ฅ(=･ω･=)ฅ"),
-            ),
-            wide = true,
-        ),
+        // 顏文字：內容從 assets/kaomoji.txt 讀進來（見 loadKaomoji），分類列會換成顏文字的小分類
+        Category("^ω^", emptyList(), wide = true),
     )
 
     private val cache = HashMap<String, List<List<Key>>>()

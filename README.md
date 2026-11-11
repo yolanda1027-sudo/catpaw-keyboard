@@ -33,6 +33,11 @@
 注音詞庫來自 [小麥注音 McBopomofo](https://github.com/openvanilla/McBopomofo)（MIT License），
 用 `tools/build_dict.py` 轉成 `app/src/main/assets/zhuyin.dict`。授權全文見 `third_party/McBopomofo-LICENSE.txt`。
 
+## 顏文字來源
+
+`app/src/main/assets/kaomoji.txt` 裡的顏文字，有一部分選自
+[Wepplication 特殊符號表](https://wepplication.github.io/tools/charMap/#emoticon)，經過挑選、重新分類。
+
 ## 給開發者
 
 - 每次 push，GitHub Actions 會自動建置 APK，並更新 Releases 的「最新測試版」

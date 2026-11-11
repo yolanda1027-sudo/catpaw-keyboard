@@ -46,6 +46,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     /** 符號鍵盤目前的分類和頁數 */
     private var symCat = 1
     private var symPage = 0
+    /** 顏文字的小分類：0 = 最近使用、1 以後 = 貓咪、動物… */
+    private var kaoTab = 1
 
     private var candidates: List<Candidate> = emptyList()
     /** 聯想詞（剛送出一個字之後，猜你接下來要打的） */
@@ -58,6 +60,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         haptics = Haptics(this)
         chinese = prefs.chinese
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
+        Symbols.loadKaomoji(assets.open("kaomoji.txt").bufferedReader().use { it.readText() })
         // 讓鍵盤上方放注音小框框的那條區域是透明的
         window.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         loadDictionary()
@@ -105,7 +108,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
-            "chinese", "recent_symbols" -> Unit
+            "chinese", "recent_symbols", "recent_kaomoji" -> Unit
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             else -> kv?.reloadPrefs()
         }
@@ -185,7 +188,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
             Page.EMOJI -> Layouts.EMOJI
         }
-        if (page == Page.SYMBOL) {
+        if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
+            v.symbolTabs = kaoTabs()
+            v.symbolTab = kaoTab + 1
+            v.symbolPageCount = symbolPageCount()
+            v.symbolPage = symPage
+        } else if (page == Page.SYMBOL) {
             v.symbolTabs = Symbols.categories.map { it.tab }
             v.symbolTab = symCat
             v.symbolPageCount = symbolPageCount()
@@ -301,7 +309,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         when (key.act) {
             Act.ZHUYIN -> typeZhuyin(key.text[0])
             Act.TEXT -> {
-                if (page == Page.SYMBOL) addRecentSymbol(key.text)
+                if (page == Page.SYMBOL) {
+                    if (symCat == Symbols.KAOMOJI) addRecentKaomoji(key.text) else addRecentSymbol(key.text)
+                }
                 val upper = !chinese && page == Page.MAIN && shift > 0
                 commitText(if (upper) key.text.uppercase() else key.text)
                 if (shift == 1 && page == Page.MAIN) {
@@ -394,15 +404,39 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         prefs.recentSymbols = list.take(Symbols.PER_PAGE).joinToString("\u0001")
     }
 
-    private fun symbolItems(): List<String> =
-        if (symCat == Symbols.RECENT) recentSymbols()
-        else Symbols.categories[symCat].pages.getOrElse(symPage) { emptyList() }
+    private fun recentKaomoji(): List<String> =
+        prefs.recentKaomoji.split('\u0001').filter { it.isNotEmpty() }
 
-    private fun symbolPageCount(): Int =
-        if (symCat == Symbols.RECENT) 1 else Symbols.categories[symCat].pages.size
+    private fun addRecentKaomoji(s: String) {
+        val list = listOf(s) + recentKaomoji().filter { it != s }
+        prefs.recentKaomoji = list.take(Symbols.PER_PAGE_WIDE).joinToString("\u0001")
+    }
+
+    /** 顏文字模式的分類列：◁ 回去、最近使用（時鐘）、各小分類 */
+    private fun kaoTabs(): List<String?> = listOf("◁", null) + Symbols.kaomojiGroups.map { it.first }
+
+    private fun kaomojiAll(): List<String> =
+        if (kaoTab == 0) recentKaomoji() else Symbols.kaomojiGroups.getOrNull(kaoTab - 1)?.second ?: emptyList()
+
+    private fun symbolItems(): List<String> = when (symCat) {
+        Symbols.RECENT -> recentSymbols()
+        Symbols.KAOMOJI -> kaomojiAll().chunked(Symbols.PER_PAGE_WIDE).getOrElse(symPage) { emptyList() }
+        else -> Symbols.categories[symCat].pages.getOrElse(symPage) { emptyList() }
+    }
+
+    private fun symbolPageCount(): Int = when (symCat) {
+        Symbols.RECENT -> 1
+        Symbols.KAOMOJI -> ((kaomojiAll().size + Symbols.PER_PAGE_WIDE - 1) / Symbols.PER_PAGE_WIDE).coerceAtLeast(1)
+        else -> Symbols.categories[symCat].pages.size
+    }
 
     override fun onSymbolTab(index: Int) {
-        symCat = index
+        if (symCat == Symbols.KAOMOJI) {
+            if (index == 0) symCat = 1 // ◁ 回到一般符號
+            else kaoTab = index - 1
+        } else {
+            symCat = index
+        }
         symPage = 0
         refresh()
     }
