@@ -31,6 +31,7 @@ class CatKeyboardView(
         fun onCandidate(index: Int)
         fun onSymbolTab(index: Int)
         fun onSymbolSwipe(direction: Int)
+        fun onClipboard()
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -393,6 +394,8 @@ class CatKeyboardView(
         val ts = topH * 0.1f
         c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
         theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) theme.textDim else theme.text)
+        // 剪貼簿按鈕（在 ▽ 左邊）
+        theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, theme.textDim)
         // 右邊的 ▽：收起鍵盤
         val cx = w - tabW * 0.4f
         val cy = topH / 2
@@ -576,6 +579,7 @@ class CatKeyboardView(
             x < tabW -> { haptics.perform(this, prefs); l.onTabChinese() }
             x < tabW * 2 -> { haptics.perform(this, prefs); l.onTabEnglish() }
             x > width - tabW * 0.8f -> { haptics.perform(this, prefs); l.onHide() }
+            x > width - tabW * 1.6f -> { haptics.perform(this, prefs); l.onClipboard() }
         }
     }
 
@@ -587,7 +591,7 @@ class CatKeyboardView(
         haptics.perform(this, prefs)
         when {
             kr.key.act == Act.BACKSPACE -> handler.postDelayed(repeatRunnable, 400)
-            kr.key.sub != null || kr.key.act == Act.SPACE ->
+            kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP ->
                 handler.postDelayed(longPressRunnable, prefs.longPressMs.toLong())
         }
         invalidate()

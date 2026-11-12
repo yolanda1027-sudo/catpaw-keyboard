@@ -123,6 +123,30 @@ class RenderTest {
     }
 
     @Test
+    fun renderClipboard() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val h = ClipHistory(File(ctx.filesDir, "test-clips.json"))
+        h.add("https://wepplication.github.io/tools/charMap/#emoticon")
+        h.add("塞德里克推開玻璃木門帶她走進去，挑了最裡頭一張靠著壁爐與弧形落地窗的雙人軟墊圓桌。")
+        h.add("0912-345-678")
+        h.togglePin("0912-345-678")
+        for (t in listOf("classic", "stitch")) {
+            val prefs = Prefs(ctx)
+            prefs.theme = t
+            val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+            v.rows = Layouts.clipRows(h.all(), 0)
+            v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選")
+            v.symbolTab = 0
+            v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+            val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+            v.draw(Canvas(bmp))
+            File("build/renders").mkdirs()
+            File("build/renders/$t-clipboard.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
+
+    @Test
     fun renderSymbolBoards() {
         File("build/renders").mkdirs()
         renderSymbols("classic", 1, 0, "classic-sym-common")

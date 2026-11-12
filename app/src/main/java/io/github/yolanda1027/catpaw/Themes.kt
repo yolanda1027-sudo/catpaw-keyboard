@@ -79,6 +79,27 @@ abstract class KbTheme(protected val dp: Float) {
         drawTextLeft(c, s, 10 * dp, h / 2 + 1 * dp, size, readingText)
     }
 
+    /** 剪貼簿的一筆：圓角底框＋靠左的一行字，太長就用「…」截掉 */
+    open fun drawClipItem(c: Canvas, r: RectF, label: String, pressed: Boolean, rowH: Float) {
+        if (label.isEmpty()) return
+        val box = RectF(r.left + 6 * dp, r.top + 4 * dp, r.right - 6 * dp, r.bottom - 4 * dp)
+        fill.shader = null
+        fill.color = text
+        fill.alpha = if (pressed) 60 else 22
+        c.drawRoundRect(box, 10 * dp, 10 * dp, fill)
+        fill.alpha = 255
+        val size = rowH * 0.3f
+        textPaint.textSize = size
+        textPaint.typeface = Typeface.DEFAULT
+        val maxW = box.width() - 28 * dp
+        var shown = label
+        if (textPaint.measureText(shown) > maxW) {
+            while (shown.isNotEmpty() && textPaint.measureText("$shown…") > maxW) shown = shown.dropLast(1)
+            shown += "…"
+        }
+        drawTextLeft(c, shown, box.left + 14 * dp, box.centerY(), size, text)
+    }
+
     /** 長按選單的配色 */
     open val popupBg get() = previewBg
     open val popupText get() = previewText
@@ -210,6 +231,13 @@ abstract class KbTheme(protected val dp: Float) {
                 c.drawPath(path, if (shift > 0) fill else stroke)
                 if (shift == 2) c.drawLine(cx - s * 0.25f, cy + s * 0.48f, cx + s * 0.25f, cy + s * 0.48f, stroke)
             }
+            Icon.CLIPBOARD -> {
+                val b = RectF(cx - s * 0.32f, cy - s * 0.36f, cx + s * 0.32f, cy + s * 0.42f)
+                c.drawRoundRect(b, s * 0.08f, s * 0.08f, stroke)
+                c.drawRoundRect(RectF(cx - s * 0.15f, cy - s * 0.46f, cx + s * 0.15f, cy - s * 0.28f), s * 0.05f, s * 0.05f, fill)
+                c.drawLine(cx - s * 0.17f, cy - s * 0.05f, cx + s * 0.17f, cy - s * 0.05f, stroke)
+                c.drawLine(cx - s * 0.17f, cy + s * 0.15f, cx + s * 0.1f, cy + s * 0.15f, stroke)
+            }
             Icon.CLOCK -> {
                 c.drawCircle(cx, cy, s * 0.42f, stroke)
                 c.drawLine(cx, cy, cx, cy - s * 0.26f, stroke)
@@ -240,6 +268,7 @@ class ClassicTheme(dp: Float) : KbTheme(dp) {
     override val backspaceCutout get() = bg
 
     override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
+        if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
         when (key.style) {
             Style.CHAR -> {
                 if (pressed) pressedBox(c, r)
@@ -255,6 +284,7 @@ class ClassicTheme(dp: Float) : KbTheme(dp) {
                 c.drawRoundRect(box, 4 * dp, 4 * dp, fill)
                 drawText(c, label, r.centerX(), r.centerY(), rowH * 0.22f, textDim)
             }
+            Style.CLIP -> Unit
             Style.ENTER -> {
                 fill.color = if (pressed) enterPressed else enterColor
                 c.drawCircle(r.centerX(), r.centerY(), 17.5f * dp, fill)
@@ -292,6 +322,7 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
     private val enterPressed = Color.parseColor("#FF7F9E")
 
     override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
+        if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
         when (key.style) {
             Style.CHAR -> drawPaw(c, r, key, label, pressed, rowH)
             Style.FUNC -> {
@@ -306,6 +337,7 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
                 c.drawRoundRect(box, box.height() / 2, box.height() / 2, fill)
                 drawText(c, label, r.centerX(), r.centerY(), rowH * 0.22f, textDim)
             }
+            Style.CLIP -> Unit
             Style.ENTER -> {
                 // 圓圓的貓頭，加兩個小耳朵
                 val cx = r.centerX()
@@ -431,6 +463,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
     private fun seed(key: Key, r: RectF) = abs(key.label.hashCode() * 31 + (r.left / dp).toInt() * 7 + (r.top / dp).toInt())
 
     override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
+        if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
         val n = seed(key, r)
         val sink = if (pressed) 1.5f * dp else 0f // 按下去會往下沉一點
         // 鍵與鍵之間只留一點點縫，讓按鍵本體盡量大
@@ -491,6 +524,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
                 }
             }
             Style.FUNC, Style.ENTER -> drawFuncContent(c, key, label, content, shift, rowH, Color.WHITE)
+            Style.CLIP -> Unit
             Style.SPACE -> {
                 drawText(c, label, content.centerX(), content.centerY(), rowH * 0.22f, textDim)
                 drawFish(c, content.left + content.width() * 0.18f, content.centerY() - 3 * dp, 7 * dp, false)

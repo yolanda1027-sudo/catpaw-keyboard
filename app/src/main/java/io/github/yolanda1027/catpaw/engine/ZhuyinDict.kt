@@ -38,7 +38,19 @@ class ZhuyinDict private constructor(
     companion object {
         const val MAX_PHRASE_LEN = 8
 
-        fun load(input: InputStream): ZhuyinDict {
+        /** 讀加分表（assets/boost.txt）：「詞 加分」，加分省略時是 1.0 */
+        fun parseBoosts(text: String): Map<String, Float> {
+            val m = HashMap<String, Float>()
+            for (raw in text.lineSequence()) {
+                val line = raw.trim()
+                if (line.isEmpty() || line.startsWith("#")) continue
+                val parts = line.split(Regex("\\s+"))
+                m[parts[0]] = parts.getOrNull(1)?.toFloatOrNull() ?: 1f
+            }
+            return m
+        }
+
+        fun load(input: InputStream, boosts: Map<String, Float> = emptyMap()): ZhuyinDict {
             val index = HashMap<String, ArrayList<Entry>>(60000)
             val assocBuild = HashMap<Char, ArrayList<Pair<String, Float>>>()
             BufferedReader(InputStreamReader(input, Charsets.UTF_8), 1 shl 16).use { r ->
@@ -50,7 +62,7 @@ class ZhuyinDict private constructor(
                     if (t1 <= 0 || t2 <= t1) continue
                     val phrase = line.substring(0, t1)
                     val reading = line.substring(t1 + 1, t2)
-                    val score = line.substring(t2 + 1).toFloatOrNull() ?: continue
+                    val score = (line.substring(t2 + 1).toFloatOrNull() ?: continue) + (boosts[phrase] ?: 0f)
                     val sig = signatureOf(reading)
                     if (sig.length > MAX_PHRASE_LEN) continue
                     index.getOrPut(sig) { ArrayList(4) }.add(Entry(phrase, reading, score))

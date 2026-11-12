@@ -15,7 +15,8 @@ class ZhuyinEngineTest {
         @JvmStatic
         fun load() {
             val t = System.currentTimeMillis()
-            dict = File("src/main/assets/zhuyin.dict").inputStream().use { ZhuyinDict.load(it) }
+            val boosts = ZhuyinDict.parseBoosts(File("src/main/assets/boost.txt").readText())
+            dict = File("src/main/assets/zhuyin.dict").inputStream().use { ZhuyinDict.load(it, boosts) }
             println("dict loaded: ${dict.size} entries in ${System.currentTimeMillis() - t} ms")
         }
     }
@@ -51,10 +52,17 @@ class ZhuyinEngineTest {
     @Test fun withoutTonesSentence() = assertEquals("我們去看電影", convert("ㄨㄛㄇㄣㄑㄩㄎㄢㄉㄧㄢㄧㄥ"))
 
     @Test fun abbreviation() {
-        // ㄒㄒ 最常見的是「學校」，「謝謝」也要排在前面
+        // 有口語加分表，ㄒㄒ 第一個就是「謝謝」
         val c = engine().type("ㄒㄒ").candidates().map { it.text }
-        assertTrue("謝謝 should be near the top: ${c.take(10)}", "謝謝" in c.take(10))
+        assertEquals("謝謝", c[0])
+        assertTrue("學校 still offered: ${c.take(10)}", "學校" in c.take(10))
     }
+
+    @Test fun colloquialParticle() = assertEquals("你好嗎", convert("ㄋㄧㄏㄠㄇㄚ"))
+
+    @Test fun goodNightWithoutTones() = assertEquals("晚安", convert("ㄨㄢㄢ"))
+
+    @Test fun sentenceStillWorksWithBoosts() = assertEquals("今天天氣很好", convert("ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋㄏㄣˇㄏㄠˇ"))
 
     @Test fun composingShowsChineseAndRawCurrent() {
         val e = engine().type("ㄋㄧˇㄏㄠ")

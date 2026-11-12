@@ -70,6 +70,11 @@ class Prefs(context: Context) {
         get() = sp.getString("recent_kaomoji", "") ?: ""
         set(v) = sp.edit().putString("recent_kaomoji", v).apply()
 
+    /** 記錄剪貼簿（點鍵盤上方的剪貼簿按鈕可以看到、貼上） */
+    var clipboardHistory: Boolean
+        get() = sp.getBoolean("clipboard_history", true)
+        set(v) = sp.edit().putBoolean("clipboard_history", v).apply()
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

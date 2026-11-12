@@ -1,6 +1,9 @@
 package io.github.yolanda1027.catpaw
 
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.SharedPreferences
+import android.os.Build
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
@@ -25,7 +28,7 @@ import java.io.File
 class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private enum class Page { MAIN, SYMBOL, EMOJI }
+    private enum class Page { MAIN, SYMBOL, EMOJI, CLIP }
 
     private lateinit var prefs: Prefs
     private lateinit var haptics: Haptics
@@ -46,6 +49,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     /** 符號鍵盤目前的分類和頁數 */
     private var symCat = 1
     private var symPage = 0
+    /** 剪貼簿紀錄 */
+    private lateinit var clips: ClipHistory
+    private var clipPage = 0
+    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
+
     /** 顏文字的小分類：0 = 最近使用、1 以後 = 貓咪、動物… */
     private var kaoTab = 1
 
@@ -61,6 +69,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         chinese = prefs.chinese
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
         Symbols.loadKaomoji(assets.open("kaomoji.txt").bufferedReader().use { it.readText() })
+        clips = ClipHistory(File(filesDir, "clips.json"))
+        getSystemService(ClipboardManager::class.java)?.addPrimaryClipChangedListener(clipListener)
         // 讓鍵盤上方放注音小框框的那條區域是透明的
         window.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         loadDictionary()
@@ -87,7 +97,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     private fun loadDictionary() {
         Thread {
-            val d = assets.open("zhuyin.dict").use { ZhuyinDict.load(it) }
+            val boosts = ZhuyinDict.parseBoosts(assets.open("boost.txt").bufferedReader().use { it.readText() })
+            val d = assets.open("zhuyin.dict").use { ZhuyinDict.load(it, boosts) }
             val user = UserScores(File(filesDir, "user_scores.txt"))
             main.post {
                 dict = d
@@ -102,6 +113,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onDestroy() {
+        getSystemService(ClipboardManager::class.java)?.removePrimaryClipChangedListener(clipListener)
         prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         super.onDestroy()
     }
@@ -110,6 +122,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         when (key) {
             "chinese", "recent_symbols", "recent_kaomoji" -> Unit
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
+            "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
+                File(filesDir, "clips.json").delete()
+                clips = ClipHistory(File(filesDir, "clips.json"))
+            }
             else -> kv?.reloadPrefs()
         }
     }
@@ -140,6 +156,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             else -> Page.MAIN
         }
         chinese = prefs.chinese && !isPassword(info)
+        captureClipboard() // 鍵盤打開時順便看一下剛剛有沒有複製新東西
         kv?.reloadPrefs()
         refresh()
     }
@@ -187,6 +204,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Page.MAIN -> if (chinese) Layouts.ZHUYIN else Layouts.ENGLISH
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
             Page.EMOJI -> Layouts.EMOJI
+            Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
         }
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
             v.symbolTabs = kaoTabs()
@@ -198,6 +216,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolTab = symCat
             v.symbolPageCount = symbolPageCount()
             v.symbolPage = symPage
+        } else if (page == Page.CLIP) {
+            v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選")
+            v.symbolTab = 0
+            v.symbolPageCount = clipPageCount()
+            v.symbolPage = clipPage
         } else {
             v.symbolTabs = null
         }
@@ -302,6 +325,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         if (longPress) {
             when (key.act) {
                 Act.SPACE -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
+                Act.CLIP -> if (key.text.isNotEmpty()) {
+                    clips.togglePin(key.text)
+                    refresh()
+                }
                 else -> key.sub?.let { commitText(it) }
             }
             return
@@ -362,6 +389,16 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Act.TO_EMOJI -> { page = Page.EMOJI; refresh() }
             Act.TO_MAIN -> { page = Page.MAIN; refresh() }
             Act.GAP -> Unit
+            Act.CLIP -> if (key.text.isNotEmpty()) {
+                commitText(key.text)
+                page = Page.MAIN
+                refresh()
+            }
+            Act.CLIP_CLEAR -> {
+                clips.clearUnpinned()
+                clipPage = 0
+                refresh()
+            }
         }
     }
 
@@ -430,7 +467,40 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         else -> Symbols.categories[symCat].pages.size
     }
 
+    // ---------- 剪貼簿 ----------
+
+    private fun clipPageCount() =
+        ((clips.all().size + Layouts.CLIPS_PER_PAGE - 1) / Layouts.CLIPS_PER_PAGE).coerceAtLeast(1)
+
+    /** 把系統剪貼簿目前的文字記下來（標成機密的不記，例如密碼管理 App 複製的） */
+    private fun captureClipboard() {
+        if (!prefs.clipboardHistory) return
+        try {
+            val cm = getSystemService(ClipboardManager::class.java) ?: return
+            val clip = cm.primaryClip ?: return
+            val desc = clip.description
+            if (Build.VERSION.SDK_INT >= 33 &&
+                desc.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true
+            ) return
+            if (clip.itemCount == 0) return
+            val text = clip.getItemAt(0).coerceToText(this)?.toString() ?: return
+            clips.add(text)
+            if (page == Page.CLIP) refresh()
+        } catch (_: Exception) {
+            // 沒有權限讀剪貼簿（例如鍵盤不是目前的輸入法）就算了
+        }
+    }
+
+    override fun onClipboard() {
+        if (isComposing) commitComposingAll()
+        captureClipboard()
+        page = Page.CLIP
+        clipPage = 0
+        refresh()
+    }
+
     override fun onSymbolTab(index: Int) {
+        if (page == Page.CLIP) return
         if (symCat == Symbols.KAOMOJI) {
             if (index == 0) symCat = 1 // ◁ 回到一般符號
             else kaoTab = index - 1
@@ -442,6 +512,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onSymbolSwipe(direction: Int) {
+        if (page == Page.CLIP) {
+            val next = (clipPage + direction).coerceIn(0, clipPageCount() - 1)
+            if (next != clipPage) { clipPage = next; haptics.perform(kv, prefs); refresh() }
+            return
+        }
         val next = (symPage + direction).coerceIn(0, symbolPageCount() - 1)
         if (next != symPage) {
             symPage = next

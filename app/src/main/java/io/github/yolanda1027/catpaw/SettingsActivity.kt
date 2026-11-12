@@ -110,6 +110,20 @@ class SettingsActivity : Activity() {
             android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
         }
 
+        section("剪貼簿")
+        root.addView(Switch(this).apply {
+            text = "記錄複製過的文字（鍵盤上方的剪貼簿按鈕）"
+            isChecked = prefs.clipboardHistory
+            setOnCheckedChangeListener { _, b -> prefs.clipboardHistory = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("只存在這支手機裡。沒釘選的 1 小時後會自動刪掉；密碼管理 App 複製的密碼不會被記錄。")
+        button("清除剪貼簿紀錄（包含釘選的）") {
+            java.io.File(filesDir, "clips.json").delete()
+            prefs.sp.edit().putLong("clear_clips", System.currentTimeMillis()).apply()
+            android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
+        }
+
         section("小提示")
         note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・長按注音鍵會跳出選單（像 Google 注音），手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫")
     }

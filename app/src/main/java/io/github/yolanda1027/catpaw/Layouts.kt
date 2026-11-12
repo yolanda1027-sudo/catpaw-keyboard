@@ -1,13 +1,13 @@
 package io.github.yolanda1027.catpaw
 
 /** 按下去要做的事 */
-enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMOJI, TO_MAIN, GAP }
+enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMOJI, TO_MAIN, GAP, CLIP, CLIP_CLEAR }
 
 /** 按鍵外觀類型：主題會依這個決定怎麼畫 */
-enum class Style { CHAR, FUNC, SPACE, ENTER }
+enum class Style { CHAR, FUNC, SPACE, ENTER, CLIP }
 
 /** 用線條畫的圖示（不靠字型，免得不同手機顯示不一樣） */
-enum class Icon { BACKSPACE, ENTER, SHIFT, EMOJI, CLOCK }
+enum class Icon { BACKSPACE, ENTER, SHIFT, EMOJI, CLOCK, CLIPBOARD }
 
 data class Key(
     val label: String,
@@ -85,6 +85,30 @@ object Layouts {
         chars("「 」 『 』 、 ： ； ！ ？ …"),
         pageBottom,
     )
+
+    /** 剪貼簿：一頁 4 筆，一筆佔一整排 */
+    const val CLIPS_PER_PAGE = 4
+
+    private val clipBottom = listOf(
+        Key("返回", Act.TO_MAIN, weight = 2f, style = Style.FUNC),
+        Key("清除未釘選", Act.CLIP_CLEAR, weight = 3f, style = Style.FUNC),
+        Key("空白", Act.SPACE, text = " ", weight = 2.5f, style = Style.SPACE),
+        backspace.copy(weight = 1.25f),
+        enter.copy(weight = 1.25f),
+    )
+
+    fun clipRows(items: List<ClipHistory.Item>, page: Int): List<List<Key>> {
+        val pageItems = items.drop(page * CLIPS_PER_PAGE).take(CLIPS_PER_PAGE)
+        val rows = pageItems.map { item ->
+            val oneLine = item.text.replace(Regex("\\s+"), " ").trim()
+            listOf(Key((if (item.pinned) "📌 " else "") + oneLine, Act.CLIP, text = item.text, weight = 10f, style = Style.CLIP))
+        }.toMutableList()
+        if (rows.isEmpty()) {
+            rows.add(listOf(Key("還沒有複製過的文字。複製之後會出現在這裡", Act.CLIP, text = "", weight = 10f, style = Style.CLIP)))
+        }
+        while (rows.size < CLIPS_PER_PAGE) rows.add(listOf(Key("", Act.GAP, weight = 10f)))
+        return rows + listOf(clipBottom)
+    }
 
     val EMOJI: List<List<Key>> = listOf(
         chars("😀 😂 🤣 😊 😍 🥰 😘 😭 😢 😡"),
