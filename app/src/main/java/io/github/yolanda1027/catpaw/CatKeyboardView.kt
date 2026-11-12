@@ -140,7 +140,7 @@ class CatKeyboardView(
 
     // ---------- 長按選單（像 Google 注音：O ㄟ o） ----------
 
-    /** @param main 選項裡哪一個是「原本的注音」（選它就跟一般點一下一樣） */
+    /** @param main 選項裡哪一個是原本的注音 */
     private class PopupOptions(val items: List<String>, val default: Int, val main: Int)
 
     private var popup: PopupOptions? = null
@@ -606,9 +606,8 @@ class CatKeyboardView(
         if (cancel || kr == null) return
         when {
             o != null -> {
-                // 長按選單：選原本的注音＝一般點一下；選其他的就直接打出那個字
-                if (popupSel == o.main) listener?.onKey(kr.key, false)
-                else listener?.onKey(Key(o.items[popupSel], Act.TEXT), false)
+                // 長按選單：選到什麼就直接打出什麼（選注音就打出注音符號本身，不進選字）
+                listener?.onKey(Key(o.items[popupSel], Act.TEXT), false)
             }
             !longFired -> listener?.onKey(kr.key, false)
         }
