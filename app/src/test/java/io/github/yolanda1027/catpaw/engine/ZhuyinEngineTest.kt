@@ -101,6 +101,55 @@ class ZhuyinEngineTest {
         assertEquals("妳", engine().let { it }.let { e.type("ㄋㄧˇ"); e.candidates()[0].text })
     }
 
+    // ---------- 記憶選字 ----------
+
+    @Test fun onePickIsEnoughToBecomeFirst() {
+        val e = engine()
+        e.type("ㄋㄧˇ")
+        assertTrue(e.candidates()[0].text != "擬")
+        e.select(e.candidates().first { it.text == "擬" })
+        e.type("ㄋㄧˇ")
+        assertEquals("擬", e.candidates()[0].text)
+    }
+
+    @Test fun acceptingTheDefaultDoesNotChangeRanking() {
+        val e = engine()
+        repeat(5) { e.type("ㄋㄧˇ"); e.commitAll() }
+        e.type("ㄋㄧˇ")
+        e.select(e.candidates().first { it.text == "妳" })
+        e.type("ㄋㄧˇ")
+        assertEquals("妳", e.candidates()[0].text)
+    }
+
+    @Test fun picksInARowBecomeAPhrase() {
+        val e = engine()
+        e.type("ㄋㄧˇㄏㄠˇ")
+        e.select(e.candidates().first { it.text == "妳" })   // 先選「妳」
+        e.select(e.candidates().first { it.text == "好" })   // 再選「好」
+        assertEquals("妳好", e.type("ㄋㄧˇㄏㄠˇ").commitAll()) // 下次整句就是「妳好」
+    }
+
+    @Test fun learnedPhraseWorksInsideASentence() {
+        val e = engine()
+        e.type("ㄋㄧˇㄏㄠˇ")
+        e.select(e.candidates().first { it.text == "妳" })
+        e.select(e.candidates().first { it.text == "好" })
+        assertEquals("妳好嗎", e.type("ㄋㄧˇㄏㄠˇㄇㄚ˙").commitAll())
+    }
+
+    @Test fun memorySurvivesRestart() {
+        val f = File.createTempFile("mem", ".txt")
+        f.delete()
+        val e1 = ZhuyinEngine(dict, UserScores(f))
+        e1.type("ㄋㄧˇㄏㄠˇ")
+        e1.select(e1.candidates().first { it.text == "妳" })
+        e1.select(e1.candidates().first { it.text == "好" })
+        val e2 = ZhuyinEngine(dict, UserScores(f))
+        assertEquals("妳好", e2.type("ㄋㄧˇㄏㄠˇ").commitAll())
+        f.delete()
+        ZhuyinEngine(dict, UserScores(null)) // 還原詞庫裡的使用者詞
+    }
+
     @Test fun associated() {
         val a = dict.associated('天')
         assertTrue("天 → 氣/空/下 expected in $a", a.any { it == "氣" || it == "空" || it == "下" })

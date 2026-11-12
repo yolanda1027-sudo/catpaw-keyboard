@@ -5,7 +5,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 
 /** 詞庫裡的一筆：詞、讀音（音節用空白分隔，一聲沒有符號）、分數（log10 機率） */
-class Entry(val phrase: String, val reading: String, val score: Float) {
+class Entry(val phrase: String, val reading: String, val score: Float, val user: Boolean = false) {
     val syllables: List<String> by lazy(LazyThreadSafetyMode.NONE) { reading.split(' ') }
 }
 
@@ -28,6 +28,25 @@ class ZhuyinDict private constructor(
             val syl = e.syllables
             syl.size == patterns.size && patterns.indices.all { patterns[it].matches(syl[it]) }
         }
+    }
+
+    private val userEntries = ArrayList<Entry>()
+
+    /** 換上使用者自訂詞（先拿掉舊的，再加新的） */
+    fun setUserPhrases(list: List<Pair<String, String>>) {
+        for (e in userEntries) index[signatureOf(e.reading)]?.remove(e)
+        userEntries.clear()
+        for ((p, r) in list) addUserPhrase(p, r)
+    }
+
+    fun addUserPhrase(phrase: String, reading: String) {
+        val sig = signatureOf(reading)
+        if (sig.length > MAX_PHRASE_LEN) return
+        val e = Entry(phrase, reading, UserScores.USER_PHRASE_SCORE, user = true)
+        val bucket = index.getOrPut(sig) { ArrayList() }
+        bucket.add(e)
+        bucket.sortByDescending { it.score }
+        userEntries.add(e)
     }
 
     /** 聯想詞：以這個字開頭的常用詞，去掉開頭那個字 */
@@ -79,7 +98,7 @@ class ZhuyinDict private constructor(
             return ZhuyinDict(index, assoc)
         }
 
-        private fun signatureOf(reading: String): String {
+        internal fun signatureOf(reading: String): String {
             val sb = StringBuilder()
             var atStart = true
             for (ch in reading) {

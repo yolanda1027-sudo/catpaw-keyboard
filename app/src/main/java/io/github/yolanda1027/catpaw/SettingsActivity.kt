@@ -103,7 +103,7 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.inlineComposing = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
-        note("你選過的字詞會被記住，下次排在比較前面（只存在這支手機裡）。")
+        note("記憶選字：你從選字列挑的字，下次會排第一個；同一次打字裡分段挑的字（例如先選「妳」再選「好」）會記成新詞「妳好」。直接按空白／Enter 接受預設的不算。只存在這支手機裡。")
         button("清除學習紀錄") {
             java.io.File(filesDir, "user_scores.txt").delete()
             prefs.sp.edit().putLong("clear_learning", System.currentTimeMillis()).apply()

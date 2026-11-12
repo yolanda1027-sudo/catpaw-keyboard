@@ -27,9 +27,24 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
     private var currentSlot = -1
     private val cache = HashMap<String, List<Entry>>()
 
+    /** 這一次打字（從開始組字到全部送出）用到的詞，用來學「分段選的字」 */
+    private val session = ArrayList<Entry?>()
+    private var sessionPicked = false
+
+    init {
+        dict.setUserPhrases(user.userPhrases())
+    }
+
     val isEmpty: Boolean get() = done.isEmpty() && current.isEmpty()
 
+    /** 放棄目前組的字（不學習） */
     fun clear() {
+        session.clear()
+        sessionPicked = false
+        clearInput()
+    }
+
+    private fun clearInput() {
         done.clear()
         current.setLength(0)
         currentSlot = -1
@@ -142,9 +157,26 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
     /** 全部轉成中文（按 Enter 或空白送出時用） */
     fun commitAll(): String {
         val segs = convert()
-        segs.forEach { s -> s.entry?.let { user.learn(it) } }
-        clear()
+        // 直接接受預設的轉換不算「學習」，只拿來組合分段選的詞
+        session.addAll(segs.map { it.entry })
+        clearInput()
+        finishSession()
         return segs.joinToString("") { it.text }
+    }
+
+    /** 一次打字結束：如果中間有自己挑過字，就把整段記成一個自訂詞 */
+    private fun finishSession() {
+        if (sessionPicked && session.size >= 2 && session.none { it == null }) {
+            val phrase = session.joinToString("") { it!!.phrase }
+            val reading = session.joinToString(" ") { it!!.reading }
+            val n = reading.count { it == ' ' } + 1
+            if (n in 2..MAX_LEARN_LEN && user.addPhrase(phrase, reading)) {
+                dict.addUserPhrase(phrase, reading)
+            }
+        }
+        session.clear()
+        sessionPicked = false
+        cache.clear()
     }
 
     /**
@@ -175,13 +207,29 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
 
     /** 選了一個選項：回傳要送出的文字，剩下的音節繼續留著 */
     fun select(c: Candidate): String {
-        c.entries.forEach { user.learn(it) }
-        val total = done.size + if (current.isNotEmpty()) 1 else 0
-        if (c.length >= total) {
-            clear()
+        val p = allPatterns()
+        if (c.entries.size == 1 && c.length <= p.size) {
+            // 自己從選字列挑的：如果不是原本的第一名，就讓它下次變第一名
+            val e = c.entries[0]
+            val top = lookup(p.subList(0, c.length)).maxOfOrNull { scoreOf(it) } ?: scoreOf(e)
+            if (scoreOf(e) < top) {
+                user.pick(e, top)
+                sessionPicked = true
+            }
+        }
+        session.addAll(c.entries)
+        if (c.length >= p.size) {
+            clearInput()
+            finishSession()
         } else {
             repeat(c.length) { done.removeAt(0) }
         }
+        cache.clear()
         return c.text
+    }
+
+    companion object {
+        /** 分段選字最多記幾個字的詞 */
+        private const val MAX_LEARN_LEN = 6
     }
 }
