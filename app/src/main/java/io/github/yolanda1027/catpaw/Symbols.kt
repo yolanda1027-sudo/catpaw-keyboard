@@ -99,8 +99,9 @@ object Symbols {
     private val bottomRow = listOf(
         Key("返回", Act.TO_MAIN, weight = 1.5f, style = Style.FUNC),
         Key("，", sub = "。"),
+        Key("123", Act.TO_NUMPAD, style = Style.FUNC),
         Key("", Act.TO_EMOJI, style = Style.FUNC, icon = Icon.EMOJI),
-        Key("空白", Act.SPACE, text = " ", weight = 4f, style = Style.SPACE),
+        Key("空白", Act.SPACE, text = " ", weight = 3f, style = Style.SPACE),
         Key("。"),
         Key("", Act.ENTER, weight = 1.5f, style = Style.ENTER, icon = Icon.ENTER),
     )

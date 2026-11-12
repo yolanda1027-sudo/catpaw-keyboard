@@ -1,7 +1,7 @@
 package io.github.yolanda1027.catpaw
 
 /** 按下去要做的事 */
-enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMOJI, TO_MAIN, GAP, CLIP, CLIP_CLEAR }
+enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMOJI, TO_MAIN, GAP, CLIP, CLIP_CLEAR, TO_NUMPAD }
 
 /** 按鍵外觀類型：主題會依這個決定怎麼畫 */
 enum class Style { CHAR, FUNC, SPACE, ENTER, CLIP }
@@ -85,6 +85,30 @@ object Layouts {
         chars("「 」 『 』 、 ： ； ！ ？ …"),
         pageBottom,
     )
+
+    /**
+     * 數字鍵盤（像 Google 注音）：中間大大的 1–9，左右兩排是常用符號，
+     * 底下是返回、@?#（回符號鍵盤）和 0。
+     */
+    val NUMPAD: List<List<Key>> = run {
+        fun d(s: String) = Key(s, weight = 7f / 3)
+        fun side(s: String) = Key(s, weight = 1.5f, style = Style.FUNC)
+        listOf(
+            listOf(side("+"), d("1"), d("2"), d("3"), side("#")),
+            listOf(side("-"), d("4"), d("5"), d("6"), Key("␣", Act.SPACE, text = " ", weight = 1.5f, style = Style.FUNC)),
+            listOf(side("*"), d("7"), d("8"), d("9"), backspace.copy(weight = 1.5f)),
+            listOf(
+                Key("返回", Act.TO_MAIN, weight = 1.5f, style = Style.FUNC),
+                Key(",", weight = 0.85f),
+                Key("@?#", Act.TO_SYMBOL, weight = 1.3f, style = Style.FUNC),
+                Key("/", weight = 0.85f),
+                Key("0", weight = 2.3f),
+                Key("=", weight = 0.85f),
+                Key(".", weight = 0.85f),
+                enter,
+            ),
+        )
+    }
 
     /** 剪貼簿：一頁 4 筆，一筆佔一整排 */
     const val CLIPS_PER_PAGE = 4

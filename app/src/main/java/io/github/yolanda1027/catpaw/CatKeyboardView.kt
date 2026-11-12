@@ -243,7 +243,7 @@ class CatKeyboardView(
         } else {
             for (kr in keyRects) {
                 if (kr.key.act == Act.GAP) continue
-                theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, keyH)
+                theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, rowH)
             }
             drawPageIndicator(c, w)
             drawPreview(c, w)

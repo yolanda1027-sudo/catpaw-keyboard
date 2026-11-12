@@ -123,6 +123,24 @@ class RenderTest {
     }
 
     @Test
+    fun renderNumpad() {
+        val ctx = RuntimeEnvironment.getApplication()
+        for (t in listOf("classic", "stitch")) {
+            val prefs = Prefs(ctx)
+            prefs.theme = t
+            val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+            v.rows = Layouts.NUMPAD
+            v.symbolTabs = listOf("數字")
+            v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+            val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+            v.draw(Canvas(bmp))
+            File("build/renders").mkdirs()
+            File("build/renders/$t-numpad.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
+
+    @Test
     fun renderClipboard() {
         val ctx = RuntimeEnvironment.getApplication()
         val h = ClipHistory(File(ctx.filesDir, "test-clips.json"))

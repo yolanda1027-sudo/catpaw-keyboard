@@ -28,7 +28,7 @@ import java.io.File
 class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private enum class Page { MAIN, SYMBOL, EMOJI, CLIP }
+    private enum class Page { MAIN, SYMBOL, EMOJI, CLIP, NUMPAD }
 
     private lateinit var prefs: Prefs
     private lateinit var haptics: Haptics
@@ -148,11 +148,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         resetComposing()
         shift = 0
         page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
-            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> {
-                symCat = 1 // 數字欄位：直接開有數字的那頁
-                symPage = 0
-                Page.SYMBOL
-            }
+            // 電話、驗證碼這類數字欄位：直接開數字鍵盤
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> Page.NUMPAD
             else -> Page.MAIN
         }
         chinese = prefs.chinese && !isPassword(info)
@@ -205,6 +202,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
             Page.EMOJI -> Layouts.EMOJI
             Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
+            Page.NUMPAD -> Layouts.NUMPAD
         }
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
             v.symbolTabs = kaoTabs()
@@ -216,6 +214,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolTab = symCat
             v.symbolPageCount = symbolPageCount()
             v.symbolPage = symPage
+        } else if (page == Page.NUMPAD) {
+            v.symbolTabs = listOf("數字")
+            v.symbolTab = 0
+            v.symbolPageCount = 1
+            v.symbolPage = 0
         } else if (page == Page.CLIP) {
             v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選")
             v.symbolTab = 0
@@ -385,7 +388,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 lastShiftTap = now
                 refresh()
             }
-            Act.TO_SYMBOL -> { page = Page.SYMBOL; refresh() }
+            Act.TO_SYMBOL -> {
+                if (page == Page.NUMPAD) { symCat = 1; symPage = 0 } // 從數字鍵盤按 @?#：回到常用符號
+                page = Page.SYMBOL
+                refresh()
+            }
+            Act.TO_NUMPAD -> { page = Page.NUMPAD; refresh() }
             Act.TO_EMOJI -> { page = Page.EMOJI; refresh() }
             Act.TO_MAIN -> { page = Page.MAIN; refresh() }
             Act.GAP -> Unit
@@ -500,7 +508,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onSymbolTab(index: Int) {
-        if (page == Page.CLIP) return
+        if (page == Page.CLIP || page == Page.NUMPAD) return
         if (symCat == Symbols.KAOMOJI) {
             if (index == 0) symCat = 1 // ◁ 回到一般符號
             else kaoTab = index - 1
@@ -512,6 +520,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onSymbolSwipe(direction: Int) {
+        if (page == Page.NUMPAD) return
         if (page == Page.CLIP) {
             val next = (clipPage + direction).coerceIn(0, clipPageCount() - 1)
             if (next != clipPage) { clipPage = next; haptics.perform(kv, prefs); refresh() }
