@@ -256,16 +256,8 @@ class SettingsActivity : Activity() {
         })
 
         section("按鍵動畫")
-        radios(
-            listOf(
-                "none" to "不要動畫",
-                "bounce" to "彈一下",
-                "heart" to "冒小愛心 ♡",
-                "paw" to "冒小貓爪 🐾",
-                "star" to "冒小星星 ☆",
-            ),
-            prefs.pressEffect,
-        ) { prefs.pressEffect = it }
+        note("選好之後，在上面的預覽鍵盤按按看。")
+        radios(PressEffects.ALL, prefs.pressEffect) { prefs.pressEffect = it }
 
         section("功能鍵貼圖")
         note("從相簿選圖片貼在功能鍵上（去背的 PNG 效果最好）。圖片會縮小後存在 App 裡，相簿的原圖刪掉也沒關係。")

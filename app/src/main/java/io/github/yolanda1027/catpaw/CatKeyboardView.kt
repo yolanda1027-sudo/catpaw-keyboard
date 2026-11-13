@@ -260,7 +260,7 @@ class CatKeyboardView(
                 if (s != 1f) c.restore()
             }
             drawPageIndicator(c, w)
-            effects.draw(c, now, theme.popupSelBg)
+            effects.draw(c, now)
             drawPreview(c, w)
             if (effects.active(now)) postInvalidateOnAnimation()
         }
@@ -605,7 +605,9 @@ class CatKeyboardView(
         longFired = false
         previewLabel = if (kr.key.style == Style.CHAR) labelFor(kr.key) else null
         haptics.perform(this, prefs)
-        effects.add(prefs.pressEffect, kr.rect)
+        val bg = theme.bg
+        val dark = (android.graphics.Color.red(bg) * 299 + android.graphics.Color.green(bg) * 587 + android.graphics.Color.blue(bg) * 114) / 1000 < 128
+        effects.add(prefs.pressEffect, kr.rect, theme.popupSelBg, dark)
         when {
             kr.key.act == Act.BACKSPACE -> handler.postDelayed(repeatRunnable, 400)
             kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP ->

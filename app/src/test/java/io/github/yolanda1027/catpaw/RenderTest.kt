@@ -177,9 +177,9 @@ class RenderTest {
         }
 
         // C. 按鍵動畫：按下 ㄍ，過 180 毫秒的樣子
-        for (fx in listOf("paw", "heart", "star")) {
+        for (fx in listOf("paw", "heart", "star", "hearts", "sparkle", "flower", "butterfly", "ripple", "bubble", "snow", "note")) {
             prefs.pressEffect = fx
-            prefs.theme = if (fx == "star") "classic" else "stitch"
+            prefs.theme = if (fx in listOf("star", "ripple", "snow", "bubble")) "classic" else "stitch"
             val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
             v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
             v.layout(0, 0, v.measuredWidth, v.measuredHeight)
@@ -187,7 +187,7 @@ class RenderTest {
             val y = 89f + 105f + 16f + 118f * 1.5f
             v.dispatchTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 270f, y, 0))
             v.dispatchTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, 270f, y, 0))
-            org.robolectric.shadows.ShadowLooper.idleMainLooper(180, java.util.concurrent.TimeUnit.MILLISECONDS)
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(if (fx == "ripple") 280L else 220L, java.util.concurrent.TimeUnit.MILLISECONDS)
             renderView(v, "effect-$fx")
         }
         for (slot in StickerSlot.values()) Stickers.remove(ctx, slot)
