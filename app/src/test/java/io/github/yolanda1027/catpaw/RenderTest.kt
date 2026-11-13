@@ -122,6 +122,78 @@ class RenderTest {
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    private fun renderView(v: CatKeyboardView, name: String) {
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+        v.draw(Canvas(bmp))
+        File("build/renders").mkdirs()
+        File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** 做一張假的貼圖（粉紅圓臉貓），代替使用者從相簿選的圖 */
+    private fun fakeSticker(color: Int, face: String): Bitmap {
+        val b = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = color
+        c.drawPath(android.graphics.Path().apply { moveTo(30f, 80f); lineTo(50f, 10f); lineTo(90f, 50f); close()
+            moveTo(170f, 80f); lineTo(150f, 10f); lineTo(110f, 50f); close() }, p)
+        c.drawCircle(100f, 115f, 80f, p)
+        p.color = android.graphics.Color.WHITE
+        p.textSize = 60f
+        p.textAlign = android.graphics.Paint.Align.CENTER
+        c.drawText(face, 100f, 135f, p)
+        return b
+    }
+
+    @Test
+    fun renderPhase3() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        // D. 自訂配色（預設的薰衣草粉）
+        prefs.theme = "custom"
+        renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), "custom-default")
+        // 換一組：薄荷綠
+        prefs.customBg = android.graphics.Color.parseColor("#E8F5E9")
+        prefs.customKey = android.graphics.Color.WHITE
+        prefs.customText = android.graphics.Color.parseColor("#2E4D3A")
+        prefs.customSub = android.graphics.Color.parseColor("#7FA88C")
+        prefs.customAccent = android.graphics.Color.parseColor("#81C784")
+        renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), "custom-mint")
+
+        // B. 功能鍵貼圖
+        val pink = android.graphics.Color.parseColor("#F48FB1")
+        val purple = android.graphics.Color.parseColor("#9E86C8")
+        for ((slot, img) in listOf(
+            StickerSlot.ENTER to fakeSticker(pink, "ω"),
+            StickerSlot.BACKSPACE to fakeSticker(purple, "×"),
+            StickerSlot.SYMBOL to fakeSticker(purple, "#"),
+            StickerSlot.EMOJI to fakeSticker(pink, "^^"),
+        )) Stickers.file(ctx, slot).outputStream().use { img.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        for (t in listOf("classic", "stitch")) {
+            prefs.theme = t
+            renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), "$t-stickers")
+        }
+
+        // C. 按鍵動畫：按下 ㄍ，過 180 毫秒的樣子
+        for (fx in listOf("paw", "heart", "star")) {
+            prefs.pressEffect = fx
+            prefs.theme = if (fx == "star") "classic" else "stitch"
+            val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+            v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+            val t0 = SystemClock.uptimeMillis()
+            val y = 89f + 105f + 16f + 118f * 1.5f
+            v.dispatchTouchEvent(MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, 270f, y, 0))
+            v.dispatchTouchEvent(MotionEvent.obtain(t0, t0 + 50, MotionEvent.ACTION_UP, 270f, y, 0))
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(180, java.util.concurrent.TimeUnit.MILLISECONDS)
+            renderView(v, "effect-$fx")
+        }
+        for (slot in StickerSlot.values()) Stickers.remove(ctx, slot)
+        prefs.pressEffect = "none"
+    }
+
     @Test
     fun renderNumpad() {
         val ctx = RuntimeEnvironment.getApplication()

@@ -75,6 +75,22 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("clipboard_history", true)
         set(v) = sp.edit().putBoolean("clipboard_history", v).apply()
 
+    // ---------- 第三階段：自訂配色、按鍵動畫 ----------
+
+    private fun color(key: String, def: String) = sp.getInt(key, android.graphics.Color.parseColor(def))
+    private fun setColor(key: String, v: Int) = sp.edit().putInt(key, v).apply()
+
+    var customBg: Int get() = color("c_bg", "#FDF0F5"); set(v) = setColor("c_bg", v)
+    var customKey: Int get() = color("c_key", "#FFFFFF"); set(v) = setColor("c_key", v)
+    var customText: Int get() = color("c_text", "#5B4B57"); set(v) = setColor("c_text", v)
+    var customSub: Int get() = color("c_sub", "#B59AAB"); set(v) = setColor("c_sub", v)
+    var customAccent: Int get() = color("c_accent", "#F49AB7"); set(v) = setColor("c_accent", v)
+
+    /** none / bounce / heart / paw / star */
+    var pressEffect: String
+        get() = sp.getString("press_effect", "none") ?: "none"
+        set(v) = sp.edit().putString("press_effect", v).apply()
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

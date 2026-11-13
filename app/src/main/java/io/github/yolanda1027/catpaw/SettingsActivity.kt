@@ -26,6 +26,159 @@ class SettingsActivity : Activity() {
     private lateinit var root: LinearLayout
     private lateinit var status: TextView
     private lateinit var customMsRow: View
+    private lateinit var preview: CatKeyboardView
+    private lateinit var themeGroup: RadioGroup
+    private val stickerThumbs = HashMap<StickerSlot, android.widget.ImageView>()
+
+    /** 設定一改，預覽就重畫（要存成欄位，不然會被系統回收掉） */
+    private val previewListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        preview.reloadPrefs()
+    }
+
+    override fun onDestroy() {
+        prefs.sp.unregisterOnSharedPreferenceChangeListener(previewListener)
+        super.onDestroy()
+    }
+
+    // ---------- 功能鍵貼圖 ----------
+
+    private fun stickerRow(slot: StickerSlot) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+        }
+        val thumb = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(0x11000000)
+        }
+        stickerThumbs[slot] = thumb
+        refreshThumb(slot)
+        row.addView(thumb, LinearLayout.LayoutParams((48 * dp).toInt(), (48 * dp).toInt()))
+        row.addView(TextView(this).apply {
+            text = slot.title
+            textSize = 15f
+            setPadding((12 * dp).toInt(), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(Button(this).apply {
+            text = "選圖片"
+            isAllCaps = false
+            setOnClickListener {
+                val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(i, REQ_STICKER + slot.ordinal)
+            }
+        })
+        row.addView(Button(this).apply {
+            text = "移除"
+            isAllCaps = false
+            setOnClickListener {
+                Stickers.remove(this@SettingsActivity, slot)
+                refreshThumb(slot)
+                bumpStickers()
+            }
+        })
+        root.addView(row)
+    }
+
+    private fun refreshThumb(slot: StickerSlot) {
+        val f = Stickers.file(this, slot)
+        stickerThumbs[slot]?.setImageBitmap(if (f.exists()) android.graphics.BitmapFactory.decodeFile(f.path) else null)
+    }
+
+    /** 通知鍵盤重新讀貼圖 */
+    private fun bumpStickers() = prefs.sp.edit().putLong("stickers_ver", System.currentTimeMillis()).apply()
+
+    @Deprecated("startActivityForResult 在這裡夠用")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        val slot = StickerSlot.values().getOrNull(requestCode - REQ_STICKER) ?: return
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        if (Stickers.import(this, slot, uri) != null) {
+            refreshThumb(slot)
+            bumpStickers()
+        } else {
+            android.widget.Toast.makeText(this, "這張圖讀不出來，換一張試試", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ---------- 自訂配色 ----------
+
+    private val palette = listOf(
+        "#FFFFFF", "#FDF0F5", "#FFE4EC", "#F9C9D6", "#F49AB7", "#E0688E",
+        "#FFF3E0", "#FFE0B2", "#FFF9C4", "#E8F5E9", "#C8E6C9", "#E0F7FA",
+        "#B3E5FC", "#E1D5F5", "#C5B3E6", "#9E86C8", "#B59AAB", "#5B4B57",
+        "#3E3A4F", "#273238", "#000000",
+    )
+
+    private fun swatch(color: Int, sizeDp: Int) = View(this).apply {
+        background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+            setColor(color)
+            setStroke((1 * dp).toInt(), 0x33000000)
+        }
+        layoutParams = LinearLayout.LayoutParams((sizeDp * dp).toInt(), (sizeDp * dp).toInt()).apply {
+            setMargins((4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt())
+        }
+    }
+
+    private fun colorRow(label: String, get: () -> Int, set: (Int) -> Unit) {
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, (10 * dp).toInt(), 0, 0)
+        }
+        val current = swatch(get(), 22)
+        head.addView(current)
+        head.addView(TextView(this).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        fun apply(c: Int) {
+            set(c)
+            (current.background as android.graphics.drawable.GradientDrawable).setColor(c)
+            if (prefs.theme != "custom") {
+                prefs.theme = "custom"
+                themeGroup.findViewWithTag<RadioButton>("custom")?.isChecked = true
+            }
+        }
+        head.addView(Button(this).apply {
+            text = "色碼"
+            isAllCaps = false
+            setOnClickListener {
+                val input = EditText(this@SettingsActivity).apply {
+                    setText(String.format("#%06X", 0xFFFFFF and get()))
+                }
+                android.app.AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle(label)
+                    .setView(input)
+                    .setPositiveButton("確定") { _, _ ->
+                        try { apply(android.graphics.Color.parseColor(input.text.toString().trim())) }
+                        catch (_: Exception) {
+                            android.widget.Toast.makeText(this@SettingsActivity, "色碼格式像 #F49AB7", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+        })
+        root.addView(head)
+        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (hex in palette) {
+            val c = android.graphics.Color.parseColor(hex)
+            strip.addView(swatch(c, 34).apply { setOnClickListener { apply(c) } })
+        }
+        root.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(strip)
+        })
+    }
+
+    companion object {
+        private const val REQ_STICKER = 100
+    }
     private val dp get() = resources.displayMetrics.density
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,7 +195,7 @@ class SettingsActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(root) })
 
         title("🐾 貓爪鍵盤")
-        note("第二階段：可以打中文了！支援整句轉換、不打聲調、聲母縮寫（ㄒㄒ → 謝謝）和聯想詞。")
+        note("第三階段：功能鍵貼圖、按鍵動畫、自訂配色都在「外觀」裡，上面有即時預覽可以直接按按看。")
 
         section("開始使用")
         status = note("")
@@ -79,11 +232,17 @@ class SettingsActivity : Activity() {
         button("試震一下") { haptics.perform(it, prefs) }
 
         section("外觀")
-        radios(
+        note("預覽（可以直接按按看動畫和震動）：")
+        preview = CatKeyboardView(this, prefs, haptics)
+        root.addView(preview, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
+
+        themeGroup = radios(
             listOf(
                 "classic" to "經典深色（Google 注音風）",
-                "stitch" to "粉紅縫線（新！）",
+                "stitch" to "粉紅縫線",
                 "catpaw" to "貓爪肉球",
+                "custom" to "自訂配色（在下面調顏色）",
             ),
             prefs.theme,
         ) { prefs.theme = it }
@@ -95,6 +254,30 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.preview = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
+
+        section("按鍵動畫")
+        radios(
+            listOf(
+                "none" to "不要動畫",
+                "bounce" to "彈一下",
+                "heart" to "冒小愛心 ♡",
+                "paw" to "冒小貓爪 🐾",
+                "star" to "冒小星星 ☆",
+            ),
+            prefs.pressEffect,
+        ) { prefs.pressEffect = it }
+
+        section("功能鍵貼圖")
+        note("從相簿選圖片貼在功能鍵上（去背的 PNG 效果最好）。圖片會縮小後存在 App 裡，相簿的原圖刪掉也沒關係。")
+        for (slot in StickerSlot.values()) stickerRow(slot)
+
+        section("自訂配色")
+        note("點色塊就會換成「自訂配色」主題，上面的預覽會跟著變。也可以按「色碼」輸入像 #F49AB7 這樣的顏色。")
+        colorRow("背景", { prefs.customBg }) { prefs.customBg = it }
+        colorRow("按鍵", { prefs.customKey }) { prefs.customKey = it }
+        colorRow("文字", { prefs.customText }) { prefs.customText = it }
+        colorRow("小字（數字、英文）", { prefs.customSub }) { prefs.customSub = it }
+        colorRow("強調色（Enter、選取）", { prefs.customAccent }) { prefs.customAccent = it }
 
         section("選字")
         root.addView(Switch(this).apply {
@@ -178,7 +361,7 @@ class SettingsActivity : Activity() {
         setOnClickListener(onClick)
     })
 
-    private fun radios(options: List<Pair<String, String>>, current: String, onPick: (String) -> Unit) {
+    private fun radios(options: List<Pair<String, String>>, current: String, onPick: (String) -> Unit): RadioGroup {
         val group = RadioGroup(this)
         options.forEachIndexed { i, (key, label) ->
             group.addView(RadioButton(this).apply {
@@ -190,6 +373,7 @@ class SettingsActivity : Activity() {
         }
         group.setOnCheckedChangeListener { g, id -> onPick(g.findViewById<View>(id).tag as String) }
         root.addView(group)
+        return group
     }
 
     private fun slider(label: String, min: Int, max: Int, value: Int, unit: String, onChange: (Int) -> Unit): View {

@@ -288,7 +288,7 @@ class ClassicTheme(dp: Float) : KbTheme(dp) {
             Style.ENTER -> {
                 fill.color = if (pressed) enterPressed else enterColor
                 c.drawCircle(r.centerX(), r.centerY(), 17.5f * dp, fill)
-                drawIcon(c, Icon.ENTER, r.centerX(), r.centerY(), rowH * 0.4f, bg)
+                key.icon?.let { drawIcon(c, it, r.centerX(), r.centerY(), rowH * 0.4f, bg) }
             }
         }
     }
@@ -346,7 +346,7 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
                 fill.color = if (pressed) enterPressed else enterColor
                 c.drawPath(catEars(cx, cy, rad), fill)
                 c.drawCircle(cx, cy, rad, fill)
-                drawIcon(c, Icon.ENTER, cx, cy, rowH * 0.34f, Color.WHITE)
+                key.icon?.let { drawIcon(c, it, cx, cy, rowH * 0.34f, Color.WHITE) }
             }
         }
     }
@@ -564,10 +564,78 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
     }
 }
 
+/** 自訂配色：5 個顏色都可以在設定頁調 */
+class CustomTheme(
+    dp: Float,
+    override val bg: Int,
+    private val key: Int,
+    override val text: Int,
+    override val textDim: Int,
+    private val accent: Int,
+) : KbTheme(dp) {
+    override val topBar = blend(bg, text, 0.07f)
+    override val tabSelected = bg
+    override val previewBg = key
+    override val previewText = text
+    override val popupBg get() = key
+    override val popupSelBg = accent
+    override val popupSelText = contrastOn(accent)
+    override val readingBg = key
+    override val readingText = text
+    override val readingBorder = accent
+
+    override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
+        if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
+        val box = RectF(r.left + 3 * dp, r.top + 4 * dp, r.right - 3 * dp, r.bottom - 4 * dp)
+        val rad = 8 * dp
+        fill.shader = null
+        when (key.style) {
+            Style.CHAR -> {
+                fill.color = if (pressed) blend(this.key, text, 0.18f) else this.key
+                c.drawRoundRect(box, rad, rad, fill)
+                drawLabels(c, key, label, r.centerX(), r.centerY(), rowH, text, textDim, maxW = box.width() - 6 * dp)
+            }
+            Style.FUNC -> {
+                fill.color = blend(this.key, text, if (pressed) 0.25f else 0.1f)
+                c.drawRoundRect(box, rad, rad, fill)
+                drawFuncContent(c, key, label, r, shift, rowH, text)
+            }
+            Style.SPACE -> {
+                fill.color = if (pressed) blend(this.key, text, 0.18f) else this.key
+                c.drawRoundRect(box, rad, rad, fill)
+                drawText(c, label, r.centerX(), r.centerY(), rowH * 0.22f, textDim)
+            }
+            Style.ENTER -> {
+                fill.color = if (pressed) blend(accent, Color.BLACK, 0.15f) else accent
+                c.drawRoundRect(box, rad, rad, fill)
+                key.icon?.let { drawIcon(c, it, r.centerX(), r.centerY(), rowH * 0.4f, contrastOn(accent)) }
+            }
+            Style.CLIP -> Unit
+        }
+    }
+
+    companion object {
+        fun blend(a: Int, b: Int, t: Float): Int = Color.rgb(
+            (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+            (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+            (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt(),
+        )
+
+        /** 在這個底色上，用白字還是深色字比較清楚 */
+        fun contrastOn(c: Int): Int {
+            val l = 0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)
+            return if (l > 170) Color.parseColor("#3E3A4F") else Color.WHITE
+        }
+    }
+}
+
 object Themes {
-    fun byName(name: String, dp: Float): KbTheme = when (name) {
+    fun byName(name: String, dp: Float, prefs: Prefs? = null): KbTheme = when (name) {
         "catpaw" -> CatPawTheme(dp)
         "stitch" -> StitchTheme(dp)
+        "custom" -> if (prefs != null) CustomTheme(
+            dp, prefs.customBg, prefs.customKey, prefs.customText, prefs.customSub, prefs.customAccent,
+        ) else ClassicTheme(dp)
         else -> ClassicTheme(dp)
     }
 }

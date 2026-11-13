@@ -80,7 +80,9 @@ class CatKeyboardView(
     private var dragMoved = false
 
     private val dp = resources.displayMetrics.density
-    private var theme: KbTheme = Themes.byName(prefs.theme, dp)
+    private var theme: KbTheme = Themes.byName(prefs.theme, dp, prefs)
+    private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context)
+    private val effects = PressEffects(dp)
     private var keyH = prefs.keyHeightDp * dp
     // 這些比例是照 Google 注音截圖量的：上方列 40dp，按鍵區上面留 6dp、下面留 10dp
     private val topH = 40 * dp
@@ -186,7 +188,8 @@ class CatKeyboardView(
     }
 
     fun reloadPrefs() {
-        theme = Themes.byName(prefs.theme, dp)
+        theme = Themes.byName(prefs.theme, dp, prefs)
+        stickers = Stickers.load(context)
         keyH = prefs.keyHeightDp * dp
         requestLayout()
         layoutKeys()
@@ -241,12 +244,25 @@ class CatKeyboardView(
         if (expanded) {
             drawPanel(c, w)
         } else {
+            val now = android.os.SystemClock.uptimeMillis()
             for (kr in keyRects) {
                 if (kr.key.act == Act.GAP) continue
-                theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, rowH)
+                val s = effects.scaleFor(kr.rect, now)
+                if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
+                val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
+                if (sticker == null) {
+                    theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, rowH)
+                } else {
+                    // 有貼圖：照樣畫按鍵底框，但圖示／文字換成貼圖
+                    theme.drawKey(c, kr.rect, kr.key.copy(label = "", icon = null), "", kr === pressed, shiftState, rowH)
+                    Stickers.draw(c, sticker, kr.rect, kr === pressed, 5 * dp)
+                }
+                if (s != 1f) c.restore()
             }
             drawPageIndicator(c, w)
+            effects.draw(c, now, theme.popupSelBg)
             drawPreview(c, w)
+            if (effects.active(now)) postInvalidateOnAnimation()
         }
         c.restore()
     }
@@ -589,6 +605,7 @@ class CatKeyboardView(
         longFired = false
         previewLabel = if (kr.key.style == Style.CHAR) labelFor(kr.key) else null
         haptics.perform(this, prefs)
+        effects.add(prefs.pressEffect, kr.rect)
         when {
             kr.key.act == Act.BACKSPACE -> handler.postDelayed(repeatRunnable, 400)
             kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP ->
