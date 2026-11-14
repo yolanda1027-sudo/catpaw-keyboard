@@ -91,6 +91,16 @@ class Prefs(context: Context) {
         get() = sp.getString("press_effect", "none") ?: "none"
         set(v) = sp.edit().putString("press_effect", v).apply()
 
+    /** 按鍵上的字體：system / huninn / iansui / wenkai */
+    var keyFont: String
+        get() = sp.getString("key_font", "system") ?: "system"
+        set(v) = sp.edit().putString("key_font", v).apply()
+
+    /** 選字列、注音小框框的字體 */
+    var candFont: String
+        get() = sp.getString("cand_font", "system") ?: "system"
+        set(v) = sp.edit().putString("cand_font", v).apply()
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

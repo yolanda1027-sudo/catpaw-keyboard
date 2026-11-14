@@ -83,6 +83,8 @@ class CatKeyboardView(
     private var theme: KbTheme = Themes.byName(prefs.theme, dp, prefs)
     private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context)
     private val effects = PressEffects(dp)
+    private var keyFace = Fonts.get(context, prefs.keyFont)
+    private var candFace = Fonts.get(context, prefs.candFont).also { candPaint.typeface = it }
     private var keyH = prefs.keyHeightDp * dp
     // 這些比例是照 Google 注音截圖量的：上方列 40dp，按鍵區上面留 6dp、下面留 10dp
     private val topH = 40 * dp
@@ -190,6 +192,11 @@ class CatKeyboardView(
     fun reloadPrefs() {
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context)
+        keyFace = Fonts.get(context, prefs.keyFont)
+        candFace = Fonts.get(context, prefs.candFont)
+        candPaint.typeface = candFace
+        stripCache = null
+        panelCache = null
         keyH = prefs.keyHeightDp * dp
         requestLayout()
         layoutKeys()
@@ -236,14 +243,19 @@ class CatKeyboardView(
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat()
+        theme.font = candFace
         if (reading.isNotEmpty()) theme.drawReading(c, reading, floatH)
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.drawBackground(c, w, kbH, topH)
+        // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
+        if (candidates.isEmpty() || symbolTabs != null) theme.font = keyFace
         drawTopBar(c, w)
         if (expanded) {
+            theme.font = candFace
             drawPanel(c, w)
         } else {
+            theme.font = keyFace
             val now = android.os.SystemClock.uptimeMillis()
             for (kr in keyRects) {
                 if (kr.key.act == Act.GAP) continue

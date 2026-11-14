@@ -30,6 +30,16 @@ abstract class KbTheme(protected val dp: Float) {
     abstract val previewBg: Int
     abstract val previewText: Int
 
+    /** 目前畫字用的字體（按鍵和選字可以分開設定，CatKeyboardView 會切換） */
+    var font: Typeface = Typeface.DEFAULT
+        set(v) {
+            if (field !== v) {
+                field = v
+                boldFont = Typeface.create(v, Typeface.BOLD)
+            }
+        }
+    private var boldFont: Typeface = Typeface.DEFAULT_BOLD
+
     protected val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     protected val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -66,7 +76,7 @@ abstract class KbTheme(protected val dp: Float) {
     fun drawReading(c: Canvas, s: String, h: Float) {
         val size = h * 0.62f
         textPaint.textSize = size
-        textPaint.typeface = Typeface.DEFAULT
+        textPaint.typeface = font
         val tw = textPaint.measureText(s)
         val r = RectF(0f, 0f, tw + 20 * dp, h)
         fill.color = readingBg
@@ -90,7 +100,7 @@ abstract class KbTheme(protected val dp: Float) {
         fill.alpha = 255
         val size = rowH * 0.3f
         textPaint.textSize = size
-        textPaint.typeface = Typeface.DEFAULT
+        textPaint.typeface = font
         val maxW = box.width() - 28 * dp
         var shown = label
         if (textPaint.measureText(shown) > maxW) {
@@ -129,7 +139,7 @@ abstract class KbTheme(protected val dp: Float) {
     fun drawText(c: Canvas, s: String, cx: Float, cy: Float, size: Float, color: Int, bold: Boolean = false) {
         textPaint.textSize = size
         textPaint.color = color
-        textPaint.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        textPaint.typeface = if (bold) boldFont else font
         val fm = textPaint.fontMetrics
         c.drawText(s, cx, cy - (fm.ascent + fm.descent) / 2f, textPaint)
     }
@@ -146,7 +156,7 @@ abstract class KbTheme(protected val dp: Float) {
     /** 長的字（顏文字、按鍵上的詞）：盡量放大，但不超出按鍵寬度 */
     protected fun fitSize(label: String, maxW: Float, desired: Float): Float {
         textPaint.textSize = desired
-        textPaint.typeface = Typeface.DEFAULT
+        textPaint.typeface = font
         val w = textPaint.measureText(label)
         return if (w <= maxW || w == 0f) desired else desired * maxW / w
     }

@@ -33,6 +33,13 @@
 注音詞庫來自 [小麥注音 McBopomofo](https://github.com/openvanilla/McBopomofo)（MIT License），
 用 `tools/build_dict.py` 轉成 `app/src/main/assets/zhuyin.dict`。授權全文見 `third_party/McBopomofo-LICENSE.txt`。
 
+## 字體來源
+
+附在 App 裡的字體（`app/src/main/assets/fonts/`），授權都是 SIL Open Font License 1.1，全文在 `third_party/fonts/`：
+- [jf open 粉圓](https://github.com/justfont/open-huninn-font) 2.1（justfont）：原檔，未修改
+- [芫荽 Iansui](https://github.com/ButTaiwan/iansui)：只保留約 7,900 個常用字與注音、標點（子集化）
+- [霞鶩文楷 TC](https://github.com/lxgw/LxgwWenkaiTC) Regular：同上
+
 ## 顏文字來源
 
 `app/src/main/assets/kaomoji.txt` 裡的顏文字，有一部分選自

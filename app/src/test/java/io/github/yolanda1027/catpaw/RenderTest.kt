@@ -209,6 +209,23 @@ class RenderTest {
     }
 
     @Test
+    fun renderFonts() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        prefs.theme = "macaron_butter"
+        for ((id, _) in Fonts.OPTIONS) {
+            prefs.keyFont = id
+            prefs.candFont = id
+            val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+            v.reading = "ㄇㄠ ㄓㄠˇ"
+            v.candidates = listOf("貓爪", "毛", "貓", "帽子", "冒")
+            renderView(v, "font-$id")
+        }
+        prefs.keyFont = "system"
+        prefs.candFont = "system"
+    }
+
+    @Test
     fun renderNumpad() {
         val ctx = RuntimeEnvironment.getApplication()
         for (t in listOf("classic", "stitch")) {

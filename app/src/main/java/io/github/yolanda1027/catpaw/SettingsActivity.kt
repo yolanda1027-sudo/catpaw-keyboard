@@ -234,6 +234,9 @@ class SettingsActivity : Activity() {
         section("外觀")
         note("預覽（可以直接按按看動畫和震動）：")
         preview = CatKeyboardView(this, prefs, haptics)
+        // 預覽裡放幾個選字，才看得到「選字字體」
+        preview.reading = "ㄇㄠ ㄓㄠˇ"
+        preview.candidates = listOf("貓爪", "毛", "貓", "帽子", "冒")
         root.addView(preview, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
 
@@ -255,6 +258,14 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.preview = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
+
+        section("字體")
+        note("按鍵上的字和選字列可以用不同字體。字體附在 App 裡，不用另外下載。")
+        subTitle("按鍵字體")
+        radios(Fonts.OPTIONS, prefs.keyFont) { prefs.keyFont = it }
+        subTitle("選字字體（選字列、注音小框框）")
+        radios(Fonts.OPTIONS, prefs.candFont) { prefs.candFont = it }
+        note("字體授權：jf open 粉圓（justfont）、芫荽 Iansui、霞鶩文楷 TC（LXGW），都是 SIL Open Font License 1.1。芫荽和霞鶩文楷只保留常用字，比較少見的字會用系統字體顯示。")
 
         section("按鍵動畫")
         note("選好之後，在上面的預覽鍵盤按按看。")
@@ -339,6 +350,13 @@ class SettingsActivity : Activity() {
         textSize = 18f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(0, (24 * dp).toInt(), 0, (8 * dp).toInt())
+    })
+
+    private fun subTitle(s: String) = root.addView(TextView(this).apply {
+        text = s
+        textSize = 15f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, (10 * dp).toInt(), 0, (2 * dp).toInt())
     })
 
     private fun note(s: String): TextView = TextView(this).apply {
