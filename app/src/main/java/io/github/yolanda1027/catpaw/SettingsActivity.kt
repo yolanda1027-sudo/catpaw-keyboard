@@ -96,6 +96,14 @@ class SettingsActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_FONT) {
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) return
+            val r = Fonts.import(this, uri)
+            android.widget.Toast.makeText(this, r.message, android.widget.Toast.LENGTH_LONG).show()
+            if (r.id != null) recreate() // 重新整理字體清單
+            return
+        }
         val slot = StickerSlot.values().getOrNull(requestCode - REQ_STICKER) ?: return
         val uri = data?.data
         if (resultCode != RESULT_OK || uri == null) return
@@ -178,6 +186,7 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val REQ_STICKER = 100
+        private const val REQ_FONT = 200
     }
     private val dp get() = resources.displayMetrics.density
 
@@ -262,9 +271,43 @@ class SettingsActivity : Activity() {
         section("字體")
         note("按鍵上的字和選字列可以用不同字體。字體附在 App 裡，不用另外下載。")
         subTitle("按鍵字體")
-        radios(Fonts.OPTIONS, prefs.keyFont) { prefs.keyFont = it }
+        radios(Fonts.options(this), prefs.keyFont) { prefs.keyFont = it }
         subTitle("選字字體（選字列、注音小框框）")
-        radios(Fonts.OPTIONS, prefs.candFont) { prefs.candFont = it }
+        radios(Fonts.options(this), prefs.candFont) { prefs.candFont = it }
+
+        subTitle("我的字體")
+        note("可以上傳自己的 .ttf / .otf 字體檔，上傳後會出現在上面兩個清單裡。請使用你有權利使用的字體（例如免費授權或自己買的）。")
+        button("上傳字體檔") {
+            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*" // 很多檔案管理 App 不會把字體檔標成 font/ttf，所以全部列出來
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_FONT)
+        }
+        for (f in Fonts.userFonts(this)) {
+            val id = "user:" + f.name
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(TextView(this).apply {
+                text = Fonts.displayName(f) + "（" + (f.length() / 1024 / 1024.0).let { String.format("%.1f", it) } + " MB）"
+                textSize = 15f
+                typeface = Fonts.get(this@SettingsActivity, id)
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(Button(this).apply {
+                text = "刪除"
+                isAllCaps = false
+                setOnClickListener {
+                    Fonts.delete(this@SettingsActivity, id)
+                    if (prefs.keyFont == id) prefs.keyFont = "system"
+                    if (prefs.candFont == id) prefs.candFont = "system"
+                    recreate()
+                }
+            })
+            root.addView(row)
+        }
         note("字體授權：jf open 粉圓（justfont）、芫荽 Iansui、霞鶩文楷 TC（LXGW），都是 SIL Open Font License 1.1。芫荽和霞鶩文楷只保留常用字，比較少見的字會用系統字體顯示。")
 
         section("按鍵動畫")

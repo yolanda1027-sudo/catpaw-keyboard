@@ -213,7 +213,7 @@ class RenderTest {
         val ctx = RuntimeEnvironment.getApplication()
         val prefs = Prefs(ctx)
         prefs.theme = "macaron_butter"
-        for ((id, _) in Fonts.OPTIONS) {
+        for ((id, _) in Fonts.options(ctx)) {
             prefs.keyFont = id
             prefs.candFont = id
             val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
