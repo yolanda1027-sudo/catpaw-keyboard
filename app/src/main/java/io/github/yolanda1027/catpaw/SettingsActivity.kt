@@ -242,6 +242,7 @@ class SettingsActivity : Activity() {
                 "classic" to "經典深色（Google 注音風）",
                 "stitch" to "粉紅縫線",
                 "catpaw" to "貓爪肉球",
+            ) + MacaronTheme.PALETTES.map { it.id to it.title } + listOf(
                 "custom" to "自訂配色（在下面調顏色）",
             ),
             prefs.theme,

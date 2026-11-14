@@ -564,6 +564,195 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
     }
 }
 
+/** 馬卡龍主題的一組顏色 */
+class MacaronPalette(
+    val id: String,
+    val title: String,
+    val bg: String, val dots: String, val key: String, val shadow: String,
+    val func: String, val text: String, val sub: String, val accent: String,
+    /** 空白鍵上的小圖案：star / heart / clover / cloud / flower / paw */
+    val charm: String,
+)
+
+/**
+ * 馬卡龍主題：粉嫩底色＋淡淡圓點、圓胖的糖果按鍵（下面有立體邊）、
+ * 糖果感的 Enter（帶一點亮面反光）、空白鍵上有個小圖案。
+ */
+class MacaronTheme(dp: Float, private val pal: MacaronPalette) : KbTheme(dp) {
+    private fun c(s: String) = Color.parseColor(s)
+    override val bg = c(pal.bg)
+    override val topBar = Color.TRANSPARENT
+    override val tabSelected = c(pal.key)
+    override val text = c(pal.text)
+    override val textDim = c(pal.sub)
+    override val previewBg = c(pal.key)
+    override val previewText = c(pal.text)
+    override val popupBg get() = c(pal.key)
+    override val popupSelBg = c(pal.accent)
+    override val popupSelText = CustomTheme.contrastOn(c(pal.accent))
+    override val readingBg = c(pal.key)
+    override val readingText = c(pal.text)
+    override val readingBorder = c(pal.accent)
+    private val keyC = c(pal.key)
+    private val shadowC = c(pal.shadow)
+    private val funcC = c(pal.func)
+    private val accentC = c(pal.accent)
+    private val dotsC = c(pal.dots)
+    private val charmPath = Path()
+
+    override fun drawBackground(c: Canvas, w: Float, h: Float, topH: Float) {
+        fill.shader = null
+        fill.color = bg
+        c.drawRect(0f, 0f, w, h, fill)
+        // 淡淡的圓點花紋（交錯排列）
+        fill.color = dotsC
+        val step = 22 * dp
+        var row = 0
+        var y = step / 2
+        while (y < h) {
+            var x = if (row % 2 == 0) step / 2 else step
+            while (x < w) {
+                c.drawCircle(x, y, 2.2f * dp, fill)
+                x += step
+            }
+            y += step * 0.85f
+            row++
+        }
+    }
+
+    override fun drawTabHighlight(c: Canvas, r: RectF) {
+        val box = RectF(r.left + 8 * dp, r.top + 7 * dp, r.right - 8 * dp, r.bottom - 7 * dp)
+        fill.shader = null
+        fill.color = keyC
+        c.drawRoundRect(box, box.height() / 2, box.height() / 2, fill)
+    }
+
+    override fun drawPreview(c: Canvas, r: RectF, label: String) {
+        fill.shader = null
+        fill.color = shadowC
+        c.drawRoundRect(RectF(r.left, r.top + 3 * dp, r.right, r.bottom + 3 * dp), 14 * dp, 14 * dp, fill)
+        fill.color = keyC
+        c.drawRoundRect(r, 14 * dp, 14 * dp, fill)
+        drawText(c, label, r.centerX(), r.centerY(), r.height() * 0.5f, text)
+    }
+
+    override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
+        if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
+        val sink = if (pressed) 2.5f * dp else 0f
+        val box = RectF(r.left + 3 * dp, r.top + 3.5f * dp + sink, r.right - 3 * dp, r.bottom - 5.5f * dp + sink)
+        val rad = minOf(box.height(), box.width()) * 0.32f
+        val face = when (key.style) {
+            Style.ENTER -> accentC
+            Style.FUNC -> funcC
+            else -> keyC
+        }
+        fill.shader = null
+        // 糖果的立體邊
+        if (!pressed) {
+            fill.color = if (key.style == Style.ENTER) CustomTheme.blend(accentC, Color.BLACK, 0.15f) else shadowC
+            c.drawRoundRect(RectF(box.left, box.top + 3 * dp, box.right, box.bottom + 3 * dp), rad, rad, fill)
+        }
+        fill.color = if (pressed) CustomTheme.blend(face, shadowC, 0.5f) else face
+        c.drawRoundRect(box, rad, rad, fill)
+
+        when (key.style) {
+            Style.CHAR -> drawLabels(c, key, label, box.centerX(), box.centerY(), rowH * 0.95f, text, textDim, maxW = box.width() - 6 * dp)
+            Style.FUNC -> drawFuncContent(c, key, label, box, shift, rowH * 0.95f, text)
+            Style.SPACE -> {
+                drawText(c, label, box.centerX(), box.centerY(), rowH * 0.22f, textDim)
+                if (box.width() > rowH * 1.6f) drawCharm(c, box.left + box.height() * 0.6f, box.centerY(), box.height() * 0.24f)
+            }
+            Style.ENTER -> {
+                // 糖果的亮面反光
+                fill.color = Color.WHITE
+                fill.alpha = 110
+                c.drawOval(RectF(box.left + rad * 0.5f, box.top + 3 * dp, box.left + rad * 0.5f + box.width() * 0.28f, box.top + 3 * dp + box.height() * 0.2f), fill)
+                fill.alpha = 255
+                key.icon?.let { drawIcon(c, it, box.centerX(), box.centerY(), rowH * 0.4f, CustomTheme.contrastOn(accentC)) }
+            }
+            Style.CLIP -> Unit
+        }
+    }
+
+    /** 空白鍵上的小圖案 */
+    private fun drawCharm(c: Canvas, cx: Float, cy: Float, s: Float) {
+        fill.shader = null
+        fill.color = accentC
+        val p = charmPath
+        p.reset()
+        when (pal.charm) {
+            "star" -> {
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rr = if (i % 2 == 0) s else s * 0.45f
+                    val x = cx + cos(a).toFloat() * rr
+                    val y = cy + sin(a).toFloat() * rr
+                    if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+                }
+                p.close()
+                c.drawPath(p, fill)
+            }
+            "heart" -> {
+                p.moveTo(cx, cy + s * 0.9f)
+                p.cubicTo(cx - s * 1.4f, cy - s * 0.1f, cx - s * 0.7f, cy - s * 1.1f, cx, cy - s * 0.35f)
+                p.cubicTo(cx + s * 0.7f, cy - s * 1.1f, cx + s * 1.4f, cy - s * 0.1f, cx, cy + s * 0.9f)
+                c.drawPath(p, fill)
+            }
+            "clover" -> {
+                for (i in 0 until 4) {
+                    val a = Math.toRadians(45.0 + i * 90.0)
+                    c.drawCircle(cx + cos(a).toFloat() * s * 0.45f, cy + sin(a).toFloat() * s * 0.45f, s * 0.42f, fill)
+                }
+            }
+            "cloud" -> {
+                c.drawCircle(cx - s * 0.45f, cy + s * 0.15f, s * 0.42f, fill)
+                c.drawCircle(cx + s * 0.05f, cy - s * 0.15f, s * 0.55f, fill)
+                c.drawCircle(cx + s * 0.55f, cy + s * 0.15f, s * 0.4f, fill)
+                c.drawRoundRect(RectF(cx - s * 0.85f, cy + s * 0.05f, cx + s * 0.95f, cy + s * 0.55f), s * 0.25f, s * 0.25f, fill)
+            }
+            "flower" -> {
+                for (i in 0 until 5) {
+                    val a = Math.toRadians(-90.0 + i * 72.0)
+                    c.drawCircle(cx + cos(a).toFloat() * s * 0.6f, cy + sin(a).toFloat() * s * 0.6f, s * 0.4f, fill)
+                }
+                fill.color = Color.WHITE
+                c.drawCircle(cx, cy, s * 0.28f, fill)
+            }
+            else -> { // paw
+                c.drawOval(RectF(cx - s * 0.55f, cy - s * 0.05f, cx + s * 0.55f, cy + s * 0.75f), fill)
+                val r = s * 0.22f
+                c.drawCircle(cx - s * 0.62f, cy - s * 0.25f, r, fill)
+                c.drawCircle(cx - s * 0.22f, cy - s * 0.6f, r, fill)
+                c.drawCircle(cx + s * 0.22f, cy - s * 0.6f, r, fill)
+                c.drawCircle(cx + s * 0.62f, cy - s * 0.25f, r, fill)
+            }
+        }
+    }
+
+    companion object {
+        val PALETTES = listOf(
+            MacaronPalette("macaron_butter", "馬卡龍・奶油黃 🧈",
+                bg = "#FFF6D5", dots = "#FFEAAE", key = "#FFFDF4", shadow = "#F0D894",
+                func = "#FFE9A0", text = "#7A5C2E", sub = "#C49A4A", accent = "#FFCC45", charm = "star"),
+            MacaronPalette("macaron_strawberry", "馬卡龍・草莓牛奶 🍓",
+                bg = "#FFE8EE", dots = "#FFD5E0", key = "#FFFAFB", shadow = "#F3C1CE",
+                func = "#FFD0DC", text = "#8C4A5E", sub = "#D08AA0", accent = "#FF9EBB", charm = "heart"),
+            MacaronPalette("macaron_mint", "馬卡龍・薄荷綠 🌿",
+                bg = "#E3F6EE", dots = "#CDEEDE", key = "#FBFFFD", shadow = "#B7E0CC",
+                func = "#C6EBD9", text = "#3F6E5A", sub = "#7DB59B", accent = "#7FD3AE", charm = "clover"),
+            MacaronPalette("macaron_blueberry", "馬卡龍・藍莓蘇打 🫐",
+                bg = "#E3F0FF", dots = "#D0E3FF", key = "#FBFDFF", shadow = "#B9D3F0",
+                func = "#CADFF8", text = "#435C85", sub = "#8AA6CF", accent = "#8DB8F2", charm = "cloud"),
+            MacaronPalette("macaron_lavender", "馬卡龍・薰衣草 💜",
+                bg = "#EFE8FB", dots = "#E2D7F7", key = "#FDFBFF", shadow = "#D0C1EC",
+                func = "#DED0F5", text = "#5E4B85", sub = "#A08CC8", accent = "#B79CF0", charm = "flower"),
+            MacaronPalette("macaron_peach", "馬卡龍・蜜桃 🍑",
+                bg = "#FFEBDD", dots = "#FFDCC6", key = "#FFFBF8", shadow = "#F2C6AA",
+                func = "#FFD6BD", text = "#8A5038", sub = "#D2957A", accent = "#FFAA80", charm = "paw"),
+        )
+    }
+}
+
 /** 自訂配色：5 個顏色都可以在設定頁調 */
 class CustomTheme(
     dp: Float,
@@ -633,6 +822,7 @@ object Themes {
     fun byName(name: String, dp: Float, prefs: Prefs? = null): KbTheme = when (name) {
         "catpaw" -> CatPawTheme(dp)
         "stitch" -> StitchTheme(dp)
+        in MacaronTheme.PALETTES.map { it.id } -> MacaronTheme(dp, MacaronTheme.PALETTES.first { it.id == name })
         "custom" -> if (prefs != null) CustomTheme(
             dp, prefs.customBg, prefs.customKey, prefs.customText, prefs.customSub, prefs.customAccent,
         ) else ClassicTheme(dp)

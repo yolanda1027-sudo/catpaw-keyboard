@@ -195,6 +195,20 @@ class RenderTest {
     }
 
     @Test
+    fun renderMacarons() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        for (pal in MacaronTheme.PALETTES) {
+            prefs.theme = pal.id
+            renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), pal.id)
+            val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+            v.candidates = listOf("奶油", "奶", "耐", "乃", "氖")
+            v.reading = "ㄋㄞˇ"
+            renderView(v, pal.id + "-typing")
+        }
+    }
+
+    @Test
     fun renderNumpad() {
         val ctx = RuntimeEnvironment.getApplication()
         for (t in listOf("classic", "stitch")) {
