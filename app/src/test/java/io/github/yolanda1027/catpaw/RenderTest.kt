@@ -176,10 +176,15 @@ class RenderTest {
             renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), "$t-stickers")
         }
 
+        for (slot in StickerSlot.values()) Stickers.remove(ctx, slot) // 動畫截圖不要有貼圖
         // C. 按鍵動畫：按下 ㄍ，過 180 毫秒的樣子
-        for (fx in listOf("paw", "heart", "star", "hearts", "sparkle", "flower", "butterfly", "ripple", "bubble", "snow", "note")) {
+        for (fx in listOf("paw", "heart", "star", "hearts", "sparkle", "flower", "butterfly", "ripple", "bubble", "snow", "note", "spell")) {
             prefs.pressEffect = fx
-            prefs.theme = if (fx in listOf("star", "ripple", "snow", "bubble")) "classic" else "stitch"
+            prefs.theme = when (fx) {
+                "spell" -> "magic_blue"
+                in listOf("star", "ripple", "snow", "bubble") -> "classic"
+                else -> "stitch"
+            }
             val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
             v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
             v.layout(0, 0, v.measuredWidth, v.measuredHeight)
@@ -223,6 +228,25 @@ class RenderTest {
         }
         prefs.keyFont = "system"
         prefs.candFont = "system"
+    }
+
+    @Test
+    fun renderMagic() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        for (pal in MagicTheme.PALETTES) {
+            prefs.theme = pal.id
+            renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), pal.id)
+        }
+        prefs.theme = "magic_red"
+        prefs.candFont = "wenkai"
+        prefs.keyFont = "wenkai"
+        val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+        v.reading = "ㄇㄛˊ ㄈㄚˇ"
+        v.candidates = listOf("魔法", "魔", "膜", "摩", "磨")
+        renderView(v, "magic_red-typing")
+        prefs.candFont = "system"
+        prefs.keyFont = "system"
     }
 
     @Test

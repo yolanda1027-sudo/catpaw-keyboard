@@ -763,6 +763,201 @@ class MacaronTheme(dp: Float, private val pal: MacaronPalette) : KbTheme(dp) {
     }
 }
 
+/** 魔法學院主題的一組顏色 */
+class MagicPalette(
+    val id: String,
+    val title: String,
+    /** 學院色（底色）、深一點的學院色、金屬色（金、銀、銅…） */
+    val house: String, val houseDark: String, val metal: String,
+    /** 蠟封的顏色、蠟封上圖示的顏色 */
+    val wax: String, val waxIcon: String,
+)
+
+/**
+ * 魔法學院風：深色學院底色＋星光、舊羊皮紙按鍵（墨水字）、
+ * 學院色功能鍵＋金屬色字、蠟封印章 Enter、空白鍵上的月亮和星星。
+ */
+class MagicTheme(dp: Float, private val pal: MagicPalette) : KbTheme(dp) {
+    private fun c(s: String) = Color.parseColor(s)
+    private val houseC = c(pal.house)
+    private val houseDarkC = c(pal.houseDark)
+    private val metalC = c(pal.metal)
+    private val ink = c("#3B2A1A")
+    private val inkSoft = c("#7A6040")
+    private val paperLight = c("#F6EBCB")
+    private val paperDark = c("#E2CD98")
+    private val paperEdge = c("#B8955A")
+
+    // 底色是深的：上方列、選字列用淺色字
+    override val bg = houseC
+    override val topBar = Color.TRANSPARENT
+    override val tabSelected = Color.TRANSPARENT
+    override val text = c("#F6EBCB")
+    override val textDim = metalC
+    override val previewBg = paperLight
+    override val previewText = ink
+    override val popupBg get() = paperLight
+    override val popupText get() = ink
+    override val popupSelBg = metalC
+    override val popupSelText = CustomTheme.contrastOn(metalC)
+    override val readingBg = paperLight
+    override val readingText = ink
+    override val readingBorder = metalC
+    override val backspaceCutout: Int? = null
+
+    override fun drawBackground(c: Canvas, w: Float, h: Float, topH: Float) {
+        fill.shader = LinearGradient(0f, 0f, 0f, h, houseC, houseDarkC, Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, fill)
+        fill.shader = null
+        // 星光：固定位置（每次畫都一樣），大小亮度不一
+        var seed = 7
+        fun rnd(): Float { seed = (seed * 1103515245 + 12345) and 0x7fffffff; return (seed % 10000) / 10000f }
+        repeat(70) {
+            val x = rnd() * w
+            val y = rnd() * h
+            val big = rnd() > 0.85f
+            fill.color = if (big) metalC else Color.WHITE
+            fill.alpha = (40 + rnd() * 110).toInt()
+            if (big) sparkle(c, x, y, 3.5f * dp) else c.drawCircle(x, y, (0.6f + rnd()) * dp, fill)
+        }
+        fill.alpha = 255
+        // 上方列底下一條金屬色細線
+        stroke.color = metalC
+        stroke.alpha = 120
+        stroke.strokeWidth = 1 * dp
+        stroke.pathEffect = null
+        c.drawLine(10 * dp, topH - 1 * dp, w - 10 * dp, topH - 1 * dp, stroke)
+        stroke.alpha = 255
+    }
+
+    override fun drawTabHighlight(c: Canvas, r: RectF) {
+        val box = RectF(r.left + 8 * dp, r.top + 7 * dp, r.right - 8 * dp, r.bottom - 7 * dp)
+        stroke.color = metalC
+        stroke.strokeWidth = 1.5f * dp
+        stroke.pathEffect = null
+        c.drawRoundRect(box, box.height() / 2, box.height() / 2, stroke)
+    }
+
+    override fun drawPreview(c: Canvas, r: RectF, label: String) {
+        parchment(c, r, false, 0)
+        drawText(c, label, r.centerX(), r.centerY(), r.height() * 0.5f, ink)
+    }
+
+    /** 舊羊皮紙：米黃漸層、邊緣深一點、幾個泛黃斑點 */
+    private fun parchment(c: Canvas, box: RectF, pressed: Boolean, seed: Int) {
+        val rad = 6 * dp
+        fill.shader = LinearGradient(0f, box.top, 0f, box.bottom,
+            if (pressed) paperDark else paperLight, if (pressed) paperEdge else paperDark, Shader.TileMode.CLAMP)
+        c.drawRoundRect(box, rad, rad, fill)
+        fill.shader = null
+        var s = seed or 1
+        fun rnd(): Float { s = (s * 1103515245 + 12345) and 0x7fffffff; return (s % 10000) / 10000f }
+        fill.color = paperEdge
+        repeat(2) {
+            fill.alpha = (10 + rnd() * 16).toInt()
+            c.drawCircle(box.left + rnd() * box.width(), box.top + rnd() * box.height(), (0.8f + rnd() * 1.6f) * dp, fill)
+        }
+        fill.alpha = 255
+        stroke.color = paperEdge
+        stroke.alpha = 160
+        stroke.strokeWidth = 1.2f * dp
+        stroke.pathEffect = null
+        c.drawRoundRect(box, rad, rad, stroke)
+        stroke.alpha = 255
+    }
+
+    override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
+        if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
+        val box = RectF(r.left + 2.5f * dp, r.top + 3.5f * dp, r.right - 2.5f * dp, r.bottom - 3.5f * dp)
+        when (key.style) {
+            Style.CHAR -> {
+                parchment(c, box, pressed, (r.left.toInt() * 31 + r.top.toInt()))
+                drawLabels(c, key, label, box.centerX(), box.centerY(), rowH, ink, inkSoft, maxW = box.width() - 6 * dp)
+            }
+            Style.FUNC -> {
+                fill.shader = null
+                fill.color = if (pressed) houseC else houseDarkC
+                c.drawRoundRect(box, 6 * dp, 6 * dp, fill)
+                stroke.color = metalC
+                stroke.strokeWidth = 1.2f * dp
+                stroke.pathEffect = null
+                c.drawRoundRect(box, 6 * dp, 6 * dp, stroke)
+                drawFuncContent(c, key, label, box, shift, rowH, metalC)
+            }
+            Style.SPACE -> {
+                parchment(c, box, pressed, 99)
+                drawText(c, label, box.centerX(), box.centerY(), rowH * 0.22f, inkSoft)
+                if (box.width() > rowH * 1.6f) moonAndStar(c, box.left + box.height() * 0.5f, box.centerY(), box.height() * 0.24f)
+            }
+            Style.ENTER -> waxSeal(c, r, key, pressed, rowH)
+            Style.CLIP -> Unit
+        }
+    }
+
+    /** 蠟封印章：波浪邊的圓、裡面一圈金屬色 */
+    private fun waxSeal(c: Canvas, r: RectF, key: Key, pressed: Boolean, rowH: Float) {
+        val cx = r.centerX()
+        val cy = r.centerY()
+        val rad = minOf(r.width(), r.height()) * 0.36f * if (pressed) 0.92f else 1f
+        val wax = c(pal.wax)
+        fill.shader = null
+        fill.color = CustomTheme.blend(wax, Color.BLACK, 0.25f)
+        c.drawCircle(cx + 1.5f * dp, cy + 2 * dp, rad * 1.05f, fill) // 影子
+        fill.color = wax
+        for (i in 0 until 14) {
+            val a = Math.toRadians(i * 360.0 / 14)
+            c.drawCircle(cx + cos(a).toFloat() * rad * 0.88f, cy + sin(a).toFloat() * rad * 0.88f, rad * 0.2f, fill)
+        }
+        c.drawCircle(cx, cy, rad * 0.92f, fill)
+        // 蠟封的光澤
+        fill.color = Color.WHITE
+        fill.alpha = 60
+        c.drawCircle(cx - rad * 0.3f, cy - rad * 0.35f, rad * 0.25f, fill)
+        fill.alpha = 255
+        stroke.color = c(pal.waxIcon)
+        stroke.strokeWidth = 1.4f * dp
+        stroke.pathEffect = null
+        c.drawCircle(cx, cy, rad * 0.68f, stroke)
+        key.icon?.let { drawIcon(c, it, cx, cy, rowH * 0.32f, c(pal.waxIcon)) }
+    }
+
+    private fun moonAndStar(c: Canvas, cx: Float, cy: Float, s: Float) {
+        fill.shader = null
+        fill.color = metalC
+        val p = Path()
+        p.addCircle(cx, cy, s, Path.Direction.CW)
+        val cut = Path().apply { addCircle(cx + s * 0.45f, cy - s * 0.25f, s * 0.85f, Path.Direction.CW) }
+        p.op(cut, Path.Op.DIFFERENCE)
+        c.drawPath(p, fill)
+        sparkle(c, cx + s * 1.05f, cy - s * 0.7f, s * 0.42f)
+    }
+
+    private fun sparkle(c: Canvas, cx: Float, cy: Float, s: Float) {
+        val p = Path()
+        val k = s * 0.18f
+        p.moveTo(cx, cy - s)
+        p.quadTo(cx + k, cy - k, cx + s, cy)
+        p.quadTo(cx + k, cy + k, cx, cy + s)
+        p.quadTo(cx - k, cy + k, cx - s, cy)
+        p.quadTo(cx - k, cy - k, cx, cy - s)
+        p.close()
+        c.drawPath(p, fill)
+    }
+
+    companion object {
+        val PALETTES = listOf(
+            MagicPalette("magic_red", "魔法學院・紅金 🦁", house = "#7F1D1D", houseDark = "#4A0E0E", metal = "#E2B33C",
+                wax = "#B3262A", waxIcon = "#F2C75C"),
+            MagicPalette("magic_green", "魔法學院・綠銀 🐍", house = "#1E4D33", houseDark = "#0F2A1C", metal = "#C9CED3",
+                wax = "#2F7D52", waxIcon = "#E4E8EC"),
+            MagicPalette("magic_blue", "魔法學院・藍銅 🦅", house = "#1B2A57", houseDark = "#0D1630", metal = "#C08A4E",
+                wax = "#3A5BA8", waxIcon = "#E8B57A"),
+            MagicPalette("magic_yellow", "魔法學院・黃黑 🦡", house = "#3A322B", houseDark = "#1F1A16", metal = "#F0C23B",
+                wax = "#E2A92B", waxIcon = "#3A2A10"),
+        )
+    }
+}
+
 /** 自訂配色：5 個顏色都可以在設定頁調 */
 class CustomTheme(
     dp: Float,
@@ -833,6 +1028,7 @@ object Themes {
         "catpaw" -> CatPawTheme(dp)
         "stitch" -> StitchTheme(dp)
         in MacaronTheme.PALETTES.map { it.id } -> MacaronTheme(dp, MacaronTheme.PALETTES.first { it.id == name })
+        in MagicTheme.PALETTES.map { it.id } -> MagicTheme(dp, MagicTheme.PALETTES.first { it.id == name })
         "custom" -> if (prefs != null) CustomTheme(
             dp, prefs.customBg, prefs.customKey, prefs.customText, prefs.customSub, prefs.customAccent,
         ) else ClassicTheme(dp)

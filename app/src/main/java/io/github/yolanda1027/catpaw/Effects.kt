@@ -40,6 +40,7 @@ class PressEffects(private val dp: Float) {
             "bubble" to "彩虹泡泡 ○",
             "snow" to "雪花 ❄",
             "note" to "音符 ♪",
+            "spell" to "魔法火花 ✧",
         )
         private const val MAX_PARTICLES = 80
     }
@@ -145,6 +146,25 @@ class PressEffects(private val dp: Float) {
                 repeat(5) {
                     add(P(Shape.DOT, cx + r(-18f, 18f) * dp, top + r(-10f, 4f) * dp, r(-15f, 15f) * dp, r(20f, 50f) * dp, 0f,
                         r(1f, 1.8f) * dp, ink, now + rnd.nextLong(0, 200), 800, sway = 3 * dp, phase = r(0f, 6f), outline = false))
+                }
+            }
+            "spell" -> {
+                // 魔杖火花：金色、白色的閃光往上噴開，帶幾顆小星星
+                val gold = Color.parseColor("#F5C542")
+                repeat(9) {
+                    val a = r(-PI.toFloat() * 0.92f, -PI.toFloat() * 0.08f)
+                    val v = r(110f, 230f) * dp
+                    add(P(Shape.SPARKLE, cx, cy, cos(a) * v, sin(a) * v, 260 * dp,
+                        r(3f, 6.5f) * dp, if (it % 3 == 0) Color.WHITE else gold, now + rnd.nextLong(0, 50), 600,
+                        phase = r(0f, 6f), outline = false))
+                }
+                repeat(3) {
+                    add(P(Shape.STAR, cx + r(-10f, 10f) * dp, cy, r(-40f, 40f) * dp, -r(90f, 150f) * dp, 0f,
+                        r(4f, 6f) * dp, gold, now + 60, 700, rot0 = r(0f, 72f), vrot = r(-200f, 200f), outline = true))
+                }
+                repeat(6) {
+                    add(P(Shape.DOT, cx + r(-6f, 6f) * dp, cy, r(-50f, 50f) * dp, -r(60f, 160f) * dp, 300 * dp,
+                        r(1f, 1.8f) * dp, Color.WHITE, now + rnd.nextLong(0, 120), 550, outline = false))
                 }
             }
             "note" -> repeat(2) { i ->
