@@ -516,7 +516,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
         if (!solid) {
             stroke.pathEffect = dash
             stroke.strokeWidth = 1.4f * dp
-            val inner = RectF(box.left + 3 * dp, box.top + 3 * dp, box.right - 3 * dp, box.bottom - 3 * dp)
+            val inner = RectF(box.left + 2.5f * dp, box.top + 2.5f * dp, box.right - 2.5f * dp, box.bottom - 2.5f * dp)
             c.drawRoundRect(inner, rad * 0.6f, rad * 0.6f, stroke)
             stroke.pathEffect = null
         }
@@ -782,11 +782,14 @@ class MagicTheme(dp: Float, private val pal: MagicPalette) : KbTheme(dp) {
     private val houseC = c(pal.house)
     private val houseDarkC = c(pal.houseDark)
     private val metalC = c(pal.metal)
+    // 羊皮紙的顏色（照使用者給的「霍格華茲日誌」狀態欄取色）
     private val ink = c("#3B2A1A")
-    private val inkSoft = c("#7A6040")
-    private val paperLight = c("#F6EBCB")
-    private val paperDark = c("#E2CD98")
-    private val paperEdge = c("#B8955A")
+    private val inkSoft = c("#8A6A2F") // 金褐色：小字（數字、英文）
+    private val paperLight = c("#F3E8D2")
+    private val paperDark = c("#EBDFC6") // 紙張邊緣稍微深一點
+    private val paperPressed = c("#E4D5B5")
+    private val paperEdge = c("#B39863") // 細細的深金褐邊框
+    private val edgeGlow = android.graphics.BlurMaskFilter(5f * dp, android.graphics.BlurMaskFilter.Blur.NORMAL)
 
     // 底色是深的：上方列、選字列用淺色字
     override val bg = houseC
@@ -843,27 +846,25 @@ class MagicTheme(dp: Float, private val pal: MagicPalette) : KbTheme(dp) {
         drawText(c, label, r.centerX(), r.centerY(), r.height() * 0.5f, ink)
     }
 
-    /** 舊羊皮紙：米黃漸層、邊緣深一點、幾個泛黃斑點 */
+    /**
+     * 羊皮紙：很淡的米色，邊緣往內一點點變深（像舊紙），外面一圈細細的深金褐邊框。
+     * 作法：先塗邊緣色，再把中間的米色「暈開」疊上去。
+     */
+    @Suppress("UNUSED_PARAMETER")
     private fun parchment(c: Canvas, box: RectF, pressed: Boolean, seed: Int) {
-        val rad = 6 * dp
-        fill.shader = LinearGradient(0f, box.top, 0f, box.bottom,
-            if (pressed) paperDark else paperLight, if (pressed) paperEdge else paperDark, Shader.TileMode.CLAMP)
-        c.drawRoundRect(box, rad, rad, fill)
+        val rad = 8 * dp
         fill.shader = null
-        var s = seed or 1
-        fun rnd(): Float { s = (s * 1103515245 + 12345) and 0x7fffffff; return (s % 10000) / 10000f }
-        fill.color = paperEdge
-        repeat(2) {
-            fill.alpha = (10 + rnd() * 16).toInt()
-            c.drawCircle(box.left + rnd() * box.width(), box.top + rnd() * box.height(), (0.8f + rnd() * 1.6f) * dp, fill)
-        }
-        fill.alpha = 255
+        fill.color = if (pressed) paperPressed else paperDark
+        c.drawRoundRect(box, rad, rad, fill)
+        val inner = RectF(box.left + 3 * dp, box.top + 3 * dp, box.right - 3 * dp, box.bottom - 3 * dp)
+        fill.color = if (pressed) CustomTheme.blend(paperPressed, paperLight, 0.4f) else paperLight
+        fill.maskFilter = edgeGlow
+        c.drawRoundRect(inner, rad * 0.7f, rad * 0.7f, fill)
+        fill.maskFilter = null
         stroke.color = paperEdge
-        stroke.alpha = 160
-        stroke.strokeWidth = 1.2f * dp
+        stroke.strokeWidth = 1f * dp
         stroke.pathEffect = null
         c.drawRoundRect(box, rad, rad, stroke)
-        stroke.alpha = 255
     }
 
     override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
