@@ -21,6 +21,19 @@
             </intent-filter>
         </activity>
 
+        <!-- 主題工作室：桌面上獨立一個圖示，用起來像另一個 App -->
+        <activity
+            android:name=".StudioActivity"
+            android:exported="true"
+            android:icon="@mipmap/ic_studio"
+            android:label="@string/studio_name"
+            android:taskAffinity="io.github.yolanda1027.catpaw.studio">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".CatImeService"
             android:exported="true"

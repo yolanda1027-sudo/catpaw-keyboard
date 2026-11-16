@@ -83,6 +83,7 @@ class CatKeyboardView(
     private val dp = resources.displayMetrics.density
     private var theme: KbTheme = Themes.byName(prefs.theme, dp, prefs)
     private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context)
+    private var keyStyles = KeyStyles.load(prefs)
     private val effects = PressEffects(dp)
     private var fontSet = loadFonts()
 
@@ -196,6 +197,7 @@ class CatKeyboardView(
     fun reloadPrefs() {
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context)
+        keyStyles = KeyStyles.load(prefs)
         fontSet = loadFonts()
         stripCache = null
         panelCache = null
@@ -270,23 +272,76 @@ class CatKeyboardView(
                 }
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
-                val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
-                if (sticker == null) {
-                    theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), kr === pressed, shiftState, rowH)
-                } else {
-                    // 有貼圖：照樣畫按鍵底框，但圖示／文字換成貼圖
-                    theme.drawKey(c, kr.rect, kr.key.copy(label = "", icon = null), "", kr === pressed, shiftState, rowH)
-                    Stickers.draw(c, sticker, kr.rect, kr === pressed, 5 * dp)
-                }
+                drawOneKey(c, kr)
                 if (s != 1f) c.restore()
                 if (inGrid) c.restore()
             }
+            drawEditHighlight(c)
             drawPageIndicator(c, w)
             effects.draw(c, now)
             drawPreview(c, w)
             if (effects.active(now)) postInvalidateOnAnimation()
         }
         c.restore()
+    }
+
+    /** 畫一顆鍵：主題原本的樣子，再套上功能鍵貼圖、主題工作室的單鍵樣式 */
+    private fun drawOneKey(c: Canvas, kr: KeyRect) {
+        val isPressed = kr === pressed
+        val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
+        val st = keyStyles.resolve(kr.key)
+        val split = sticker != null || (st != null && (st.bg != null || st.text != null || st.hideLabel == true))
+        if (!split) {
+            theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), isPressed, shiftState, rowH)
+        } else {
+            // 底框：自訂底色，或主題原本的底框（不畫字）
+            if (st?.bg != null) theme.drawStyledBody(c, kr.rect, st, isPressed)
+            else theme.drawKey(c, kr.rect, kr.key.copy(label = "", icon = null, sub = null), "", isPressed, shiftState, rowH)
+            // 內容：貼圖、或用自訂顏色畫字
+            when {
+                sticker != null -> Stickers.draw(c, sticker, kr.rect, isPressed, 5 * dp)
+                st?.hideLabel == true -> Unit
+                else -> {
+                    val main = st?.text ?: theme.text
+                    val dim = if (st?.text != null) (main and 0x00FFFFFF) or (0xA8 shl 24) else theme.textDim
+                    theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, st?.bg)
+                }
+            }
+        }
+        if (st?.border != null) theme.drawStyledBorder(c, kr.rect, st)
+    }
+
+    // ---------- 主題工作室：點按鍵來編輯 ----------
+
+    /** 有設定的話，鍵盤變成「編輯模式」：點按鍵不會打字，而是選到那顆鍵 */
+    var editPicker: ((Key) -> Unit)? = null
+
+    /** 編輯模式下要框起來的鍵（選到的那顆，或同一類的全部） */
+    var editHighlight: ((Key) -> Boolean)? = null
+        set(v) { field = v; invalidate() }
+
+    private val editPaint by lazy {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 2.5f * dp
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(6 * dp, 4 * dp), 0f)
+        }
+    }
+
+    private fun drawEditHighlight(c: Canvas) {
+        val f = editHighlight ?: return
+        for (kr in keyRects) {
+            if (kr.key.act == Act.GAP || !f(kr.key)) continue
+            val r = RectF(kr.rect).apply { inset(1.5f * dp, 1.5f * dp) }
+            editPaint.color = android.graphics.Color.WHITE
+            editPaint.pathEffect = null
+            editPaint.strokeWidth = 4.5f * dp
+            c.drawRoundRect(r, 8 * dp, 8 * dp, editPaint)
+            editPaint.color = android.graphics.Color.parseColor("#FF4F8B")
+            editPaint.strokeWidth = 2.5f * dp
+            editPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(6 * dp, 4 * dp), 0f)
+            c.drawRoundRect(r, 8 * dp, 8 * dp, editPaint)
+        }
     }
 
     // ---------- 選字列 ----------
@@ -556,6 +611,10 @@ class CatKeyboardView(
     }
 
     private fun handleTouch(e: MotionEvent): Boolean {
+        editPicker?.let { pick ->
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) keyAt(e.x, e.y)?.let { pick(it.key) }
+            return true
+        }
         if (handleCandidateTouch(e)) return true
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {

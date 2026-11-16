@@ -212,6 +212,60 @@ abstract class KbTheme(protected val dp: Float) {
         else drawText(c, label, r.centerX(), r.centerY(), if (label.length > 2) rowH * 0.34f else rowH * 0.3f, color)
     }
 
+    // ---------- 主題工作室：單顆按鍵自己的樣式 ----------
+
+    /** 自訂底色、外框畫在這個框裡（比按鍵範圍內縮一點，鍵和鍵之間才有空隙） */
+    fun styledBox(r: RectF): RectF = RectF(r.left + 3 * dp, r.top + 4 * dp, r.right - 3 * dp, r.bottom - 4 * dp)
+
+    private fun styledRadius(box: RectF, st: KeyStyle) = (st.radius ?: 0.3f) * min(box.width(), box.height()) / 2f
+
+    /** 按下去的顏色：亮的變暗一點、暗的變亮一點 */
+    fun pressedOf(color: Int): Int {
+        val lum = (Color.red(color) * 299 + Color.green(color) * 587 + Color.blue(color) * 114) / 1000
+        val t = if (lum > 128) 0f else 255f
+        val k = if (lum > 128) 0.14f else 0.18f
+        fun mix(v: Int) = (v + (t - v) * k).toInt().coerceIn(0, 255)
+        return Color.argb(Color.alpha(color), mix(Color.red(color)), mix(Color.green(color)), mix(Color.blue(color)))
+    }
+
+    fun drawStyledBody(c: Canvas, r: RectF, st: KeyStyle, pressed: Boolean) {
+        val color = st.bg ?: return
+        val box = styledBox(r)
+        val rad = styledRadius(box, st)
+        fill.shader = null
+        fill.color = if (pressed) pressedOf(color) else color
+        c.drawRoundRect(box, rad, rad, fill)
+    }
+
+    fun drawStyledBorder(c: Canvas, r: RectF, st: KeyStyle) {
+        val color = st.border ?: return
+        val box = styledBox(r)
+        val half = 1 * dp
+        box.inset(half, half)
+        val rad = styledRadius(box, st)
+        stroke.color = color
+        stroke.strokeWidth = 2 * dp
+        stroke.pathEffect = null
+        c.drawRoundRect(box, rad, rad, stroke)
+    }
+
+    /**
+     * 只畫按鍵上的字或圖示（主題工作室改了文字顏色時用）。
+     * @param body 這顆鍵自訂的底色（刪除鍵的實心圖示要用它挖出 X）
+     */
+    fun drawKeyContent(c: Canvas, r: RectF, key: Key, label: String, shift: Int, rowH: Float, main: Int, dim: Int, body: Int?) {
+        when (key.style) {
+            Style.CHAR -> drawLabels(c, key, label, r.centerX(), r.centerY(), rowH, main, dim, maxW = r.width() * 0.9f)
+            Style.SPACE -> drawText(c, label, r.centerX(), r.centerY(), rowH * 0.22f, main)
+            Style.CLIP -> Unit
+            else -> {
+                val icon = key.icon
+                if (icon != null) drawIcon(c, icon, r.centerX(), r.centerY(), rowH * 0.46f, main, shift, backspaceCutout?.let { body ?: it })
+                else drawText(c, label, r.centerX(), r.centerY(), if (label.length > 2) rowH * 0.34f else rowH * 0.3f, main)
+            }
+        }
+    }
+
     /** 用線條畫圖示 */
     fun drawIcon(c: Canvas, icon: Icon, cx: Float, cy: Float, s: Float, color: Int, shift: Int = 0, cutout: Int? = null) {
         stroke.color = color

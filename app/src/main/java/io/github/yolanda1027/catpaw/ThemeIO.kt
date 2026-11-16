@@ -22,7 +22,8 @@ import java.io.ByteArrayOutputStream
  *   "fonts": { "zh": "wenkai", "zhuyin": "huninn", "en": "system" },   // 選擇性
  *   "effect": "spell",                                                  // 選擇性
  *   "stickers": { "enter": "<PNG base64>", ... },                       // 選擇性
- *   "quickBar": { "on": true, "items": [ { "t": "()", "on": true } ] }  // 選擇性
+ *   "quickBar": { "on": true, "items": [ { "t": "()", "on": true } ] }, // 選擇性
+ *   "keyStyles": { "zy:ㄅ": { "bg": "#FFFFE08A", "radius": 0.5 }, "@enter": {...} } // 選擇性
  * }
  * 自己上傳的字體不會放進檔案（太大，也可能有授權問題），對方沒有的話會換成系統字體。
  */
@@ -37,6 +38,7 @@ object ThemeIO {
         EFFECT("按鍵動畫"),
         STICKERS("功能鍵貼圖"),
         QUICK("快捷符號列"),
+        KEYS("單顆按鍵樣式（主題工作室）"),
     }
 
     private fun hex(c: Int) = String.format("#%06X", 0xFFFFFF and c)
@@ -70,6 +72,10 @@ object ThemeIO {
             for (q in prefs.quickEntries()) items.put(JSONObject().put("t", q.text).put("on", q.on))
             o.put("quickBar", JSONObject().put("on", prefs.quickBar).put("items", items))
         }
+        if (Part.KEYS in parts) {
+            val ks = KeyStyles.load(prefs)
+            if (ks.map.isNotEmpty()) o.put("keyStyles", ks.toJson())
+        }
         return o.toString(2)
     }
 
@@ -89,6 +95,7 @@ object ThemeIO {
         if (o.has("effect")) parts.add("按鍵動畫")
         o.optJSONObject("stickers")?.let { if (it.length() > 0) parts.add("功能鍵貼圖 ${it.length()} 張") }
         if (o.has("quickBar")) parts.add("快捷符號列")
+        o.optJSONObject("keyStyles")?.let { if (it.length() > 0) parts.add("單顆按鍵樣式 ${it.length()} 組") }
         return o.optString("name", "沒有名字的主題") to parts
     }
 
@@ -174,6 +181,7 @@ object ThemeIO {
                 if (list.isNotEmpty()) prefs.setQuickEntries(list)
             }
         }
+        o.optJSONObject("keyStyles")?.let { KeyStyles.save(prefs, KeyStyles.fromJson(it)) }
         return warnings
     }
 }
