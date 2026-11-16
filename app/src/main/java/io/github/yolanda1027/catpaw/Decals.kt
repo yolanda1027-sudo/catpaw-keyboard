@@ -40,7 +40,22 @@ data class Decal(
     val flip: Boolean = false,
     /** 高度的拉伸倍率（拖上下的拉把只改高、左右的拉把只改寬時會變；1 = 原本比例） */
     val stretch: Float = 1f,
+    /** 內建圖案調過樣式了沒（沒調過：照圖案的預設樣子；調過：color 是填色，下面三個是外框） */
+    val styled: Boolean = false,
+    /** 外框顏色（null = 沒有外框） */
+    val outline: Int? = null,
+    /** 外框粗細：圖案短邊的幾分之幾 */
+    val outlineWidth: Float = 0.06f,
+    /** 外框樣式：solid、dash、dot、stitch */
+    val outlineStyle: String = "solid",
 ) {
+    /** 內建圖案要怎麼畫 */
+    fun shapeStyle(): ShapeStyle =
+        if (!styled) DecalShapes.defaultStyle(shapeName, color) else ShapeStyle(color, outline, outlineWidth, outlineStyle)
+
+    /** 換成新的樣式（之後就照這個畫） */
+    fun withStyle(st: ShapeStyle) = copy(styled = true, color = st.fill, outline = st.outline, outlineWidth = st.width, outlineStyle = st.dash)
+
     val isShape get() = img.startsWith(SHAPE)
     val shapeName get() = img.removePrefix(SHAPE)
     val fileName get() = img.removePrefix(FILE)
@@ -51,6 +66,14 @@ data class Decal(
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size.toDouble())
         .put("rotation", rotation.toDouble()).put("alpha", alpha.toDouble())
         .put("color", String.format("#%08X", color)).put("front", front).put("flip", flip).put("stretch", stretch.toDouble())
+        .apply {
+            if (styled) {
+                put("styled", true)
+                outline?.let { put("outline", String.format("#%08X", it)) }
+                put("outlineWidth", outlineWidth.toDouble())
+                put("outlineStyle", outlineStyle)
+            }
+        }
 
     companion object {
         const val BG = "@bg"
@@ -76,6 +99,10 @@ data class Decal(
                 front = o.optBoolean("front", false),
                 flip = o.optBoolean("flip", false),
                 stretch = f("stretch", 1f, 0.1f, 10f),
+                styled = o.optBoolean("styled", false),
+                outline = o.optString("outline").takeIf { it.isNotEmpty() }?.let { try { Color.parseColor(it) } catch (_: Exception) { null } },
+                outlineWidth = f("outlineWidth", 0.06f, 0.005f, 0.3f),
+                outlineStyle = o.optString("outlineStyle", "solid").takeIf { st -> DecalShapes.DASHES.any { it.first == st } } ?: "solid",
             )
         }
     }
@@ -96,6 +123,12 @@ object Decals {
         "flower" to "小花",
         "bow" to "蝴蝶結",
         "moon" to "月亮",
+        "roundrect" to "圓角方形",
+        "circle" to "圓形",
+        "cloud" to "雲朵",
+        "fish" to "小魚",
+        "crown" to "皇冠",
+        "drop" to "水滴",
     )
 
     private var counter = 0
@@ -247,9 +280,7 @@ object Decals {
             paint.colorFilter = null
             c.drawBitmap(bmp, null, r, paint)
         } else {
-            // 內建圖案先畫成正方形，再上下拉伸
-            if (w > 0f) c.scale(1f, h / w)
-            DecalShapes.draw(c, d.shapeName, RectF(-w / 2, -w / 2, w / 2, w / 2), d.color, d.alpha)
+            DecalShapes.draw(c, d.shapeName, r, d.shapeStyle(), d.alpha)
         }
         c.restore()
     }
@@ -303,98 +334,224 @@ object Decals {
     fun toBytes(bmp: Bitmap): ByteArray = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
 }
 
-/** 內建的小圖案：全部用線條和形狀畫，所有手機看起來都一樣，也可以換顏色 */
+/**
+ * 內建圖案的樣式（像小畫家）：填色（可以透明）、外框（可以沒有）、外框的樣式和粗細。
+ * @param width 外框粗細：圖案短邊的幾分之幾
+ * @param dash solid 實線｜dash 虛線｜dot 點點｜stitch 縫線（往內縮一點的短虛線）
+ */
+data class ShapeStyle(val fill: Int, val outline: Int?, val width: Float = 0.06f, val dash: String = "solid")
+
+/** 內建的小圖案：全部用線條和形狀畫，所有手機看起來都一樣，可以換填色、加外框 */
 object DecalShapes {
+    val DASHES = listOf("solid" to "實線", "dash" to "虛線", "dot" to "點點", "stitch" to "縫線")
+
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
+    private val matrix = android.graphics.Matrix()
 
     private fun lighter(c: Int, t: Float): Int {
         fun m(v: Int) = (v + (255 - v) * t).toInt()
-        return Color.argb(Color.alpha(c), m(Color.red(c)), m(Color.green(c)), m(Color.blue(c)))
+        return Color.argb(255, m(Color.red(c)), m(Color.green(c)), m(Color.blue(c)))
     }
 
     private fun darker(c: Int, t: Float): Int {
         fun m(v: Int) = (v * (1 - t)).toInt()
-        return Color.argb(Color.alpha(c), m(Color.red(c)), m(Color.green(c)), m(Color.blue(c)))
+        return Color.argb(255, m(Color.red(c)), m(Color.green(c)), m(Color.blue(c)))
     }
 
-    fun draw(c: Canvas, name: String, r: RectF, color: Int, alpha: Float) {
+    /** 沒調過樣式的圖案長什麼樣：線條貓咪本來就是「只有外框」，其他是「只有填色」 */
+    fun defaultStyle(name: String, color: Int) =
+        if (name == "catline") ShapeStyle(Color.TRANSPARENT, color, 0.045f) else ShapeStyle(color, null)
+
+    /** 只給顏色（按鍵動畫的粒子用）：照預設樣式畫 */
+    fun draw(c: Canvas, name: String, r: RectF, color: Int, alpha: Float) = draw(c, name, r, defaultStyle(name, color), alpha)
+
+    /**
+     * r 是實際要畫的範圍（可以被拉寬或拉高）。
+     * 形狀先照正方形做好，再把「路徑」拉成 r 的比例——拉的是路徑不是畫布，外框才不會一邊粗一邊細。
+     * 圓角方形、圓形直接照 r 做（圓角才不會被拉成橢圓）。
+     */
+    fun draw(c: Canvas, name: String, r: RectF, st: ShapeStyle, alpha: Float) {
         val a = (alpha * 255).toInt()
-        fill.color = color
-        fill.alpha = a
-        val s = minOf(r.width(), r.height()) / 2 // 半徑
+        val path = outlinePath(name, r)
+        if (Color.alpha(st.fill) > 0) {
+            fill.color = st.fill
+            fill.alpha = Color.alpha(st.fill) * a / 255
+            c.drawPath(path, fill)
+        }
+        st.outline?.let { drawOutline(c, path, r, it, st.width, st.dash, a) }
+        // 臉、花心這些小細節：有填色就用填色深一點／淺一點的顏色，沒有填色就用外框的顏色
+        val ink = st.outline ?: st.fill
+        val base = if (Color.alpha(st.fill) > 0) st.fill else ink
+        details(c, name, r, base, ink, Color.alpha(st.fill) > 0, a)
+    }
+
+    private fun drawOutline(c: Canvas, path: Path, r: RectF, color: Int, widthFrac: Float, dash: String, a: Int) {
+        val w = (widthFrac * minOf(r.width(), r.height())).coerceAtLeast(0.5f)
+        stroke.color = color
+        stroke.alpha = Color.alpha(color) * a / 255
+        stroke.strokeWidth = w
+        stroke.pathEffect = when (dash) {
+            "dash" -> android.graphics.DashPathEffect(floatArrayOf(w * 2.4f, w * 2.2f), 0f)
+            "dot" -> android.graphics.DashPathEffect(floatArrayOf(0.01f, w * 2.1f), 0f)
+            "stitch" -> android.graphics.DashPathEffect(floatArrayOf(w * 1.8f, w * 1.9f), 0f)
+            else -> null
+        }
+        if (dash == "stitch") {
+            // 縫線：往內縮一點，像布邊車的線
+            val inset = w * 2.2f
+            val sx = ((r.width() - 2 * inset) / r.width()).coerceAtLeast(0.1f)
+            val sy = ((r.height() - 2 * inset) / r.height()).coerceAtLeast(0.1f)
+            val p = Path(path)
+            matrix.setScale(sx, sy, r.centerX(), r.centerY())
+            p.transform(matrix)
+            c.drawPath(p, stroke)
+        } else {
+            c.drawPath(path, stroke)
+        }
+        stroke.pathEffect = null
+    }
+
+    /** 圖案的輪廓（填色、外框都用它） */
+    fun outlinePath(name: String, r: RectF): Path {
+        when (name) {
+            "roundrect" -> {
+                val rad = minOf(r.width(), r.height()) * 0.22f
+                return Path().apply { addRoundRect(r, rad, rad, Path.Direction.CW) }
+            }
+            "circle" -> return Path().apply { addOval(r, Path.Direction.CW) }
+        }
         val cx = r.centerX()
         val cy = r.centerY()
+        val s = r.width() / 2
+        val p = squarePath(name, cx, cy, s)
+        if (r.width() > 0f && r.height() != r.width()) {
+            matrix.setScale(1f, r.height() / r.width(), cx, cy)
+            p.transform(matrix)
+        }
+        return p
+    }
+
+    private fun union(vararg parts: Path): Path {
+        val out = Path(parts[0])
+        for (i in 1 until parts.size) out.op(parts[i], Path.Op.UNION)
+        return out
+    }
+
+    private fun oval(l: Float, t: Float, r: Float, b: Float) = Path().apply { addOval(RectF(l, t, r, b), Path.Direction.CW) }
+    private fun circle(x: Float, y: Float, rad: Float) = Path().apply { addCircle(x, y, rad, Path.Direction.CW) }
+
+    /** 照正方形（中心 cx, cy，半徑 s）做的輪廓 */
+    private fun squarePath(name: String, cx: Float, cy: Float, s: Float): Path = when (name) {
+        "heart" -> heart(cx, cy, s)
+        "star" -> star(cx, cy, s, s * 0.45f, 5)
+        "sparkle" -> sparkle(cx, cy, s)
+        "paw" -> union(
+            oval(cx - s * 0.52f, cy - s * 0.02f, cx + s * 0.52f, cy + s * 0.78f),
+            *listOf(-0.68f to -0.22f, -0.26f to -0.62f, 0.26f to -0.62f, 0.68f to -0.22f).map { (dx, dy) ->
+                oval(cx + dx * s - s * 0.2f, cy + dy * s - s * 0.25f, cx + dx * s + s * 0.2f, cy + dy * s + s * 0.25f)
+            }.toTypedArray(),
+        )
+        "flower" -> union(*(0 until 5).map { i ->
+            val ang = Math.toRadians(-90.0 + i * 72)
+            circle(cx + (cos(ang) * s * 0.52f).toFloat(), cy + (sin(ang) * s * 0.52f).toFloat(), s * 0.42f)
+        }.toTypedArray(), circle(cx, cy, s * 0.4f))
+        "bow" -> {
+            val loops = Path().apply {
+                moveTo(cx, cy)
+                cubicTo(cx - s * 0.5f, cy - s * 0.85f, cx - s * 1.05f, cy - s * 0.5f, cx - s * 0.95f, cy)
+                cubicTo(cx - s * 1.05f, cy + s * 0.5f, cx - s * 0.5f, cy + s * 0.85f, cx, cy)
+                cubicTo(cx + s * 0.5f, cy - s * 0.85f, cx + s * 1.05f, cy - s * 0.5f, cx + s * 0.95f, cy)
+                cubicTo(cx + s * 1.05f, cy + s * 0.5f, cx + s * 0.5f, cy + s * 0.85f, cx, cy)
+                close()
+            }
+            val tail = Path().apply {
+                moveTo(cx - s * 0.12f, cy)
+                lineTo(cx - s * 0.45f, cy + s * 0.95f)
+                lineTo(cx - s * 0.2f, cy + s * 0.85f)
+                lineTo(cx, cy + s * 0.2f)
+                lineTo(cx + s * 0.2f, cy + s * 0.85f)
+                lineTo(cx + s * 0.45f, cy + s * 0.95f)
+                lineTo(cx + s * 0.12f, cy)
+                close()
+            }
+            union(loops, tail, Path().apply { addRoundRect(RectF(cx - s * 0.2f, cy - s * 0.24f, cx + s * 0.2f, cy + s * 0.24f), s * 0.1f, s * 0.1f, Path.Direction.CW) })
+        }
+        "moon" -> Path().apply {
+            addCircle(cx, cy, s * 0.9f, Path.Direction.CW)
+            op(circle(cx + s * 0.45f, cy - s * 0.3f, s * 0.75f), Path.Op.DIFFERENCE)
+        }
+        "cat" -> catHead(cx, cy, s)
+        "catline" -> catHead(cx, cy, s * 0.92f)
+        "cloud" -> union(
+            circle(cx - s * 0.45f, cy + s * 0.12f, s * 0.42f),
+            circle(cx + s * 0.05f, cy - s * 0.18f, s * 0.55f),
+            circle(cx + s * 0.55f, cy + s * 0.15f, s * 0.38f),
+            Path().apply { addRoundRect(RectF(cx - s * 0.85f, cy + s * 0.05f, cx + s * 0.9f, cy + s * 0.55f), s * 0.25f, s * 0.25f, Path.Direction.CW) },
+        )
+        "fish" -> union(
+            oval(cx - s * 0.85f, cy - s * 0.45f, cx + s * 0.45f, cy + s * 0.45f),
+            Path().apply {
+                moveTo(cx + s * 0.3f, cy)
+                lineTo(cx + s * 0.95f, cy - s * 0.45f)
+                lineTo(cx + s * 0.8f, cy)
+                lineTo(cx + s * 0.95f, cy + s * 0.45f)
+                close()
+            },
+        )
+        "crown" -> Path().apply {
+            moveTo(cx - s * 0.85f, cy + s * 0.6f)
+            lineTo(cx - s * 0.9f, cy - s * 0.45f)
+            lineTo(cx - s * 0.45f, cy - s * 0.02f)
+            lineTo(cx, cy - s * 0.65f)
+            lineTo(cx + s * 0.45f, cy - s * 0.02f)
+            lineTo(cx + s * 0.9f, cy - s * 0.45f)
+            lineTo(cx + s * 0.85f, cy + s * 0.6f)
+            close()
+        }
+        "drop" -> Path().apply {
+            moveTo(cx, cy - s * 0.95f)
+            cubicTo(cx + s * 0.25f, cy - s * 0.5f, cx + s * 0.7f, cy - s * 0.05f, cx + s * 0.7f, cy + s * 0.3f)
+            cubicTo(cx + s * 0.7f, cy + s * 0.72f, cx + s * 0.38f, cy + s * 0.95f, cx, cy + s * 0.95f)
+            cubicTo(cx - s * 0.38f, cy + s * 0.95f, cx - s * 0.7f, cy + s * 0.72f, cx - s * 0.7f, cy + s * 0.3f)
+            cubicTo(cx - s * 0.7f, cy - s * 0.05f, cx - s * 0.25f, cy - s * 0.5f, cx, cy - s * 0.95f)
+            close()
+        }
+        else -> circle(cx, cy, s * 0.8f)
+    }
+
+    /** 臉、花心、蝴蝶結的結這些小細節 */
+    private fun details(c: Canvas, name: String, r: RectF, base: Int, ink: Int, filled: Boolean, a: Int) {
+        val cx = r.centerX()
+        val cy = r.centerY()
+        val s = r.width() / 2
+        c.save()
+        if (r.width() > 0f && r.height() != r.width()) c.scale(1f, r.height() / r.width(), cx, cy)
+        fun dot(x: Float, y: Float, rad: Float, color: Int) {
+            fill.color = color
+            fill.alpha = a
+            c.drawCircle(x, y, rad, fill)
+        }
         when (name) {
-            "heart" -> c.drawPath(heart(cx, cy, s), fill)
-            "star" -> c.drawPath(star(cx, cy, s, s * 0.45f, 5), fill)
-            "sparkle" -> c.drawPath(sparkle(cx, cy, s), fill)
-            "paw" -> {
-                c.drawOval(RectF(cx - s * 0.52f, cy - s * 0.02f, cx + s * 0.52f, cy + s * 0.78f), fill)
-                for ((dx, dy) in listOf(-0.68f to -0.22f, -0.26f to -0.62f, 0.26f to -0.62f, 0.68f to -0.22f)) {
-                    c.drawOval(RectF(cx + dx * s - s * 0.2f, cy + dy * s - s * 0.25f, cx + dx * s + s * 0.2f, cy + dy * s + s * 0.25f), fill)
-                }
-            }
-            "flower" -> {
-                for (i in 0 until 5) {
-                    val ang = Math.toRadians(-90.0 + i * 72)
-                    c.drawCircle(cx + (cos(ang) * s * 0.52f).toFloat(), cy + (sin(ang) * s * 0.52f).toFloat(), s * 0.42f, fill)
-                }
-                fill.color = lighter(color, 0.75f)
-                fill.alpha = a
-                c.drawCircle(cx, cy, s * 0.3f, fill)
-            }
-            "bow" -> {
-                val p = Path()
-                p.moveTo(cx, cy)
-                p.cubicTo(cx - s * 0.5f, cy - s * 0.85f, cx - s * 1.05f, cy - s * 0.5f, cx - s * 0.95f, cy)
-                p.cubicTo(cx - s * 1.05f, cy + s * 0.5f, cx - s * 0.5f, cy + s * 0.85f, cx, cy)
-                p.cubicTo(cx + s * 0.5f, cy - s * 0.85f, cx + s * 1.05f, cy - s * 0.5f, cx + s * 0.95f, cy)
-                p.cubicTo(cx + s * 1.05f, cy + s * 0.5f, cx + s * 0.5f, cy + s * 0.85f, cx, cy)
-                c.drawPath(p, fill)
-                // 垂下來的兩條緞帶
-                val tail = Path()
-                tail.moveTo(cx - s * 0.12f, cy)
-                tail.lineTo(cx - s * 0.45f, cy + s * 0.95f)
-                tail.lineTo(cx - s * 0.2f, cy + s * 0.85f)
-                tail.lineTo(cx, cy + s * 0.2f)
-                tail.lineTo(cx + s * 0.2f, cy + s * 0.85f)
-                tail.lineTo(cx + s * 0.45f, cy + s * 0.95f)
-                tail.lineTo(cx + s * 0.12f, cy)
-                tail.close()
-                c.drawPath(tail, fill)
-                fill.color = darker(color, 0.15f)
-                fill.alpha = a
-                c.drawRoundRect(RectF(cx - s * 0.2f, cy - s * 0.24f, cx + s * 0.2f, cy + s * 0.24f), s * 0.1f, s * 0.1f, fill)
-            }
-            "moon" -> {
-                val p = Path().apply { addCircle(cx, cy, s * 0.9f, Path.Direction.CW) }
-                val cut = Path().apply { addCircle(cx + s * 0.45f, cy - s * 0.3f, s * 0.75f, Path.Direction.CW) }
-                p.op(cut, Path.Op.DIFFERENCE)
-                c.drawPath(p, fill)
-            }
             "cat" -> {
-                c.drawPath(catHead(cx, cy, s), fill)
-                // 臉：比底色深一點的眼睛、鼻子
-                fill.color = darker(color, 0.55f)
+                val eye = if (filled) darker(base, 0.55f) else ink
+                dot(cx - s * 0.32f, cy + s * 0.08f, s * 0.09f, eye)
+                dot(cx + s * 0.32f, cy + s * 0.08f, s * 0.09f, eye)
+                fill.color = eye
                 fill.alpha = a
-                c.drawCircle(cx - s * 0.32f, cy + s * 0.08f, s * 0.09f, fill)
-                c.drawCircle(cx + s * 0.32f, cy + s * 0.08f, s * 0.09f, fill)
-                val nose = Path().apply {
+                c.drawPath(Path().apply {
                     moveTo(cx - s * 0.08f, cy + s * 0.25f); lineTo(cx + s * 0.08f, cy + s * 0.25f); lineTo(cx, cy + s * 0.34f); close()
-                }
-                c.drawPath(nose, fill)
+                }, fill)
             }
             "catline" -> {
-                // 像手畫的線條貓：輪廓＋鬍鬚
-                stroke.color = color
+                // 鬍鬚和眼睛：跟外框同一個顏色
+                stroke.color = ink
                 stroke.alpha = a
                 stroke.strokeWidth = s * 0.09f
-                c.drawPath(catHead(cx, cy, s * 0.92f), stroke)
                 for (side in listOf(-1f, 1f)) {
                     c.drawLine(cx + side * s * 0.45f, cy + s * 0.22f, cx + side * s * 1.0f, cy + s * 0.1f, stroke)
                     c.drawLine(cx + side * s * 0.45f, cy + s * 0.36f, cx + side * s * 1.0f, cy + s * 0.42f, stroke)
@@ -402,8 +559,15 @@ object DecalShapes {
                 c.drawCircle(cx - s * 0.3f, cy + s * 0.05f, s * 0.04f, stroke)
                 c.drawCircle(cx + s * 0.3f, cy + s * 0.05f, s * 0.04f, stroke)
             }
-            else -> c.drawCircle(cx, cy, s * 0.8f, fill)
+            "flower" -> dot(cx, cy, s * 0.3f, if (filled) lighter(base, 0.75f) else ink)
+            "bow" -> if (filled) {
+                fill.color = darker(base, 0.15f)
+                fill.alpha = a
+                c.drawRoundRect(RectF(cx - s * 0.2f, cy - s * 0.24f, cx + s * 0.2f, cy + s * 0.24f), s * 0.1f, s * 0.1f, fill)
+            }
+            "fish" -> dot(cx - s * 0.45f, cy - s * 0.08f, s * 0.08f, if (filled) darker(base, 0.55f) else ink)
         }
+        c.restore()
     }
 
     private fun catHead(cx: Float, cy: Float, s: Float) = Path().apply {

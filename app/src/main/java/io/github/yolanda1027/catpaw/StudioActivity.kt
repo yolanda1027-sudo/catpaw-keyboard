@@ -581,19 +581,7 @@ class StudioActivity : Activity() {
         slider("旋轉", rot, -180, 180, { "$it°" }) { v -> change({ it.copy(rotation = v.toFloat()) }) }
         slider("透明度", (d.alpha * 100).toInt(), 10, 100, { "$it%" }) { v -> change({ it.copy(alpha = v / 100f) }) }
 
-        if (d.isShape) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, px(10f), 0, px(6f))
-            }
-            row.addView(TextView(this).apply { text = "顏色"; textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(View(this).apply {
-                background = GradientDrawable().apply { cornerRadius = 10 * dp; setColor(d.color); setStroke(px(1.5f), 0x33000000) }
-                setOnClickListener { ColorDialog.show(this@StudioActivity, "圖案顏色", d.color) { c -> change({ it.copy(color = c) }, rebuild = true) } }
-            }, LinearLayout.LayoutParams(px(72f), px(40f)))
-            panel.addView(row)
-        }
+        if (d.isShape) shapeStyleEditor(d) { f, rebuild -> change({ it.withStyle(f(it.shapeStyle())) }, rebuild) }
         if (d.onBackground) {
             panel.addView(CheckBox(this).apply {
                 text = "蓋在按鍵上面（不勾＝在按鍵後面）"
@@ -620,6 +608,65 @@ class StudioActivity : Activity() {
             saveDecals(decals.filter { it.id != d.id })
         }
         button(if (d.onBackground) "← 回到鍵盤背景" else "← 回到$where") { decalSel = null; refresh() }
+    }
+
+    /**
+     * 內建圖案的樣式（像小畫家）：填色（可以透明）、外框（有／沒有、顏色、樣式、粗細）。
+     * 用「圓角方形」＋「縫線」外框，就做得出粉紅縫線那種按鍵。
+     */
+    private fun shapeStyleEditor(d: Decal, set: ((ShapeStyle) -> ShapeStyle, Boolean) -> Unit) {
+        val st = d.shapeStyle()
+        section("填色與外框")
+        fun colorLine(label: String, caption: String, color: Int, clear: Boolean, onClear: (() -> Unit)?, onPick: (Int) -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, px(6f), 0, px(6f))
+            }
+            val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            names.addView(TextView(this).apply { text = label; textSize = 15f })
+            names.addView(TextView(this).apply { text = caption; textSize = 12f; alpha = 0.65f })
+            row.addView(names, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            if (onClear != null && !clear) row.addView(Button(this).apply {
+                text = "透明"
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                setPadding(px(10f), 0, px(10f), 0)
+                setOnClickListener { onClear() }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = px(6f) })
+            row.addView(TextView(this).apply {
+                gravity = Gravity.CENTER
+                textSize = 12f
+                text = if (clear) "透明" else ""
+                background = GradientDrawable().apply { cornerRadius = 10 * dp; setColor(if (clear) 0x14888888 else color); setStroke(px(1.5f), 0x33000000) }
+                setOnClickListener { ColorDialog.show(this@StudioActivity, label, color or (0xFF shl 24)) { onPick(it) } }
+            }, LinearLayout.LayoutParams(px(72f), px(40f)))
+            panel.addView(row)
+        }
+
+        val fillClear = Color.alpha(st.fill) == 0
+        colorLine("填色", if (fillClear) "透明（只剩外框）" else "圖案裡面的顏色", if (fillClear) d.color else st.fill, fillClear,
+            onClear = { set({ it.copy(fill = Color.TRANSPARENT) }, true) }) { c -> set({ it.copy(fill = c) }, true) }
+
+        panel.addView(android.widget.Switch(this).apply {
+            text = "外框"
+            textSize = 15f
+            isChecked = st.outline != null
+            setPadding(0, px(10f), 0, px(6f))
+            setOnCheckedChangeListener { _, on ->
+                // 打開外框：沒填色的用原本的顏色，有填色的先用白色（像縫線）
+                set({ it.copy(outline = if (on) (if (Color.alpha(it.fill) == 0) d.color or (0xFF shl 24) else Color.WHITE) else null) }, true)
+            }
+        })
+        val outline = st.outline ?: return
+        colorLine("外框顏色", "", outline, false, onClear = null) { c -> set({ it.copy(outline = c) }, true) }
+        text("外框樣式", 15f).setPadding(0, px(6f), 0, px(2f))
+        chipRow(DecalShapes.DASHES.map { it.second }, DecalShapes.DASHES.indexOfFirst { it.first == st.dash }) { i ->
+            set({ it.copy(dash = DecalShapes.DASHES[i].first) }, true)
+        }
+        slider("外框粗細", (st.width * 100).toInt().coerceIn(1, 20), 1, 20, { "$it" }) { v -> set({ it.copy(width = v / 100f) }, false) }
+        if (d.shapeName != "roundrect") text("💡 想做「粉紅縫線」那種按鍵：加一個「圓角方形」，填粉紅色、外框選「縫線」配白色，再用四邊的拉把拉成跟按鍵一樣大。", 12f, dim = true)
     }
 
     /** 編輯框上面的小工具（圖案：複製、翻轉、上下層、刪除；字：顏色、上下層、重設） */
