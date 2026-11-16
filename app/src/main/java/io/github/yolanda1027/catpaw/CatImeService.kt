@@ -425,7 +425,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 refresh()
             }
             Act.TO_SYMBOL -> {
-                if (page == Page.NUMPAD) { symCat = 1; symPage = 0 } // 從數字鍵盤按 @?#：回到常用符號
+                // 每次進符號鍵盤都從頭開始（跟表情符號一樣）：有用過的先開「最近使用」，沒有的話開常用符號第一頁。
+                // 從數字鍵盤按 @?# 一定回到常用符號。
+                symCat = if (page != Page.NUMPAD && recentSymbols().isNotEmpty()) Symbols.RECENT else 1
+                symPage = 0
+                kaoTab = 1
                 page = Page.SYMBOL
                 refresh()
             }
