@@ -39,6 +39,7 @@ object ThemeIO {
         STICKERS("功能鍵貼圖"),
         QUICK("快捷符號列"),
         KEYS("單顆按鍵樣式（主題工作室）"),
+        DECALS("貼上的圖案（主題工作室）"),
     }
 
     private fun hex(c: Int) = String.format("#%06X", 0xFFFFFF and c)
@@ -76,6 +77,10 @@ object ThemeIO {
             val ks = KeyStyles.load(prefs)
             if (ks.map.isNotEmpty()) o.put("keyStyles", ks.toJson())
         }
+        if (Part.DECALS in parts) {
+            val list = Decals.load(prefs)
+            if (list.isNotEmpty()) o.put("decals", Decals.exportJson(ctx, list))
+        }
         return o.toString(2)
     }
 
@@ -96,6 +101,7 @@ object ThemeIO {
         o.optJSONObject("stickers")?.let { if (it.length() > 0) parts.add("功能鍵貼圖 ${it.length()} 張") }
         if (o.has("quickBar")) parts.add("快捷符號列")
         o.optJSONObject("keyStyles")?.let { if (it.length() > 0) parts.add("單顆按鍵樣式 ${it.length()} 組") }
+        o.optJSONObject("decals")?.optJSONArray("items")?.let { if (it.length() > 0) parts.add("圖案 ${it.length()} 個") }
         return o.optString("name", "沒有名字的主題") to parts
     }
 
@@ -182,6 +188,12 @@ object ThemeIO {
             }
         }
         o.optJSONObject("keyStyles")?.let { KeyStyles.save(prefs, KeyStyles.fromJson(it)) }
+        o.optJSONObject("decals")?.let {
+            val (list, broken) = Decals.importJson(ctx, it)
+            Decals.save(prefs, list)
+            Decals.cleanup(ctx, list)
+            if (broken > 0) warnings.add("有 $broken 個圖案的圖片壞掉了，略過")
+        }
         return warnings
     }
 }

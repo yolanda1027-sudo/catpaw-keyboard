@@ -34,6 +34,14 @@ class StudioActivity : Activity() {
     private var groupScope = false
     private var english = false
 
+    private var decals: List<Decal> = emptyList()
+    /** 正在編輯鍵盤背景（沒選按鍵） */
+    private var bgSelected = false
+    /** 選到的圖案 */
+    private var decalSel: String? = null
+    /** 從相簿選圖片時，要貼到哪 */
+    private var pendingTarget: String? = null
+
     private val dp get() = resources.displayMetrics.density
     private fun px(v: Float) = (v * dp).toInt()
 
@@ -41,6 +49,7 @@ class StudioActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         styles = KeyStyles.load(prefs)
+        decals = Decals.load(prefs)
         english = savedInstanceState?.getBoolean("english") ?: false
         actionBar?.title = "貓爪主題工作室"
 
@@ -62,7 +71,17 @@ class StudioActivity : Activity() {
             editPicker = { key ->
                 if (selected?.let { KeyStyles.idOf(it) } != KeyStyles.idOf(key)) groupScope = false
                 selected = key
+                bgSelected = false
+                decalSel = null
                 refresh()
+            }
+            onDecalPicked = { d -> selectDecal(d) }
+            onDecalChanged = { d, done ->
+                decals = decals.map { if (it.id == d.id) d else it }
+                if (done) {
+                    Decals.save(prefs, decals)
+                    refresh()
+                }
             }
         }
         outer.addView(kv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -95,6 +114,8 @@ class StudioActivity : Activity() {
         tabEnglish.alpha = if (en) 1f else 0.5f
         selected = null
         groupScope = false
+        bgSelected = false
+        decalSel = null
         refresh()
     }
 
@@ -116,15 +137,21 @@ class StudioActivity : Activity() {
 
     private fun refresh() {
         panel.removeAllViews()
+        kv.decalEditId = decalSel
+        decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
+        decalSel = null
+        if (bgSelected) { bgPanel(); return }
         val key = selected
         if (key == null) {
             kv.editHighlight = null
             text("👆 點一下上面鍵盤的任何一顆按鍵，就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
             text("改好會直接套用到鍵盤上。想換整體主題、字體，到「貓爪鍵盤」設定的外觀頁。", 13f, dim = true)
+            button("🖼️ 在鍵盤背景貼圖案") { bgSelected = true; refresh() }
             if (styles.map.isNotEmpty()) {
                 text("目前有 ${styles.map.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
                 clearAllButton()
             }
+            if (decals.isNotEmpty()) clearDecalsButton()
             return
         }
         val group = KeyStyles.groupOf(key)
@@ -186,7 +213,263 @@ class StudioActivity : Activity() {
 
         val what = if (groupScope) group.title else "這顆鍵"
         button("清除${what}的設定") { update({ null }) }
+
+        section("這顆鍵上的圖案")
+        decalList(selId)
+
         clearAllButton()
+    }
+
+    // ---------- 圖案 ----------
+
+    private fun section(s: String) = text(s, 17f, bold = true).setPadding(0, px(22f), 0, px(4f))
+
+    private fun selectDecal(d: Decal) {
+        decalSel = d.id
+        if (d.onBackground) {
+            bgSelected = true
+            selected = null
+        } else {
+            bgSelected = false
+            selected = kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target } ?: selected
+        }
+        refresh()
+    }
+
+    private fun saveDecals(list: List<Decal>, rebuild: Boolean = true) {
+        decals = list
+        Decals.save(prefs, list)
+        kv.setDecalsLive(list)
+        if (rebuild) refresh()
+    }
+
+    private fun addDecal(d: Decal) {
+        decalSel = d.id
+        saveDecals(decals + d)
+    }
+
+    /** 新圖案的預設位置：按鍵上放左上角（像你畫的小貓）、背景放正中間 */
+    private fun newDecal(target: String, img: String) = if (target == Decal.BG)
+        Decal(Decals.newId(), target, img, x = 0.5f, y = 0.5f, size = 0.3f)
+    else
+        Decal(Decals.newId(), target, img, x = 0.24f, y = 0.27f, size = 0.36f)
+
+    private fun bgPanel() {
+        kv.editHighlight = null
+        text("正在編輯：鍵盤背景", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        text("背景的圖案預設在按鍵後面（可以放在鍵和鍵之間的空隙），也可以設定成蓋在按鍵上面。", 13f, dim = true)
+        section("背景上的圖案")
+        decalList(Decal.BG)
+        button("← 回到選按鍵") { bgSelected = false; refresh() }
+    }
+
+    private fun shapeName(d: Decal) = if (d.isShape) Decals.SHAPES.firstOrNull { it.first == d.shapeName }?.second ?: "圖案" else "我的圖片"
+
+    /** 某個位置上的圖案清單，點了就選到它；最下面有「加圖案」 */
+    private fun decalList(target: String) {
+        val mine = decals.filter { it.target == target }
+        if (mine.isEmpty()) text("還沒有圖案", 13f, dim = true)
+        val bmps = Decals.bitmaps(this, mine)
+        for ((i, d) in mine.withIndex()) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, px(4f), 0, px(4f))
+                setOnClickListener { selectDecal(d) }
+            }
+            row.addView(DecalThumb(this, d, bmps[d.fileName]), LinearLayout.LayoutParams(px(48f), px(48f)))
+            row.addView(TextView(this).apply {
+                text = "${i + 1}. ${shapeName(d)}" + if (d.onBackground && d.front) "（蓋在按鍵上）" else ""
+                textSize = 15f
+                setPadding(px(12f), 0, 0, 0)
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(TextView(this).apply { text = "編輯 ›"; textSize = 14f; alpha = 0.7f })
+            panel.addView(row)
+        }
+        button("＋ 加圖案") { showAddDialog(target) }
+    }
+
+    private fun showAddDialog(target: String) {
+        val grid = android.widget.GridLayout(this).apply {
+            columnCount = 3
+            setPadding(px(16f), px(8f), px(16f), 0)
+        }
+        var dialog: AlertDialog? = null
+        for ((id, name) in Decals.SHAPES) {
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(px(6f), px(6f), px(6f), px(6f))
+                setOnClickListener {
+                    dialog?.dismiss()
+                    addDecal(newDecal(target, Decal.SHAPE + id))
+                }
+            }
+            cell.addView(DecalThumb(this, Decal("", target, Decal.SHAPE + id)), LinearLayout.LayoutParams(px(64f), px(64f)))
+            cell.addView(TextView(this).apply { text = name; textSize = 12f; gravity = Gravity.CENTER })
+            grid.addView(cell)
+        }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        box.addView(grid)
+        box.addView(Button(this).apply {
+            text = "📷 從相簿選圖片"
+            isAllCaps = false
+            setOnClickListener {
+                dialog?.dismiss()
+                pendingTarget = target
+                val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(i, REQ_IMAGE)
+            }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(px(16f), px(8f), px(16f), 0)
+        })
+        dialog = AlertDialog.Builder(this)
+            .setTitle("加圖案")
+            .setView(android.widget.ScrollView(this).apply { addView(box) })
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_IMAGE) return
+        val target = pendingTarget
+        pendingTarget = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null || target == null) return
+        val name = try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = input.readBytes()
+                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes)
+            }
+        } catch (_: Exception) { null }
+        if (name == null) {
+            android.widget.Toast.makeText(this, "這個檔案讀不出來，換一張圖試試", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        addDecal(newDecal(target, Decal.FILE + name))
+    }
+
+    /** 選到一個圖案時的面板 */
+    private fun decalPanel(d: Decal) {
+        kv.editHighlight = null
+        val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
+        text("正在編輯：${shapeName(d)}", 18f, bold = true).setPadding(0, px(10f), 0, 0)
+        text("貼在：$where", 14f, dim = true)
+        text("👆 在鍵盤上用一隻手指拖曳＝移動，兩隻手指＝放大縮小、旋轉", 14f).setPadding(0, px(8f), 0, px(4f))
+
+        fun change(f: (Decal) -> Decal, rebuild: Boolean = false) {
+            val cur = decals.firstOrNull { it.id == d.id } ?: return
+            saveDecals(decals.map { if (it.id == d.id) f(cur) else it }, rebuild)
+        }
+
+        // 大小：按鍵上 5%–300%（相對按鍵高度）、背景 3%–150%（相對鍵盤高度）
+        val maxSize = if (d.onBackground) 150 else 300
+        val minSize = if (d.onBackground) 3 else 5
+        slider("大小", (d.size * 100).toInt().coerceIn(minSize, maxSize), minSize, maxSize, { "$it%" }) { v -> change({ it.copy(size = v / 100f) }) }
+        val rot = (((d.rotation % 360) + 540) % 360 - 180).toInt()
+        slider("旋轉", rot, -180, 180, { "$it°" }) { v -> change({ it.copy(rotation = v.toFloat()) }) }
+        slider("透明度", (d.alpha * 100).toInt(), 10, 100, { "$it%" }) { v -> change({ it.copy(alpha = v / 100f) }) }
+
+        if (d.isShape) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, px(10f), 0, px(6f))
+            }
+            row.addView(TextView(this).apply { text = "顏色"; textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(View(this).apply {
+                background = GradientDrawable().apply { cornerRadius = 10 * dp; setColor(d.color); setStroke(px(1.5f), 0x33000000) }
+                setOnClickListener { ColorDialog.show(this@StudioActivity, "圖案顏色", d.color) { c -> change({ it.copy(color = c) }, rebuild = true) } }
+            }, LinearLayout.LayoutParams(px(72f), px(40f)))
+            panel.addView(row)
+        }
+        if (d.onBackground) {
+            panel.addView(CheckBox(this).apply {
+                text = "蓋在按鍵上面（不勾＝在按鍵後面）"
+                isChecked = d.front
+                setPadding(0, px(6f), 0, px(6f))
+                setOnCheckedChangeListener { _, on -> change({ it.copy(front = on) }, rebuild = true) }
+            })
+        }
+
+        // 圖層、複製、刪除
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, px(8f), 0, 0) }
+        fun small(s: String, onClick: () -> Unit) = row.addView(Button(this).apply {
+            text = s
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        small("往上一層") { moveLayer(d, +1) }
+        small("往下一層") { moveLayer(d, -1) }
+        small("複製") {
+            val copy = d.copy(id = Decals.newId(), x = d.x + 0.06f, y = d.y + 0.06f)
+            addDecal(copy)
+        }
+        panel.addView(row)
+        button("🗑 刪除這個圖案") {
+            decalSel = null
+            saveDecals(decals.filter { it.id != d.id })
+            Decals.cleanup(this, decals)
+        }
+        button(if (d.onBackground) "← 回到鍵盤背景" else "← 回到$where") { decalSel = null; refresh() }
+    }
+
+    /** 跟同一個位置上的下一個（或上一個）圖案交換順序：後面的畫在上面 */
+    private fun moveLayer(d: Decal, dir: Int) {
+        val list = decals.toMutableList()
+        val i = list.indexOfFirst { it.id == d.id }
+        if (i < 0) return
+        var j = i + dir
+        while (j in list.indices && list[j].target != d.target) j += dir
+        if (j !in list.indices) {
+            android.widget.Toast.makeText(this, if (dir > 0) "已經在最上面了" else "已經在最下面了", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        list[i] = list[j].also { list[j] = list[i] }
+        saveDecals(list)
+    }
+
+    private fun slider(label: String, value: Int, min: Int, max: Int, fmt: (Int) -> String, onChange: (Int) -> Unit) {
+        val t = text("$label：${fmt(value)}", 15f)
+        t.setPadding(0, px(10f), 0, 0)
+        panel.addView(SeekBar(this).apply {
+            this.max = max - min
+            progress = value - min
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    t.text = "$label：${fmt(p + min)}"
+                    onChange(p + min)
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        })
+    }
+
+    private fun clearDecalsButton() {
+        button("清除所有圖案") {
+            AlertDialog.Builder(this)
+                .setMessage("要把貼上去的圖案全部拿掉嗎？")
+                .setPositiveButton("全部清除") { _, _ ->
+                    decalSel = null
+                    saveDecals(emptyList())
+                    Decals.cleanup(this, decals)
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        }
+    }
+
+    companion object {
+        private const val REQ_IMAGE = 500
     }
 
     private fun clearAllButton() {

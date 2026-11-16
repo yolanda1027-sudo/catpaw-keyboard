@@ -84,6 +84,8 @@ class CatKeyboardView(
     private var theme: KbTheme = Themes.byName(prefs.theme, dp, prefs)
     private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context)
     private var keyStyles = KeyStyles.load(prefs)
+    private var decals: List<Decal> = Decals.load(prefs)
+    private var decalBitmaps: Map<String, android.graphics.Bitmap> = Decals.bitmaps(context, decals)
     private val effects = PressEffects(dp)
     private var fontSet = loadFonts()
 
@@ -198,6 +200,8 @@ class CatKeyboardView(
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context)
         keyStyles = KeyStyles.load(prefs)
+        decals = Decals.load(prefs)
+        decalBitmaps = Decals.bitmaps(context, decals, decalBitmaps)
         nativeCache.clear()
         fontSet = loadFonts()
         stripCache = null
@@ -254,6 +258,7 @@ class CatKeyboardView(
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.drawBackground(c, w, kbH, topH)
+        drawBgDecals(c, front = false)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
         drawTopBar(c, w)
         drawQuickBar(c)
@@ -275,10 +280,13 @@ class CatKeyboardView(
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
                 drawOneKey(c, kr)
+                drawKeyDecals(c, kr)
                 if (s != 1f) c.restore()
                 if (inGrid) c.restore()
             }
+            drawBgDecals(c, front = true)
             drawEditHighlight(c)
+            drawDecalSelection(c)
             drawPageIndicator(c, w)
             effects.draw(c, now)
             drawPreview(c, w)
@@ -337,6 +345,176 @@ class CatKeyboardView(
         val k = KeyStyles.idOf(kr.key) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
         nativeCache[k]?.let { return it }
         return sample(kr, styled = false)?.also { nativeCache[k] = it }
+    }
+
+    // ---------- 貼上的圖案 ----------
+
+    private val bgRect get() = RectF(0f, 0f, width.toFloat(), kbH)
+
+    private fun drawBgDecals(c: Canvas, front: Boolean) {
+        if (decals.isEmpty()) return
+        val r = bgRect
+        for (d in decals) if (d.onBackground && d.front == front) Decals.draw(c, d, r, kbH, decalBitmaps[d.fileName])
+    }
+
+    private fun drawKeyDecals(c: Canvas, kr: KeyRect) {
+        if (decals.isEmpty()) return
+        val id = KeyStyles.idOf(kr.key)
+        for (d in decals) if (d.target == id) Decals.draw(c, d, kr.rect, kr.rect.height(), decalBitmaps[d.fileName])
+    }
+
+    /** 主題工作室改了圖案（拖曳、滑桿）：直接換掉，不用重讀設定 */
+    fun setDecalsLive(list: List<Decal>) {
+        decals = list
+        decalBitmaps = Decals.bitmaps(context, list, decalBitmaps)
+        invalidate()
+    }
+
+    /** 圖案貼在哪（畫面上的範圍、參考高度）；那顆鍵不在目前的鍵盤上就是 null */
+    private fun targetOf(d: Decal): Pair<RectF, Float>? =
+        if (d.onBackground) bgRect to kbH
+        else keyRects.firstOrNull { it.key.act != Act.GAP && KeyStyles.idOf(it.key) == d.target }?.let { it.rect to it.rect.height() }
+
+    /** 點到的圖案（最上面的那個優先） */
+    private fun decalAt(x: Float, y: Float): Decal? {
+        val slop = 10 * dp
+        fun hit(d: Decal) = targetOf(d)?.let { (r, ref) -> Decals.hit(d, r, ref, decalBitmaps[d.fileName], x, y, slop) } == true
+        decals.lastOrNull { it.onBackground && it.front && hit(it) }?.let { return it }
+        decals.lastOrNull { !it.onBackground && hit(it) }?.let { return it }
+        // 按鍵後面的背景圖案：點在按鍵上就算點按鍵
+        val onKey = keyRects.any { it.key.act != Act.GAP && it.rect.contains(x, y) }
+        return if (onKey) null else decals.lastOrNull { it.onBackground && !it.front && hit(it) }
+    }
+
+    /** 主題工作室選到的圖案（畫虛線框，手勢會移動它） */
+    var decalEditId: String? = null
+        set(v) { field = v; invalidate() }
+
+    /** 手勢改了圖案：done = 手指放開了 */
+    var onDecalChanged: ((Decal, Boolean) -> Unit)? = null
+
+    /** 在鍵盤上點到某個圖案 */
+    var onDecalPicked: ((Decal) -> Unit)? = null
+
+    private fun drawDecalSelection(c: Canvas) {
+        val id = decalEditId ?: return
+        val d = decals.firstOrNull { it.id == id } ?: return
+        val (r, ref) = targetOf(d) ?: return
+        val (cx, cy) = Decals.centerOf(d, r)
+        val (w, h) = Decals.sizeOf(d, ref, decalBitmaps[d.fileName])
+        c.save()
+        c.translate(cx, cy)
+        c.rotate(d.rotation)
+        val box = RectF(-w / 2 - 3 * dp, -h / 2 - 3 * dp, w / 2 + 3 * dp, h / 2 + 3 * dp)
+        editPaint.pathEffect = null
+        editPaint.color = android.graphics.Color.WHITE
+        editPaint.strokeWidth = 4f * dp
+        c.drawRect(box, editPaint)
+        editPaint.color = android.graphics.Color.parseColor("#4F8BFF")
+        editPaint.strokeWidth = 2f * dp
+        editPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(5 * dp, 4 * dp), 0f)
+        c.drawRect(box, editPaint)
+        // 四個角的小圓點
+        editPaint.pathEffect = null
+        val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.parseColor("#4F8BFF") }
+        for (px in listOf(box.left, box.right)) for (py in listOf(box.top, box.bottom)) {
+            editPaint.color = android.graphics.Color.WHITE
+            c.drawCircle(px, py, 4.5f * dp, dot.apply { color = android.graphics.Color.WHITE })
+            c.drawCircle(px, py, 3f * dp, dot.apply { color = android.graphics.Color.parseColor("#4F8BFF") })
+        }
+        c.restore()
+    }
+
+    // 編輯模式的手勢狀態
+    private var gDownX = 0f
+    private var gDownY = 0f
+    private var gMoved = false
+    private var gStart: Decal? = null
+    private var gTwo = false
+    private var gSpan0 = 1f
+    private var gAngle0 = 0f
+    private var gCx0 = 0f
+    private var gCy0 = 0f
+
+    private fun twoFinger(e: MotionEvent): FloatArray {
+        val x0 = e.getX(0); val y0 = e.getY(0); val x1 = e.getX(1); val y1 = e.getY(1)
+        val span = kotlin.math.hypot(x1 - x0, y1 - y0).coerceAtLeast(1f)
+        val ang = Math.toDegrees(kotlin.math.atan2((y1 - y0).toDouble(), (x1 - x0).toDouble())).toFloat()
+        return floatArrayOf(span, ang, (x0 + x1) / 2, (y0 + y1) / 2)
+    }
+
+    private fun currentDecal(): Decal? = decalEditId?.let { id -> decals.firstOrNull { it.id == id } }
+
+    private fun replaceDecal(d: Decal, done: Boolean) {
+        decals = decals.map { if (it.id == d.id) d else it }
+        invalidate()
+        onDecalChanged?.invoke(d, done)
+    }
+
+    /** 編輯模式：點按鍵／圖案來選，選到圖案時拖曳＝移動、兩指＝縮放旋轉 */
+    private fun handleEditTouch(e: MotionEvent, pick: (Key) -> Unit) {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                gDownX = e.x; gDownY = e.y
+                gMoved = false
+                gTwo = false
+                gStart = currentDecal()
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount >= 2) {
+                val t = twoFinger(e)
+                gSpan0 = t[0]; gAngle0 = t[1]; gCx0 = t[2]; gCy0 = t[3]
+                gStart = currentDecal()
+                gTwo = true
+                gMoved = true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val start = gStart ?: return
+                val (r, _) = targetOf(start) ?: return
+                if (gTwo && e.pointerCount >= 2) {
+                    val t = twoFinger(e)
+                    var rot = start.rotation + (t[1] - gAngle0)
+                    // 接近水平／垂直時吸附一下，比較好擺正
+                    val snap = Math.round(rot / 90f) * 90f
+                    if (kotlin.math.abs(rot - snap) < 4f) rot = snap
+                    replaceDecal(start.copy(
+                        size = (start.size * t[0] / gSpan0).coerceIn(0.03f, 5f),
+                        rotation = rot,
+                        x = (start.x + (t[2] - gCx0) / r.width()).coerceIn(-1f, 2f),
+                        y = (start.y + (t[3] - gCy0) / r.height()).coerceIn(-1f, 2f),
+                    ), false)
+                } else if (!gTwo) {
+                    val dx = e.x - gDownX
+                    val dy = e.y - gDownY
+                    if (!gMoved && kotlin.math.hypot(dx, dy) < 8 * dp) return
+                    gMoved = true
+                    replaceDecal(start.copy(
+                        x = (start.x + dx / r.width()).coerceIn(-1f, 2f),
+                        y = (start.y + dy / r.height()).coerceIn(-1f, 2f),
+                    ), false)
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                // 兩指變一指：用剩下那隻手指重新開始拖
+                gTwo = false
+                gStart = currentDecal()
+                val keep = if (e.actionIndex == 0) 1 else 0
+                gDownX = e.getX(keep); gDownY = e.getY(keep)
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!gMoved) {
+                    val d = decalAt(e.x, e.y)
+                    if (d != null) onDecalPicked?.invoke(d)
+                    else keyAt(e.x, e.y)?.let { pick(it.key) }
+                } else {
+                    currentDecal()?.let { onDecalChanged?.invoke(it, true) }
+                }
+                gStart = null
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                currentDecal()?.let { if (gMoved) onDecalChanged?.invoke(it, true) }
+                gStart = null
+            }
+        }
     }
 
     // ---------- 主題工作室：點按鍵來編輯 ----------
@@ -715,7 +893,8 @@ class CatKeyboardView(
 
     private fun handleTouch(e: MotionEvent): Boolean {
         editPicker?.let { pick ->
-            if (e.actionMasked == MotionEvent.ACTION_DOWN) keyAt(e.x, e.y)?.let { pick(it.key) }
+            parent?.requestDisallowInterceptTouchEvent(true)
+            handleEditTouch(e, pick)
             return true
         }
         if (handleCandidateTouch(e)) return true
