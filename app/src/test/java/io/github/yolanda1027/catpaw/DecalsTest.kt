@@ -27,6 +27,7 @@ class DecalsTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
     private fun render(v: View, name: String) {
+        Ui.spaceButtons(v, (3 * v.resources.displayMetrics.density).toInt())
         v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         v.layout(0, 0, v.measuredWidth, v.measuredHeight)
         val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
@@ -194,5 +195,13 @@ class DecalsTest {
         kv.onDecalPicked!!.invoke(Decals.load(p).first { it.id == "k2" })
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         render(a.window.decorView, "studio-zoom-enter")
+        // 鍵盤背景的面板（按鈕要分開，不能黏在一起）
+        kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])
+        val sel = StudioActivity::class.java.getDeclaredField("selected"); sel.isAccessible = true
+        sel.set(a, null)
+        val bg = StudioActivity::class.java.getDeclaredField("bgSelected"); bg.isAccessible = true
+        bg.set(a, true)
+        StudioActivity::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }.invoke(a)
+        render(a.window.decorView, "studio-bg-panel")
     }
 }

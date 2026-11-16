@@ -230,6 +230,7 @@ class SettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Ui.autoSpaceButtons(this)
         prefs = Prefs(this)
         prefs.migrate()
         haptics = Haptics(this)

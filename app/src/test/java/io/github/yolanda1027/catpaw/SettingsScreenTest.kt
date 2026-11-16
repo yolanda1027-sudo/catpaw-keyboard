@@ -20,6 +20,7 @@ class SettingsScreenTest {
 
     private fun shot(a: SettingsActivity, name: String) {
         val v = a.window.decorView
+        Ui.spaceButtons(v, (3 * a.resources.displayMetrics.density).toInt()) // 手機上每次畫之前會做
         v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
         v.layout(0, 0, 1080, 2340)
         val bmp = Bitmap.createBitmap(1080, 2340, Bitmap.Config.ARGB_8888)

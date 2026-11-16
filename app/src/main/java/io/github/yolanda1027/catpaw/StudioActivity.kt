@@ -50,6 +50,7 @@ class StudioActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Ui.autoSpaceButtons(this)
         prefs = Prefs(this)
         styles = KeyStyles.load(prefs)
         decals = Decals.load(prefs)
