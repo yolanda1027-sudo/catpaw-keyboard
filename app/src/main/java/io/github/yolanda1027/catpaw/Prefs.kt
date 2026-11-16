@@ -52,6 +52,16 @@ class Prefs(context: Context) {
         }
     }
 
+    /** 中文打出來用簡體（選字還是用繁體詞庫，送出前才轉） */
+    var simplified: Boolean
+        get() = sp.getBoolean("simplified", false)
+        set(v) = sp.edit().putBoolean("simplified", v).apply()
+
+    /** 鍵盤上方要不要顯示「簡」切換鍵 */
+    var showScToggle: Boolean
+        get() = sp.getBoolean("show_sc_toggle", true)
+        set(v) = sp.edit().putBoolean("show_sc_toggle", v).apply()
+
     /** 自訂按鍵動畫的設定（按鍵動畫選「custom」時用） */
     var customEffect: CustomEffect
         get() = try {

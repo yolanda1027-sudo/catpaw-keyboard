@@ -101,6 +101,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             val boosts = ZhuyinDict.parseBoosts(assets.open("boost.txt").bufferedReader().use { it.readText() })
             val d = assets.open("zhuyin.dict").use { ZhuyinDict.load(it, boosts) }
             val user = UserScores(File(filesDir, "user_scores.txt"))
+            ChineseConvert.ensure(this) // 簡繁對照表也先讀好，切換時才不會卡一下
             main.post {
                 dict = d
                 engine = ZhuyinEngine(d, user)
@@ -234,11 +235,20 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.isChinese = chinese
         v.shiftState = shift
         v.composing = if (inline) pending.toString() else ""
-        v.candidates = if (candidates.isNotEmpty()) candidates.map { it.text } else associated
+        // 簡體模式：選字列顯示簡體；兩個繁體轉成同一個簡體（例如「髮」「發」→「发」）只留第一個
+        val src = if (candidates.isNotEmpty()) candidates.map { it.text } else associated
+        if (prefs.simplified) {
+            val (shown, index) = ChineseConvert.dedupe(src, ::conv)
+            v.candidates = shown
+            shownIndex = index
+        } else {
+            v.candidates = src
+            shownIndex = src.indices.toList()
+        }
         val e = engine
         v.reading = when {
             inline -> ""
-            e != null && !e.isEmpty -> e.readingText()
+            e != null && !e.isEmpty -> conv(e.readingText())
             else -> pending.toString()
         }
     }
@@ -276,7 +286,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             }
             candidates = emptyList()
         } else {
-            if (inline) ic?.setComposingText(e.composingText(), 1)
+            if (inline) ic?.setComposingText(conv(e.composingText()), 1)
             candidates = e.candidates().take(MAX_CANDIDATES)
         }
         refresh()
@@ -287,7 +297,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         val e = engine
         if (e != null && !e.isEmpty) {
             val text = e.commitAll()
-            currentInputConnection?.commitText(text, 1)
+            currentInputConnection?.commitText(conv(text), 1)
             candidates = emptyList()
             showAssociated(text)
         } else if (pending.isNotEmpty()) {
@@ -302,14 +312,26 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         associated = if (last != null) dict?.associated(last) ?: emptyList() else emptyList()
     }
 
-    override fun onCandidate(index: Int) {
+    /** 選字列上顯示的第幾個 → 原本清單的第幾個（簡體模式會合併重複的） */
+    private var shownIndex: List<Int> = emptyList()
+
+    /** 簡體模式就轉成簡體（只在顯示、送出的時候轉；選字、學習都還是用繁體） */
+    private fun conv(s: String) = if (prefs.simplified) ChineseConvert.toSimplified(this, s) else s
+
+    override fun onToggleSimplified() {
+        prefs.simplified = !prefs.simplified
+        refresh()
+    }
+
+    override fun onCandidate(shown: Int) {
         val ic = currentInputConnection ?: return
         val e = engine ?: return
+        val index = shownIndex.getOrNull(shown) ?: shown
         if (candidates.isNotEmpty()) {
             val c = candidates.getOrNull(index) ?: return
             val text = e.select(c)
             // 全部選完才送出（直接打在輸入框模式下，會換掉底線那段）；只選了前半段的話，選好的字先留在組字區
-            if (text.isNotEmpty()) ic.commitText(text, 1)
+            if (text.isNotEmpty()) ic.commitText(conv(text), 1)
             if (e.isEmpty) {
                 candidates = emptyList()
                 showAssociated(text)
@@ -319,7 +341,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             }
         } else {
             val text = associated.getOrNull(index) ?: return
-            ic.commitText(text, 1)
+            ic.commitText(conv(text), 1)
             showAssociated(text)
             refresh()
         }

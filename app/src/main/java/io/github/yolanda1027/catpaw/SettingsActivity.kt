@@ -216,7 +216,7 @@ class SettingsActivity : Activity() {
         PageInfo("look", "🎨 外觀", "主題、按鍵大小、字體、功能鍵貼圖、主題匯入匯出", true),
         PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true),
-        PageInfo("candidate", "📝 選字與記憶", "組字方式、清除學習紀錄", false),
+        PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、清除學習紀錄", false),
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
         // 從「外觀」的主題清單跳進來，不列在首頁
@@ -697,6 +697,19 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.inlineComposing = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
+        root.addView(Switch(this).apply {
+            text = "鍵盤上方顯示「簡」切換鍵（按一下切換簡體／繁體）"
+            isChecked = prefs.showScToggle
+            setOnCheckedChangeListener { _, b -> prefs.showScToggle = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        root.addView(Switch(this).apply {
+            text = "打出簡體字"
+            isChecked = prefs.simplified
+            setOnCheckedChangeListener { _, b -> prefs.simplified = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("簡體模式：一樣用注音、一樣的選字，選字列和打出去的字會變成簡體（繁簡對照表來自 OpenCC）。把切換鍵關掉的話，也可以在這裡開關簡體。")
         note("記憶選字：你從選字列挑的字，下次會排第一個；同一次打字裡分段挑的字（例如先選「妳」再選「好」）會記成新詞「妳好」。直接按空白／Enter 接受預設的不算。只存在這支手機裡。")
         button("清除學習紀錄") {
             java.io.File(filesDir, "user_scores.txt").delete()

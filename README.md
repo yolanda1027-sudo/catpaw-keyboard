@@ -33,6 +33,9 @@
 注音詞庫來自 [小麥注音 McBopomofo](https://github.com/openvanilla/McBopomofo)（MIT License），
 用 `tools/build_dict.py` 轉成 `app/src/main/assets/zhuyin.dict`。授權全文見 `third_party/McBopomofo-LICENSE.txt`。
 
+簡體輸出用的繁簡對照表來自 [OpenCC](https://github.com/BYVoid/OpenCC)（Apache License 2.0），
+原檔未修改，放在 `app/src/main/assets/opencc/`。授權全文見 `third_party/opencc/`。
+
 ## 字體來源
 
 附在 App 裡的字體（`app/src/main/assets/fonts/`），授權都是 SIL Open Font License 1.1，全文在 `third_party/fonts/`：

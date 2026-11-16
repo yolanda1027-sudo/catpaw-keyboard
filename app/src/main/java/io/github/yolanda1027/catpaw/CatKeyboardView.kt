@@ -33,6 +33,8 @@ class CatKeyboardView(
         fun onSymbolSwipe(direction: Int)
         fun onClipboard()
         fun onQuick(item: String)
+        /** 按了上方的「簡」：切換簡體／繁體 */
+        fun onToggleSimplified() {}
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -829,6 +831,20 @@ class CatKeyboardView(
         val ts = topH * 0.1f
         c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
         theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) theme.textDim else theme.text)
+        // 簡繁切換：開著＝亮色字＋底下一條線；關著＝淡淡的
+        if (isChinese && prefs.showScToggle) {
+            val on = prefs.simplified
+            val sx = tabW * 2.5f
+            theme.drawText(c, "簡", sx, topH / 2, topH * 0.44f, if (on) theme.text else theme.textDim)
+            if (on) {
+                val u = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = theme.popupSelBg
+                    strokeWidth = 2.5f * dp
+                    strokeCap = android.graphics.Paint.Cap.ROUND
+                }
+                c.drawLine(sx - topH * 0.22f, topH * 0.82f, sx + topH * 0.22f, topH * 0.82f, u)
+            }
+        }
         // 剪貼簿按鈕（在 ▽ 左邊）
         theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, theme.textDim)
         // 右邊的 ▽：收起鍵盤
@@ -1045,6 +1061,7 @@ class CatKeyboardView(
         when {
             x < tabW -> { haptics.perform(this, prefs); l.onTabChinese() }
             x < tabW * 2 -> { haptics.perform(this, prefs); l.onTabEnglish() }
+            x < tabW * 3 && isChinese && prefs.showScToggle -> { haptics.perform(this, prefs); l.onToggleSimplified() }
             x > width - tabW * 0.8f -> { haptics.perform(this, prefs); l.onHide() }
             x > width - tabW * 1.6f -> { haptics.perform(this, prefs); l.onClipboard() }
         }
