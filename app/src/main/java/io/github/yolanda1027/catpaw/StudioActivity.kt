@@ -117,6 +117,8 @@ class StudioActivity : Activity() {
                 if (done) panel.post { refresh() }
             }
         }
+        // GIF 圖案換下一格時，放大的按鍵也要重畫
+        kv.onAnimFrame = { zoom.invalidate() }
         zoomBox = android.widget.FrameLayout(this).apply {
             addView(zoom, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
             fun corner(label: String, gravity: Int, onClick: () -> Unit) = addView(Button(this@StudioActivity).apply {
@@ -506,7 +508,7 @@ class StudioActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(grid)
         box.addView(Button(this).apply {
-            text = "📷 從相簿選圖片"
+            text = "📷 從相簿選圖片（GIF 動圖也可以）"
             isAllCaps = false
             setOnClickListener {
                 dialog?.dismiss()
@@ -547,7 +549,7 @@ class StudioActivity : Activity() {
         val name = try {
             contentResolver.openInputStream(uri)?.use { input ->
                 val bytes = input.readBytes()
-                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes)
+                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes, keepGif = true)
             }
         } catch (_: Exception) { null }
         if (name == null) {

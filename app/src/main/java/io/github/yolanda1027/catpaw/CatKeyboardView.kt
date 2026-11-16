@@ -373,7 +373,7 @@ class CatKeyboardView(
         for (id in elementOrder(kr.key)) {
             val e = elems[id]
             if (e != null) drawLabel(c, kr, e, st)
-            else decals.firstOrNull { it.id == id && it.target == keyId }?.let { Decals.draw(c, it, kr.rect, kr.rect.height(), decalBitmaps[it.fileName]) }
+            else decals.firstOrNull { it.id == id && it.target == keyId }?.let { Decals.draw(c, it, kr.rect, kr.rect.height(), decalBitmaps[it.fileName], animOf(it)) }
         }
     }
 
@@ -490,13 +490,13 @@ class CatKeyboardView(
     private fun drawBgDecals(c: Canvas, front: Boolean) {
         if (decals.isEmpty()) return
         val r = bgRect
-        for (d in decals) if (d.onBackground && d.front == front) Decals.draw(c, d, r, r.height(), decalBitmaps[d.fileName])
+        for (d in decals) if (d.onBackground && d.front == front) Decals.draw(c, d, r, r.height(), decalBitmaps[d.fileName], animOf(d))
     }
 
     private fun drawKeyDecals(c: Canvas, kr: KeyRect) {
         if (decals.isEmpty()) return
         val id = KeyStyles.idOf(kr.key)
-        for (d in decals) if (d.target == id) Decals.draw(c, d, kr.rect, kr.rect.height(), decalBitmaps[d.fileName])
+        for (d in decals) if (d.target == id) Decals.draw(c, d, kr.rect, kr.rect.height(), decalBitmaps[d.fileName], animOf(d))
     }
 
     // ---------- 按鍵動畫 ----------
@@ -522,15 +522,37 @@ class CatKeyboardView(
         invalidate()
     }
 
-    /** 按鍵動畫用的 GIF（會一直播；換設定時停掉重讀） */
+    /**
+     * 會動的圖（GIF）：貼上的圖案和按鍵動畫共用，同一個檔案只讀一次、一直播。
+     * 換設定時停掉重讀。
+     */
     private val effectAnims = HashMap<String, android.graphics.drawable.Drawable?>()
 
+    /** 放大編輯畫面（主題工作室）也要跟著換格 */
+    var onAnimFrame: (() -> Unit)? = null
+
+    /** GIF 換下一格時通知鍵盤重畫（Drawable 只記弱參照，所以要自己留一份） */
+    private val animCallback = object : android.graphics.drawable.Drawable.Callback {
+        override fun invalidateDrawable(who: android.graphics.drawable.Drawable) {
+            postInvalidateOnAnimation()
+            onAnimFrame?.invoke()
+        }
+        override fun scheduleDrawable(who: android.graphics.drawable.Drawable, what: Runnable, `when`: Long) {
+            handler.postAtTime(what, who, `when`)
+        }
+        override fun unscheduleDrawable(who: android.graphics.drawable.Drawable, what: Runnable) {
+            handler.removeCallbacks(what, who)
+        }
+    }
+
     private fun effectAnim(name: String): android.graphics.drawable.Drawable? = effectAnims.getOrPut(name) {
+        if (!name.endsWith(".gif")) return@getOrPut null
         try {
             val f = java.io.File(Decals.dir(context), name).takeIf { Decals.safeName(name) && it.exists() } ?: return@getOrPut null
             val d = android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(f))
             if (d is android.graphics.drawable.AnimatedImageDrawable) {
                 d.repeatCount = android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE
+                d.callback = animCallback
                 d.start()
                 d
             } else null // 只有一格的 GIF：當一般圖片畫就好
@@ -539,8 +561,11 @@ class CatKeyboardView(
         }
     }
 
+    /** 這個圖案會動的話，回傳會動的圖 */
+    private fun animOf(d: Decal): android.graphics.drawable.Drawable? = if (d.isShape) null else effectAnim(d.fileName)
+
     private fun stopEffectAnims() {
-        for (d in effectAnims.values) (d as? android.graphics.drawable.AnimatedImageDrawable)?.stop()
+        for (d in effectAnims.values) (d as? android.graphics.drawable.AnimatedImageDrawable)?.let { it.stop(); it.callback = null }
         effectAnims.clear()
     }
 

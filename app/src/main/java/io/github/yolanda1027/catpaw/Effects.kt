@@ -243,11 +243,9 @@ class PressEffects(private val dp: Float) {
         val s = p.size * if (p.grow) 0.4f + 1.0f * prog else 1f + 0.2f * prog
         val a = p.anim
         if (a != null && a.intrinsicWidth > 0) {
-            // GIF：畫它現在播到的那一格
+            // GIF：畫它現在播到的那一格（很多粒子共用同一張，所以用移動畫布的方式放位置，見 Decals.drawAnim）
             val h = s * a.intrinsicHeight / a.intrinsicWidth
-            a.setBounds(-s.toInt(), -h.toInt(), s.toInt(), h.toInt())
-            a.alpha = alpha
-            a.draw(c)
+            Decals.drawAnim(c, a, RectF(-s, -h, s, h), alpha)
             return
         }
         val b = p.bmp

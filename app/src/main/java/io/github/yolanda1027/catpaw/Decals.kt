@@ -210,16 +210,39 @@ object Decals {
 
     fun centerOf(d: Decal, target: RectF) = (target.left + d.x * target.width()) to (target.top + d.y * target.height())
 
-    fun draw(c: Canvas, d: Decal, target: RectF, refH: Float, bmp: Bitmap?) {
+    /**
+     * 畫一張會動的圖（GIF）到 r 這個框裡。
+     *
+     * 同一張 GIF 可能同時畫在好幾個地方（好幾顆鍵、好幾個飛出來的粒子），
+     * 手機上真正畫圖是在另一條執行緒、稍後才畫，所以「位置、透明度」不能設在圖本身（會變成全部疊在最後一個位置），
+     * 要用移動、縮放畫布的方式放到定位；圖本身的大小一直固定是原本的大小。
+     */
+    fun drawAnim(c: Canvas, a: android.graphics.drawable.Drawable, r: RectF, alpha: Int) {
+        val iw = a.intrinsicWidth
+        val ih = a.intrinsicHeight
+        if (iw <= 0 || ih <= 0) return
+        if (a.bounds.width() != iw || a.bounds.height() != ih || a.bounds.left != 0 || a.bounds.top != 0) a.setBounds(0, 0, iw, ih)
+        c.save()
+        c.translate(r.left, r.top)
+        c.scale(r.width() / iw, r.height() / ih)
+        if (alpha < 255) c.saveLayerAlpha(0f, 0f, iw.toFloat(), ih.toFloat(), alpha)
+        a.draw(c)
+        c.restore()
+    }
+
+    /** @param anim 會動的圖（GIF）；有的話用它，沒有就用 bmp（GIF 的第一格） */
+    fun draw(c: Canvas, d: Decal, target: RectF, refH: Float, bmp: Bitmap?, anim: android.graphics.drawable.Drawable? = null) {
         val (cx, cy) = centerOf(d, target)
         val (w, h) = sizeOf(d, refH, bmp)
-        if (!d.isShape && bmp == null) return
+        if (!d.isShape && bmp == null && anim == null) return
         c.save()
         c.translate(cx, cy)
         c.rotate(d.rotation)
         if (d.flip) c.scale(-1f, 1f)
         val r = RectF(-w / 2, -h / 2, w / 2, h / 2)
-        if (bmp != null) {
+        if (anim != null) {
+            drawAnim(c, anim, r, (d.alpha * 255).toInt())
+        } else if (bmp != null) {
             paint.alpha = (d.alpha * 255).toInt()
             paint.colorFilter = null
             c.drawBitmap(bmp, null, r, paint)
@@ -268,7 +291,7 @@ object Decals {
             val newName = rename.getOrPut(d.fileName) {
                 try {
                     val b64 = images.optString(d.fileName)
-                    if (b64.isEmpty()) null else storeBytes(ctx, android.util.Base64.decode(b64, android.util.Base64.DEFAULT))
+                    if (b64.isEmpty()) null else storeBytes(ctx, android.util.Base64.decode(b64, android.util.Base64.DEFAULT), keepGif = true)
                 } catch (_: Exception) { null }
             }
             if (newName == null) { broken++; continue }

@@ -88,4 +88,29 @@ class GifAndTransparentTest {
         assertTrue(Color.red(px) < 120) // 黃黑主題的背景是深色（羊皮紙底是淺色）
         assertTrue(bg != 0)
     }
+
+    /** 圖案用 GIF：同一張 GIF 貼在兩個地方，兩個地方都要畫出來（不能疊在同一個位置） */
+    @Test fun gifDecalsDrawAtTheirOwnPlaces() {
+        val p = Prefs(ctx)
+        p.theme = "classic"
+        val name = Decals.storeBytes(ctx, gif, keepGif = true)!!
+        Decals.save(p, listOf(
+            Decal("a", "zy:ㄅ", Decal.FILE + name, x = 0.5f, y = 0.5f, size = 0.6f),
+            Decal("b", "zy:ㄥ", Decal.FILE + name, x = 0.5f, y = 0.5f, size = 0.6f),
+        ))
+        val kv = CatKeyboardView(ctx, p, Haptics(ctx))
+        kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val bmp = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)
+        kv.draw(Canvas(bmp))
+        File("build/renders/gif-decals.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val floatH = 34 * 2.625f
+        for (k in listOf(Layouts.ZHUYIN[0][0], Layouts.ZHUYIN[3][9])) {
+            val r = kv.keyRectOf(k)!!
+            val px = bmp.getPixel(r.centerX().toInt(), (r.centerY() + floatH).toInt())
+            // GIF 的第一格是粉紅、第二格是藍：哪一格都好，只要不是鍵盤底色
+            val pinkOrBlue = (Color.red(px) > 200 && Color.blue(px) > 100) || (Color.blue(px) > 200 && Color.red(px) < 120)
+            assertTrue("${k.label} 中間的顏色 ${Integer.toHexString(px)}", pinkOrBlue)
+        }
+    }
 }
