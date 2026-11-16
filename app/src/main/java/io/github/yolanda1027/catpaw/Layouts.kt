@@ -143,11 +143,6 @@ object Layouts {
         return rows + listOf(clipBottom)
     }
 
-    val EMOJI: List<List<Key>> = listOf(
-        chars("😀 😂 🤣 😊 😍 🥰 😘 😭 😢 😡"),
-        chars("😳 🤔 🙄 😴 😎 🥺 😱 🤗 😏 😅"),
-        chars("👍 👏 🙏 💪 👀 ✨ 🔥 💯 🎉 ❤️"),
-        chars("🐱 😺 😸 😻 🐾 🐶 🐰 🌸 ⭐ 💕"),
-        pageBottom.map { if (it.act == Act.TO_EMOJI) toSymbol.copy(weight = 1f, label = "符號") else it },
-    )
+    /** 表情符號鍵盤最下面那排（表情鍵換成「符號」）；上面的表情見 Emojis */
+    val emojiBottom: List<Key> = pageBottom.map { if (it.act == Act.TO_EMOJI) toSymbol.copy(weight = 1f, label = "符號") else it }
 }

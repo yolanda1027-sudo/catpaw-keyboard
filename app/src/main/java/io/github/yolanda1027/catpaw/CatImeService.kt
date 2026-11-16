@@ -70,6 +70,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         chinese = prefs.chinese
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
         Symbols.loadKaomoji(assets.open("kaomoji.txt").bufferedReader().use { it.readText() })
+        Emojis.load(assets.open("emoji.txt").bufferedReader().use { it.readText() })
         clips = ClipHistory(File(filesDir, "clips.json"))
         getSystemService(ClipboardManager::class.java)?.addPrimaryClipChangedListener(clipListener)
         // 讓鍵盤上方放注音小框框的那條區域是透明的
@@ -122,7 +123,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
-            "chinese", "recent_symbols", "recent_kaomoji" -> Unit
+            "chinese", "recent_symbols", "recent_kaomoji", "recent_emoji" -> Unit
             "simplified" -> refresh() // 簡繁切換：選字列馬上換
             "quick_bar", "quick_items", "quick_config" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
@@ -204,12 +205,15 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.rows = when (page) {
             Page.MAIN -> if (chinese) Layouts.ZHUYIN else Layouts.ENGLISH
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
-            Page.EMOJI -> Layouts.EMOJI
+            Page.EMOJI -> Emojis.rows(Emojis.page(emojiItems(), emojiPage))
             Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
             Page.NUMPAD -> Layouts.NUMPAD
         }
         // 快捷符號列：只在注音／英文鍵盤顯示
         v.quickItems = if (prefs.quickBar && page == Page.MAIN) prefs.quickList() else emptyList()
+        // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
+        v.morePagesBefore = page == Page.EMOJI && emojiCat > 1
+        v.morePagesAfter = page == Page.EMOJI && emojiCat < Emojis.groups.size
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
             v.symbolTabs = kaoTabs()
             v.symbolTab = kaoTab + 1
@@ -220,6 +224,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolTab = symCat
             v.symbolPageCount = symbolPageCount()
             v.symbolPage = symPage
+        } else if (page == Page.EMOJI) {
+            v.symbolTabs = Emojis.tabs()
+            v.symbolTab = emojiCat
+            v.symbolPageCount = Emojis.pageCount(emojiItems())
+            v.symbolPage = emojiPage
         } else if (page == Page.NUMPAD) {
             v.symbolTabs = listOf("數字")
             v.symbolTab = 0
@@ -369,6 +378,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 if (page == Page.SYMBOL) {
                     if (symCat == Symbols.KAOMOJI) addRecentKaomoji(key.text) else addRecentSymbol(key.text)
                 }
+                if (page == Page.EMOJI) addRecentEmoji(key.text)
                 val upper = !key.exact && !chinese && page == Page.MAIN && shift > 0
                 commitText(if (upper) key.text.uppercase() else key.text)
                 if (shift == 1 && page == Page.MAIN) {
@@ -420,7 +430,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 refresh()
             }
             Act.TO_NUMPAD -> { page = Page.NUMPAD; refresh() }
-            Act.TO_EMOJI -> { page = Page.EMOJI; refresh() }
+            Act.TO_EMOJI -> {
+                page = Page.EMOJI
+                // 有用過的就先開「最近使用」，沒有的話開第一個分類
+                emojiCat = if (recentEmoji().isEmpty()) 1 else 0
+                emojiPage = 0
+                refresh()
+            }
             Act.TO_MAIN -> { page = Page.MAIN; refresh() }
             Act.GAP -> Unit
             Act.CLIP -> if (key.text.isNotEmpty()) {
@@ -500,6 +516,22 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         Symbols.KAOMOJI -> ((kaomojiAll().size + Symbols.PER_PAGE_WIDE - 1) / Symbols.PER_PAGE_WIDE).coerceAtLeast(1)
         else -> Symbols.categories[symCat].pages.size
     }
+
+    // ---------- 表情符號 ----------
+
+    /** 表情符號的分類：0 = 最近使用，1 之後是 Emojis.groups 的順序 */
+    private var emojiCat = 1
+    private var emojiPage = 0
+
+    private fun recentEmoji(): List<String> = prefs.recentEmoji.split('\u0001').filter { it.isNotEmpty() }
+
+    private fun addRecentEmoji(s: String) {
+        val list = listOf(s) + recentEmoji().filter { it != s }
+        prefs.recentEmoji = list.take(Emojis.PER_PAGE).joinToString("\u0001")
+    }
+
+    private fun emojiItems(): List<String> =
+        if (emojiCat == 0) recentEmoji() else Emojis.groups.getOrNull(emojiCat - 1)?.second ?: emptyList()
 
     // ---------- 剪貼簿 ----------
 
@@ -589,6 +621,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onSymbolTab(index: Int) {
         if (page == Page.CLIP || page == Page.NUMPAD) return
+        if (page == Page.EMOJI) {
+            emojiCat = index
+            emojiPage = 0
+            refresh()
+            return
+        }
         if (symCat == Symbols.KAOMOJI) {
             if (index == 0) symCat = 1 // ◁ 回到一般符號
             else kaoTab = index - 1
@@ -604,6 +642,19 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         if (page == Page.CLIP) {
             val next = (clipPage + direction).coerceIn(0, clipPageCount() - 1)
             if (next != clipPage) { clipPage = next; haptics.perform(kv, prefs); refresh() }
+            return
+        }
+        if (page == Page.EMOJI) {
+            // 一個分類滑到底就接到下一個分類（像 Google 的表情鍵盤）
+            val count = Emojis.pageCount(emojiItems())
+            when {
+                emojiPage + direction in 0 until count -> emojiPage += direction
+                direction > 0 && emojiCat < Emojis.groups.size -> { emojiCat++; emojiPage = 0 }
+                direction < 0 && emojiCat > 1 -> { emojiCat--; emojiPage = Emojis.pageCount(emojiItems()) - 1 }
+                else -> return
+            }
+            haptics.perform(kv, prefs)
+            refresh()
             return
         }
         val next = (symPage + direction).coerceIn(0, symbolPageCount() - 1)

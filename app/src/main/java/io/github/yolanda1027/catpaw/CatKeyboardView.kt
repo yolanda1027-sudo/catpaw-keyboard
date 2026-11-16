@@ -928,8 +928,15 @@ class CatKeyboardView(
     private var pagingPointer = -1
     private var pageAnim: android.animation.ValueAnimator? = null
 
+    /** 第一頁之前、最後一頁之後還有沒有東西（表情符號：滑到底接下一個分類） */
+    var morePagesBefore = false
+    var morePagesAfter = false
+
+    /** 按在空白處（沒有按到鍵）的那隻手指：拖得夠遠就開始翻頁 */
+    private var emptyPagePointer = -1
+
     private fun canPage(dx: Float) =
-        (dx < 0 && symbolPage < symbolPageCount - 1) || (dx > 0 && symbolPage > 0)
+        (dx < 0 && (symbolPage < symbolPageCount - 1 || morePagesAfter)) || (dx > 0 && (symbolPage > 0 || morePagesBefore))
 
     private fun animatePageOffsetTo(target: Float) {
         pageAnim?.cancel()
@@ -1091,10 +1098,14 @@ class CatKeyboardView(
                     val firstTop = topH + quickH + padTop
                     val lastBottom = firstTop + keyAreaH - 1f
                     downX = x
-                    keyAt(x, y.coerceIn(firstTop, lastBottom))?.let { press(it, e.getPointerId(i)) }
+                    val hit = keyAt(x, y.coerceIn(firstTop, lastBottom))
+                    if (hit != null) press(hit, e.getPointerId(i))
+                    // 符號／表情的最後一頁常常下面是空的：按在空白處也要能左右滑翻頁
+                    else if (symbolTabs != null) emptyPagePointer = e.getPointerId(i)
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                if (e.getPointerId(e.actionIndex) == emptyPagePointer) emptyPagePointer = -1
                 if (paging && e.getPointerId(e.actionIndex) == pagingPointer) { finishPaging(); return true }
                 if (e.getPointerId(e.actionIndex) == pressedPointer) release(cancel = false)
             }
@@ -1110,6 +1121,19 @@ class CatKeyboardView(
                         invalidate()
                     }
                     return true
+                }
+                val ei = if (pressed == null && emptyPagePointer >= 0) e.findPointerIndex(emptyPagePointer) else -1
+                if (pressed == null && ei >= 0 && symbolTabs != null) {
+                    val dx = e.getX(ei) - downX
+                    if (kotlin.math.abs(dx) > 14 * dp) {
+                        pagingPointer = emptyPagePointer
+                        emptyPagePointer = -1
+                        paging = true
+                        pageAnim?.cancel()
+                        pageOffset = if (canPage(dx)) dx else dx * 0.25f
+                        invalidate()
+                        return true
+                    }
                 }
                 if (o == null && i >= 0 && symbolTabs != null && pressed != null) {
                     val dx = e.getX(i) - downX
@@ -1134,6 +1158,7 @@ class CatKeyboardView(
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
+                emptyPagePointer = -1
                 if (paging) finishPaging()
                 release(cancel = true)
             }

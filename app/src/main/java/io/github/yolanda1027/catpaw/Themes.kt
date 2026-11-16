@@ -173,6 +173,19 @@ abstract class KbTheme(protected val dp: Float) {
 
     protected fun isLong(s: String) = s.codePointCount(0, s.length) > 2
 
+    /** 表情符號（一整個，可能是好幾個字碼組成的，例如 👨‍👩‍👧、🇹🇼）：畫大一點才看得清楚 */
+    protected fun isEmoji(s: String): Boolean {
+        if (s.isEmpty()) return false
+        val cp = s.codePointAt(0)
+        // ★ ♥ ♪ 這類符號本身不算；要當表情顯示的會帶 FE0F（例如 ❤️ ☀️）
+        return cp >= 0x1F000 || s.contains('\uFE0F') || s.contains('\u200D')
+    }
+
+    protected fun emojiSize(label: String, maxW: Float, rowH: Float): Float {
+        val want = rowH * 0.52f
+        return if (maxW > 0f) fitSize(label, maxW, want) else want
+    }
+
     /** 主字＋小字（長按的字），或只有主字 */
     /** 長的字（顏文字、按鍵上的詞）：盡量放大，但不超出按鍵寬度 */
     protected fun fitSize(label: String, maxW: Float, desired: Float): Float {
@@ -194,6 +207,7 @@ abstract class KbTheme(protected val dp: Float) {
             }
             else -> {
                 val size = when {
+                    isEmoji(label) -> emojiSize(label, maxW, rowH)
                     !isLong(label) -> rowH * 0.38f
                     maxW > 0f -> fitSize(label, maxW, rowH * 0.36f)
                     else -> rowH * 0.24f
@@ -298,6 +312,7 @@ abstract class KbTheme(protected val dp: Float) {
                 )
                 else -> {
                     val size = when {
+                        isEmoji(label) -> emojiSize(label, r.width() * 0.9f, rowH)
                         !isLong(label) -> rowH * 0.38f
                         else -> fitSize(label, r.width() * 0.9f, rowH * 0.36f)
                     }
@@ -507,7 +522,11 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
         fill.color = if (pressed) padPressed else pad
         val padRect = RectF(cx - w * 0.42f, top + h * 0.3f, cx + w * 0.42f, top + h * 0.97f)
         c.drawRoundRect(padRect, padRect.height() * 0.42f, padRect.height() * 0.42f, fill)
-        val size = if (label.codePointCount(0, label.length) > 2) fitSize(label, padRect.width() * 0.9f, rowH * 0.3f) else rowH * 0.32f
+        val size = when {
+            isEmoji(label) -> emojiSize(label, padRect.width() * 0.9f, rowH * 0.85f)
+            label.codePointCount(0, label.length) > 2 -> fitSize(label, padRect.width() * 0.9f, rowH * 0.3f)
+            else -> rowH * 0.32f
+        }
         val sub = if (key.subBelow) key.sub else null
         if (sub != null) {
             // 主字稍微往左，長按的小字縮在掌心右下角

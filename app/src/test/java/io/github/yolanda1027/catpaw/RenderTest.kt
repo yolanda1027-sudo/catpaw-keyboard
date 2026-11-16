@@ -382,12 +382,13 @@ class RenderTest {
 
     @Test
     fun renderAll() {
+        Emojis.load(File("src/main/assets/emoji.txt").readText())
         for (t in listOf("classic", "stitch", "catpaw")) {
             render(t, Layouts.ZHUYIN, "$t-zhuyin")
             render(t, Layouts.ZHUYIN, "$t-zhuyin-pressed", pressAt = 270f to 420f, composing = "ㄇㄠ")
             render(t, Layouts.ENGLISH, "$t-english")
             render(t, Layouts.SYMBOLS, "$t-symbols")
-            render(t, Layouts.EMOJI, "$t-emoji")
+            render(t, Emojis.rows(Emojis.page(Emojis.groups[0].second, 0)), "$t-emoji")
         }
     }
 }

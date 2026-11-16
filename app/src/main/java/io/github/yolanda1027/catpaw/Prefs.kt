@@ -82,6 +82,11 @@ class Prefs(context: Context) {
         get() = sp.getString("recent_symbols", "") ?: ""
         set(v) = sp.edit().putString("recent_symbols", v).apply()
 
+    /** 最近用過的表情符號（用 \u0001 分隔） */
+    var recentEmoji: String
+        get() = sp.getString("recent_emoji", "") ?: ""
+        set(v) = sp.edit().putString("recent_emoji", v).apply()
+
     /** 最近用過的顏文字（用 \u0001 分隔） */
     var recentKaomoji: String
         get() = sp.getString("recent_kaomoji", "") ?: ""
