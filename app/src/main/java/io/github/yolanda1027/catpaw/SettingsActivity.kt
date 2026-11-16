@@ -424,14 +424,16 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageFont() {
-        note("按鍵上的字和選字列可以用不同字體。")
-        subTitle("按鍵字體")
-        radios(Fonts.options(this), prefs.keyFont) { prefs.keyFont = it }
-        subTitle("選字字體（選字列、注音小框框）")
-        radios(Fonts.options(this), prefs.candFont) { prefs.candFont = it }
+        note("照文字種類分三組，可以各用不同字體。例如注音鍵上的「ㄅ」用注音字體、下面的小「1」用英文字體。")
+        subTitle("中文字體（選字列、中文字、全形標點「」，。）")
+        radios(Fonts.options(this), prefs.zhFont) { prefs.zhFont = it }
+        subTitle("注音字體（注音鍵、注音小框框、聲調）")
+        radios(Fonts.options(this), prefs.zhuyinFont) { prefs.zhuyinFont = it }
+        subTitle("英文和符號字體（英文、數字、半形符號）")
+        radios(Fonts.options(this), prefs.enFont) { prefs.enFont = it }
 
         subTitle("我的字體")
-        note("可以上傳自己的 .ttf / .otf 字體檔，上傳後會出現在上面兩個清單裡。請使用你有權利使用的字體（例如免費授權或自己買的）。")
+        note("可以上傳自己的 .ttf / .otf 字體檔，上傳後會出現在上面三個清單裡。請使用你有權利使用的字體（例如免費授權或自己買的）。")
         button("上傳字體檔") {
             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -456,8 +458,9 @@ class SettingsActivity : Activity() {
                 isAllCaps = false
                 setOnClickListener {
                     Fonts.delete(this@SettingsActivity, id)
-                    if (prefs.keyFont == id) prefs.keyFont = "system"
-                    if (prefs.candFont == id) prefs.candFont = "system"
+                    if (prefs.zhFont == id) prefs.zhFont = "system"
+                    if (prefs.zhuyinFont == id) prefs.zhuyinFont = "system"
+                    if (prefs.enFont == id) prefs.enFont = "system"
                     recreate()
                 }
             })

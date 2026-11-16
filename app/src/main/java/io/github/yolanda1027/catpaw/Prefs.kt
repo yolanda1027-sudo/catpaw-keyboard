@@ -96,7 +96,23 @@ class Prefs(context: Context) {
         get() = sp.getString("key_font", "system") ?: "system"
         set(v) = sp.edit().putString("key_font", v).apply()
 
-    /** 選字列、注音小框框的字體 */
+    /**
+     * 字體分三組：中文、注音、英文和符號。
+     * 舊版是「按鍵字體／選字字體」，沒設過新的就沿用：中文＝選字字體，注音、英文＝按鍵字體。
+     */
+    var zhFont: String
+        get() = sp.getString("font_zh", null) ?: candFont
+        set(v) = sp.edit().putString("font_zh", v).apply()
+
+    var zhuyinFont: String
+        get() = sp.getString("font_zhuyin", null) ?: keyFont
+        set(v) = sp.edit().putString("font_zhuyin", v).apply()
+
+    var enFont: String
+        get() = sp.getString("font_en", null) ?: keyFont
+        set(v) = sp.edit().putString("font_en", v).apply()
+
+    /** 選字列、注音小框框的字體（舊版） */
     var candFont: String
         get() = sp.getString("cand_font", "system") ?: "system"
         set(v) = sp.edit().putString("cand_font", v).apply()

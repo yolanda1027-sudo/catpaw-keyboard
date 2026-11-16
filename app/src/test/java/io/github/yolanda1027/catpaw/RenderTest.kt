@@ -228,6 +228,15 @@ class RenderTest {
         }
         prefs.keyFont = "system"
         prefs.candFont = "system"
+        // 三組分開：中文＝霞鶩文楷、注音＝粉圓、英文和符號＝芫荽
+        prefs.zhFont = "wenkai"
+        prefs.zhuyinFont = "huninn"
+        prefs.enFont = "iansui"
+        val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+        v.reading = "這ㄅㄧˇ ㄎㄜˇ"
+        v.candidates = listOf("筆可", "比較", "Hi!", "123")
+        renderView(v, "font-mixed")
+        prefs.zhFont = "system"; prefs.zhuyinFont = "system"; prefs.enFont = "system"
     }
 
     @Test

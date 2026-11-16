@@ -84,8 +84,11 @@ class CatKeyboardView(
     private var theme: KbTheme = Themes.byName(prefs.theme, dp, prefs)
     private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context)
     private val effects = PressEffects(dp)
-    private var keyFace = Fonts.get(context, prefs.keyFont)
-    private var candFace = Fonts.get(context, prefs.candFont).also { candPaint.typeface = it }
+    private var fontSet = loadFonts()
+
+    private fun loadFonts() = FontSet(
+        Fonts.get(context, prefs.zhFont), Fonts.get(context, prefs.zhuyinFont), Fonts.get(context, prefs.enFont),
+    )
     private var keyH = prefs.keyHeightDp * dp
     // 這些比例是照 Google 注音截圖量的：上方列 40dp，按鍵區上面留 6dp、下面留 10dp
     private val topH = 40 * dp
@@ -193,9 +196,7 @@ class CatKeyboardView(
     fun reloadPrefs() {
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context)
-        keyFace = Fonts.get(context, prefs.keyFont)
-        candFace = Fonts.get(context, prefs.candFont)
-        candPaint.typeface = candFace
+        fontSet = loadFonts()
         stripCache = null
         panelCache = null
         keyH = prefs.keyHeightDp * dp
@@ -244,21 +245,17 @@ class CatKeyboardView(
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat()
-        theme.font = candFace
+        theme.fonts = fontSet
         if (reading.isNotEmpty()) theme.drawReading(c, reading, floatH)
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.drawBackground(c, w, kbH, topH)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
-        if (candidates.isEmpty() || symbolTabs != null) theme.font = keyFace
         drawTopBar(c, w)
-        theme.font = keyFace
         drawQuickBar(c)
         if (expanded) {
-            theme.font = candFace
             drawPanel(c, w)
         } else {
-            theme.font = keyFace
             val now = android.os.SystemClock.uptimeMillis()
             // 翻頁中：符號那幾排跟著偏移（最下面那排返回、空白不動）
             val sliding = pageOffset != 0f && symbolTabs != null
@@ -299,8 +296,8 @@ class CatKeyboardView(
     private val panelRowH get() = keyH * 0.95f
 
     private fun textWidth(s: String, size: Float): Float {
-        candPaint.textSize = size
-        return candPaint.measureText(s)
+        theme.fonts = fontSet
+        return theme.measure(s, size)
     }
 
     /** 每個選項在選字列上的位置（還沒加上捲動） */

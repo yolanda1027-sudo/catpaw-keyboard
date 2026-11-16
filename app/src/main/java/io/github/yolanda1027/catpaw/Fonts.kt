@@ -130,3 +130,67 @@ object Fonts {
 
     fun isUser(id: String) = id.startsWith(USER_PREFIX)
 }
+
+/**
+ * 三組字體：中文、注音、英文和符號。
+ * 畫字的時候會把一段文字切成「同一組的字連在一起」的小段，每段用自己的字體畫。
+ */
+class FontSet(val zh: Typeface, val zhuyin: Typeface, val en: Typeface) {
+    private val bolds = HashMap<Typeface, Typeface>()
+
+    fun bold(t: Typeface): Typeface = bolds.getOrPut(t) { Typeface.create(t, Typeface.BOLD) }
+
+    /** 三組都一樣：不用切段，直接畫 */
+    val uniform: Boolean get() = zh === zhuyin && zhuyin === en
+
+    fun forCodePoint(cp: Int): Typeface = when {
+        isZhuyin(cp) -> zhuyin
+        isChinese(cp) -> zh
+        else -> en
+    }
+
+    /** 切成 (文字, 字體) 的小段；空白和附加符號跟著前一段，不另外切 */
+    fun runs(s: String): List<Pair<String, Typeface>> {
+        if (s.isEmpty() || uniform) return listOf(s to en)
+        val out = ArrayList<Pair<String, Typeface>>()
+        val sb = StringBuilder()
+        var cur: Typeface? = null
+        var i = 0
+        while (i < s.length) {
+            val cp = s.codePointAt(i)
+            val n = Character.charCount(cp)
+            val tf = if (cur != null && attaches(cp)) cur else forCodePoint(cp)
+            if (cur != null && tf !== cur) {
+                out.add(sb.toString() to cur)
+                sb.setLength(0)
+            }
+            cur = tf
+            sb.append(s, i, i + n)
+            i += n
+        }
+        if (cur != null) out.add(sb.toString() to cur)
+        return out
+    }
+
+    companion object {
+        val DEFAULT = FontSet(Typeface.DEFAULT, Typeface.DEFAULT, Typeface.DEFAULT)
+
+        /** 注音符號、聲調 */
+        fun isZhuyin(cp: Int) = cp in 0x3100..0x312F || cp in 0x31A0..0x31BF ||
+            cp == 0x02CA || cp == 0x02C7 || cp == 0x02CB || cp == 0x02D9 || cp == 0x02C9
+
+        /** 中文字、全形標點（「」，。、） */
+        fun isChinese(cp: Int) = cp in 0x3400..0x9FFF || cp in 0xF900..0xFAFF || cp in 0x20000..0x3FFFF ||
+            cp in 0x3000..0x303F || cp in 0xFF00..0xFFEF || cp in 0xFE30..0xFE4F
+
+        /** 要跟著前一個字的：空白、附加符號（顏文字常用）、變體選擇符、零寬連接字 */
+        private fun attaches(cp: Int): Boolean {
+            if (cp == ' '.code || cp == 0x200D || cp in 0xFE00..0xFE0F) return true
+            return when (Character.getType(cp)) {
+                Character.NON_SPACING_MARK.toInt(), Character.ENCLOSING_MARK.toInt(), Character.COMBINING_SPACING_MARK.toInt() -> true
+                else -> false
+            }
+        }
+    }
+}
+

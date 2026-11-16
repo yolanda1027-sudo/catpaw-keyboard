@@ -30,15 +30,8 @@ abstract class KbTheme(protected val dp: Float) {
     abstract val previewBg: Int
     abstract val previewText: Int
 
-    /** 目前畫字用的字體（按鍵和選字可以分開設定，CatKeyboardView 會切換） */
-    var font: Typeface = Typeface.DEFAULT
-        set(v) {
-            if (field !== v) {
-                field = v
-                boldFont = Typeface.create(v, Typeface.BOLD)
-            }
-        }
-    private var boldFont: Typeface = Typeface.DEFAULT_BOLD
+    /** 畫字用的字體：中文、注音、英文和符號三組 */
+    var fonts: FontSet = FontSet.DEFAULT
 
     protected val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     protected val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -75,9 +68,7 @@ abstract class KbTheme(protected val dp: Float) {
     /** 在鍵盤左上方畫出正在打的注音，h = 透明區域的高度 */
     fun drawReading(c: Canvas, s: String, h: Float) {
         val size = h * 0.62f
-        textPaint.textSize = size
-        textPaint.typeface = font
-        val tw = textPaint.measureText(s)
+        val tw = measure(s, size)
         val r = RectF(0f, 0f, tw + 20 * dp, h)
         fill.color = readingBg
         fill.shader = null
@@ -99,12 +90,10 @@ abstract class KbTheme(protected val dp: Float) {
         c.drawRoundRect(box, 10 * dp, 10 * dp, fill)
         fill.alpha = 255
         val size = rowH * 0.3f
-        textPaint.textSize = size
-        textPaint.typeface = font
         val maxW = box.width() - 28 * dp
         var shown = label
-        if (textPaint.measureText(shown) > maxW) {
-            while (shown.isNotEmpty() && textPaint.measureText("$shown…") > maxW) shown = shown.dropLast(1)
+        if (measure(shown, size) > maxW) {
+            while (shown.isNotEmpty() && measure("$shown…", size) > maxW) shown = shown.dropLast(1)
             shown += "…"
         }
         drawTextLeft(c, shown, box.left + 14 * dp, box.centerY(), size, text)
@@ -136,12 +125,44 @@ abstract class KbTheme(protected val dp: Float) {
         drawText(c, label, r.centerX(), r.centerY(), r.height() * 0.5f, previewText)
     }
 
+    /** 量文字寬度（每一段用自己的字體量） */
+    fun measure(s: String, size: Float, bold: Boolean = false): Float {
+        textPaint.textSize = size
+        var w = 0f
+        for ((t, tf) in fonts.runs(s)) {
+            textPaint.typeface = if (bold) fonts.bold(tf) else tf
+            w += textPaint.measureText(t)
+        }
+        return w
+    }
+
     fun drawText(c: Canvas, s: String, cx: Float, cy: Float, size: Float, color: Int, bold: Boolean = false) {
+        drawRuns(c, s, cx, cy, size, color, bold, center = textPaint.textAlign == Paint.Align.CENTER)
+    }
+
+    /** 一段文字可能混了中文、注音、英文：切成小段，各用各的字體，排在同一條基線上 */
+    private fun drawRuns(c: Canvas, s: String, x: Float, cy: Float, size: Float, color: Int, bold: Boolean, center: Boolean) {
+        val runs = fonts.runs(s)
         textPaint.textSize = size
         textPaint.color = color
-        textPaint.typeface = if (bold) boldFont else font
+        val oldAlign = textPaint.textAlign
+        // 基線用第一段的字體來算，大家都排在同一條線上
+        textPaint.typeface = if (bold) fonts.bold(runs[0].second) else runs[0].second
         val fm = textPaint.fontMetrics
-        c.drawText(s, cx, cy - (fm.ascent + fm.descent) / 2f, textPaint)
+        val baseline = cy - (fm.ascent + fm.descent) / 2f
+        if (runs.size == 1) {
+            c.drawText(s, x, baseline, textPaint)
+            return
+        }
+        var pen = if (center) x - measure(s, size, bold) / 2f else x
+        textPaint.textSize = size
+        textPaint.textAlign = Paint.Align.LEFT
+        for ((t, tf) in runs) {
+            textPaint.typeface = if (bold) fonts.bold(tf) else tf
+            c.drawText(t, pen, baseline, textPaint)
+            pen += textPaint.measureText(t)
+        }
+        textPaint.textAlign = oldAlign
     }
 
     fun drawTextLeft(c: Canvas, s: String, x: Float, cy: Float, size: Float, color: Int) {
@@ -155,9 +176,7 @@ abstract class KbTheme(protected val dp: Float) {
     /** 主字＋小字（長按的字），或只有主字 */
     /** 長的字（顏文字、按鍵上的詞）：盡量放大，但不超出按鍵寬度 */
     protected fun fitSize(label: String, maxW: Float, desired: Float): Float {
-        textPaint.textSize = desired
-        textPaint.typeface = font
-        val w = textPaint.measureText(label)
+        val w = measure(label, desired)
         return if (w <= maxW || w == 0f) desired else desired * maxW / w
     }
 
