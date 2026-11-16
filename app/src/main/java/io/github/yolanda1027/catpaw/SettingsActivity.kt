@@ -565,6 +565,8 @@ class SettingsActivity : Activity() {
     private fun pageEffect() {
         note("選好之後，在上面的預覽鍵盤按按看。")
         radios(PressEffects.ALL, prefs.pressEffect) { prefs.pressEffect = it }
+        note("想自己決定動畫怎麼動、飛出什麼、什麼顏色，或只讓某幾顆鍵用特別的動畫，到主題工作室調：")
+        button("🎨 打開主題工作室") { startActivity(Intent(this, StudioActivity::class.java)) }
     }
 
     private fun pageSticker() {

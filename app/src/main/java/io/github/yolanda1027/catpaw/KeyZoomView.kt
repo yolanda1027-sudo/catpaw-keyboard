@@ -41,6 +41,15 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
     private val hint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
+    /**
+     * 自己不決定高度：跟著底下的鍵盤一樣高（外面的 FrameLayout 會用鍵盤的高度再量一次）。
+     * 不這樣做的話，它會把整個畫面撐滿，下面的面板就被擠不見了。
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) MeasureSpec.getSize(heightMeasureSpec) else 0
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), h)
+    }
+
     /** 放大後的按鍵在畫面上的位置（四周留空間，圖案超出去也看得到） */
     private fun keyBox(): RectF? {
         val k = key ?: return null
@@ -73,6 +82,7 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         c.drawRect(box, line)
 
         kv.drawKeyZoomed(c, k, box)
+        if (kv.effectsActive()) postInvalidateOnAnimation()
 
         // 選到的圖案：藍色虛線框＋四個角
         val sel = mine().firstOrNull { it.id == selectedId }

@@ -13,12 +13,15 @@ data class KeyStyle(
     val border: Int? = null,
     val radius: Float? = null,
     val hideLabel: Boolean? = null,
+    /** 這顆鍵自己的按鍵動畫（null = 跟全部按鍵一樣） */
+    val effect: KeyEffect? = null,
 ) {
-    val isEmpty get() = bg == null && text == null && border == null && radius == null && hideLabel == null
+    val isEmpty get() = bg == null && text == null && border == null && radius == null && hideLabel == null && effect == null
 
     /** 自己有設定的用自己的，沒設定的用 base（例如「所有注音鍵」的設定） */
     fun over(base: KeyStyle?): KeyStyle = if (base == null) this else KeyStyle(
         bg ?: base.bg, text ?: base.text, border ?: base.border, radius ?: base.radius, hideLabel ?: base.hideLabel,
+        effect ?: base.effect,
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -27,6 +30,7 @@ data class KeyStyle(
         border?.let { put("border", hex(it)) }
         radius?.let { put("radius", it.toDouble()) }
         hideLabel?.let { put("hideLabel", it) }
+        effect?.let { put("effect", it.toJson()) }
     }
 
     companion object {
@@ -42,6 +46,7 @@ data class KeyStyle(
                 border = col("border"),
                 radius = if (o.has("radius")) o.optDouble("radius").toFloat().coerceIn(0f, 1f) else null,
                 hideLabel = if (o.has("hideLabel")) o.optBoolean("hideLabel") else null,
+                effect = KeyEffect.fromJson(o.optJSONObject("effect")),
             )
         }
     }

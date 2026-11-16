@@ -154,10 +154,19 @@ object Decals {
         return out
     }
 
-    /** 刪掉沒有任何圖案在用的圖檔 */
+    /** 刪掉沒有任何圖案、按鍵動畫在用的圖檔 */
     fun cleanup(ctx: Context, list: List<Decal>) {
-        val used = list.filter { !it.isShape }.map { it.fileName }.toSet()
+        val used = list.filter { !it.isShape }.map { it.fileName }.toMutableSet()
+        used += effectFiles(Prefs(ctx))
         dir(ctx).listFiles()?.forEach { if (it.name !in used) it.delete() }
+    }
+
+    /** 按鍵動畫用到的圖檔（全部按鍵共用的、單顆鍵自己的） */
+    fun effectFiles(prefs: Prefs): Set<String> {
+        val out = HashSet<String>()
+        prefs.customEffect.takeIf { it.isImage }?.let { out.add(it.fileName) }
+        for (st in KeyStyles.load(prefs).map.values) st.effect?.custom?.takeIf { it.isImage }?.let { out.add(it.fileName) }
+        return out
     }
 
     // ---------- 畫 ----------

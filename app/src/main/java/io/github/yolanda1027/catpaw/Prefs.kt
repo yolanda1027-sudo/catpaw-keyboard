@@ -52,6 +52,13 @@ class Prefs(context: Context) {
         }
     }
 
+    /** 自訂按鍵動畫的設定（按鍵動畫選「custom」時用） */
+    var customEffect: CustomEffect
+        get() = try {
+            CustomEffect.fromJson(sp.getString("custom_effect", null)?.let { org.json.JSONObject(it) }) ?: CustomEffect()
+        } catch (_: Exception) { CustomEffect() }
+        set(v) = sp.edit().putString("custom_effect", v.toJson().toString()).apply()
+
     /**
      * false（預設）＝像 Google 注音：注音顯示在鍵盤上方的小框框，選了字才送進輸入框
      * true ＝ 注音直接顯示在輸入框裡（帶底線），即時轉成中文

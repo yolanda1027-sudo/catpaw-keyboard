@@ -59,7 +59,24 @@ object ThemeIO {
         if (Part.FONTS in parts) {
             o.put("fonts", JSONObject().put("zh", prefs.zhFont).put("zhuyin", prefs.zhuyinFont).put("en", prefs.enFont))
         }
-        if (Part.EFFECT in parts) o.put("effect", prefs.pressEffect)
+        // 按鍵動畫用到的自己的圖（全部按鍵的自訂動畫、單顆鍵的動畫）
+        val effectImages = HashSet<String>()
+        if (Part.EFFECT in parts) {
+            o.put("effect", prefs.pressEffect)
+            if (prefs.pressEffect == "custom") {
+                val c = prefs.customEffect
+                o.put("customEffect", c.toJson())
+                if (c.isImage) effectImages.add(c.fileName)
+            }
+        }
+        if (Part.KEYS in parts) {
+            for (st in KeyStyles.load(prefs).map.values) st.effect?.custom?.takeIf { it.isImage }?.let { effectImages.add(it.fileName) }
+        }
+        if (effectImages.isNotEmpty()) {
+            val imgs = JSONObject()
+            for (n in effectImages) Decals.pngBytes(ctx, n)?.let { imgs.put(n, Base64.encodeToString(it, Base64.NO_WRAP)) }
+            o.put("effectImages", imgs)
+        }
         if (Part.STICKERS in parts) {
             val st = JSONObject()
             for (slot in StickerSlot.values()) {
@@ -187,7 +204,28 @@ object ThemeIO {
                 if (list.isNotEmpty()) prefs.setQuickEntries(list)
             }
         }
-        o.optJSONObject("keyStyles")?.let { KeyStyles.save(prefs, KeyStyles.fromJson(it)) }
+        // 按鍵動畫的圖：存一份新的，再把設定裡的檔名換成新的
+        val rename = HashMap<String, String>()
+        o.optJSONObject("effectImages")?.let { imgs ->
+            for (n in imgs.keys()) {
+                val newName = try { Decals.storeBytes(ctx, Base64.decode(imgs.optString(n), Base64.DEFAULT)) } catch (_: Exception) { null }
+                if (newName != null) rename[n] = newName else warnings.add("有一張按鍵動畫的圖片壞掉了，改用愛心")
+            }
+        }
+        fun fix(c: CustomEffect?): CustomEffect? = when {
+            c == null || !c.isImage -> c
+            rename[c.fileName] != null -> c.copy(particle = Decal.FILE + rename[c.fileName])
+            else -> c.copy(particle = "shape:heart")
+        }
+        if (o.optString("effect") == "custom") {
+            fix(CustomEffect.fromJson(o.optJSONObject("customEffect")) ?: CustomEffect())?.let { prefs.customEffect = it }
+        }
+        o.optJSONObject("keyStyles")?.let { ks ->
+            val loaded = KeyStyles.fromJson(ks)
+            KeyStyles.save(prefs, KeyStyles(loaded.map.mapValues { (_, st) ->
+                st.effect?.custom?.let { st.copy(effect = st.effect.copy(custom = fix(it))) } ?: st
+            }))
+        }
         o.optJSONObject("decals")?.let {
             val (list, broken) = Decals.importJson(ctx, it)
             Decals.save(prefs, list)

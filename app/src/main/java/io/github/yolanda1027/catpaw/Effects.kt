@@ -41,11 +41,12 @@ class PressEffects(private val dp: Float) {
             "snow" to "雪花 ❄",
             "note" to "音符 ♪",
             "spell" to "魔法火花 ✧",
+            "custom" to "自訂動畫 🎨（在主題工作室調）",
         )
         private const val MAX_PARTICLES = 80
     }
 
-    private enum class Shape { HEART, PAW, STAR, SPARKLE, FLOWER, BUTTERFLY, RING, BUBBLE, SNOW, NOTE, DOT }
+    private enum class Shape { HEART, PAW, STAR, SPARKLE, FLOWER, BUTTERFLY, RING, BUBBLE, SNOW, NOTE, DOT, CUSTOM }
 
     /** 一個小粒子。位置用「經過的時間」直接算，不用每格更新狀態 */
     private class P(
@@ -58,6 +59,10 @@ class PressEffects(private val dp: Float) {
         val sway: Float = 0f, val phase: Float = 0f,
         val text: String = "",
         val outline: Boolean = true,
+        // 自訂動畫：內建圖案的名字，或自己的圖；grow = 從小變大（原地閃一下）
+        val shapeName: String = "",
+        val bmp: android.graphics.Bitmap? = null,
+        val grow: Boolean = false,
     )
 
     private class Bounce(val rect: RectF, val start: Long)
@@ -178,6 +183,71 @@ class PressEffects(private val dp: Float) {
         while (bounces.size > 10) bounces.removeAt(0)
     }
 
+    /**
+     * 自訂動畫（主題工作室調的）。
+     * @param bmp 粒子用自己的圖時的圖片（null = 用內建圖案）
+     */
+    fun addCustom(e: CustomEffect, rect: RectF, bmp: android.graphics.Bitmap?) {
+        val now = SystemClock.uptimeMillis()
+        val cx = rect.centerX()
+        val cy = rect.centerY()
+        val sp = e.speed
+        val size = e.size * dp
+        if (e.bounce) bounces.add(Bounce(RectF(rect), now))
+        val n = e.count
+        for (i in 0 until n) {
+            val col = if (e.rainbow) Color.HSVToColor(floatArrayOf((i * 360f / n + r(0f, 30f)) % 360f, 0.55f, 0.98f)) else e.color
+            val delay = (i * 35L / sp).toLong()
+            val spinV = if (e.spin) r(-260f, 260f) * sp else 0f
+            val rot0 = if (e.spin) r(0f, 360f) else r(-12f, 12f)
+            val p = when (e.motion) {
+                "burst" -> {
+                    // 一圈平均散開（再加一點亂數，不要太死板）
+                    val a = (2 * PI.toFloat() * i / n) + r(-0.3f, 0.3f)
+                    val v = r(90f, 170f) * dp * sp
+                    P(Shape.CUSTOM, cx, cy, cos(a) * v, sin(a) * v, 60 * dp * sp * sp, size * r(0.8f, 1.1f), col,
+                        now + delay / 3, (750 / sp).toLong(), rot0 = rot0, vrot = spinV)
+                }
+                "fall" -> P(Shape.CUSTOM, cx + r(-0.45f, 0.45f) * rect.width(), rect.top - r(4f, 16f) * dp,
+                    r(-15f, 15f) * dp * sp, r(45f, 85f) * dp * sp, 30 * dp * sp, size * r(0.8f, 1.1f), col,
+                    now + delay * 2, (1100 / sp).toLong(), rot0 = rot0, vrot = spinV, sway = r(4f, 9f) * dp, phase = r(0f, 6f))
+                "fountain" -> {
+                    val a = -PI.toFloat() * (0.18f + 0.64f * (if (n == 1) 0.5f else i / (n - 1f))) + r(-0.12f, 0.12f)
+                    val v = r(170f, 250f) * dp * sp
+                    P(Shape.CUSTOM, cx, cy, cos(a) * v * 0.6f, sin(a) * v, 520 * dp * sp * sp, size * r(0.8f, 1.1f), col,
+                        now + delay, (850 / sp).toLong(), rot0 = rot0, vrot = spinV)
+                }
+                "pop" -> P(Shape.CUSTOM, cx + (if (n == 1) 0f else r(-0.35f, 0.35f) * rect.width()), cy + (if (n == 1) 0f else r(-0.3f, 0.3f) * rect.height()),
+                    0f, 0f, 0f, size, col, now + delay, (480 / sp).toLong(), rot0 = rot0, vrot = spinV / 3, grow = true)
+                else -> P(Shape.CUSTOM, cx + (if (n == 1) 0f else r(-0.3f, 0.3f) * rect.width()), rect.top + rect.height() * 0.25f,
+                    r(-20f, 20f) * dp * sp, -r(130f, 210f) * dp * sp, 0f, size * r(0.85f, 1.1f), col,
+                    now + delay, (850 / sp).toLong(), rot0 = rot0, vrot = spinV, sway = r(3f, 6f) * dp, phase = r(0f, 6f))
+            }
+            particles.add(p.copyWith(e.shapeName, bmp))
+        }
+        while (particles.size > MAX_PARTICLES) particles.removeAt(0)
+        while (bounces.size > 10) bounces.removeAt(0)
+    }
+
+    private fun P.copyWith(name: String, bmp: android.graphics.Bitmap?) = P(
+        shape, x0, y0, vx, vy, gravity, size, color, start, life, rot0, vrot, sway, phase, text, false,
+        shapeName = name, bmp = bmp, grow = grow,
+    )
+
+    private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    private fun custom(c: Canvas, p: P, prog: Float, alpha: Int) {
+        val s = p.size * if (p.grow) 0.4f + 1.0f * prog else 1f + 0.2f * prog
+        val b = p.bmp
+        if (b != null && b.width > 0) {
+            val h = s * b.height / b.width
+            bmpPaint.alpha = alpha
+            c.drawBitmap(b, null, RectF(-s, -h, s, h), bmpPaint)
+        } else {
+            DecalShapes.draw(c, p.shapeName, RectF(-s, -s, s, s), p.color, alpha / 255f)
+        }
+    }
+
     /** 還有動畫在跑嗎（有的話畫面要繼續更新） */
     fun active(now: Long): Boolean {
         particles.removeAll { now - it.start > it.life }
@@ -208,6 +278,7 @@ class PressEffects(private val dp: Float) {
             when (p.shape) {
                 Shape.RING -> ring(c, p, prog, alpha)
                 Shape.BUBBLE -> bubble(c, p, prog, alpha)
+                Shape.CUSTOM -> custom(c, p, prog, alpha)
                 else -> {
                     if (p.outline) shape(c, p, t, prog, outlinePaint(alpha))
                     fill.color = p.color
@@ -243,7 +314,7 @@ class PressEffects(private val dp: Float) {
                 c.drawText(p.text, 0f, s * 0.35f, textPaint)
             }
             Shape.DOT -> c.drawCircle(0f, 0f, s, pt)
-            Shape.RING, Shape.BUBBLE -> Unit
+            Shape.RING, Shape.BUBBLE, Shape.CUSTOM -> Unit
         }
     }
 

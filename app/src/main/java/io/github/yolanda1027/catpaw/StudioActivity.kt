@@ -44,6 +44,8 @@ class StudioActivity : Activity() {
     private var decalSel: String? = null
     /** 從相簿選圖片時，要貼到哪 */
     private var pendingTarget: String? = null
+    /** 正在調按鍵動畫：null = 沒有、GLOBAL = 全部按鍵、KEY = 選到的鍵（或那一類） */
+    private var animMode: String? = null
 
     private val dp get() = resources.displayMetrics.density
     private fun px(v: Float) = (v * dp).toInt()
@@ -77,6 +79,7 @@ class StudioActivity : Activity() {
                 selected = key
                 bgSelected = false
                 decalSel = null
+                if (animMode == GLOBAL) animMode = null
                 refresh()
             }
             onDecalPicked = { d -> selectDecal(d) }
@@ -120,6 +123,7 @@ class StudioActivity : Activity() {
             corner("← 整個鍵盤", Gravity.TOP or Gravity.START) {
                 selected = null
                 decalSel = null
+                animMode = null
                 refresh()
             }
             corner("＋ 加圖案", Gravity.BOTTOM or Gravity.END) {
@@ -158,6 +162,7 @@ class StudioActivity : Activity() {
         tabEnglish.alpha = if (en) 1f else 0.5f
         selected = null
         groupScope = false
+        animMode = null
         bgSelected = false
         decalSel = null
         refresh()
@@ -182,11 +187,13 @@ class StudioActivity : Activity() {
     private fun refresh() {
         panel.removeAllViews()
         // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
-        val zoomKey = selected?.takeIf { !bgSelected && !groupScope }
+        val zoomKey = selected?.takeIf { !bgSelected && !groupScope && animMode != GLOBAL }
         zoomBox.visibility = if (zoomKey != null) View.VISIBLE else View.GONE
         zoom.key = zoomKey
         zoom.selectedId = decalSel
         kv.decalEditId = decalSel
+        if (animMode == GLOBAL || (animMode == KEY && selected != null)) { animPanel(); return }
+        animMode = null
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
         if (bgSelected) { bgPanel(); return }
@@ -196,6 +203,7 @@ class StudioActivity : Activity() {
             text("👆 點一下上面鍵盤的任何一顆按鍵，就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
             text("改好會直接套用到鍵盤上。想換整體主題、字體，到「貓爪鍵盤」設定的外觀頁。", 13f, dim = true)
             button("🖼️ 在鍵盤背景貼圖案") { bgSelected = true; refresh() }
+            button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             if (styles.map.isNotEmpty()) {
                 text("目前有 ${styles.map.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
                 clearAllButton()
@@ -265,6 +273,11 @@ class StudioActivity : Activity() {
 
         section("這顆鍵上的圖案")
         decalList(selId)
+
+        section("按鍵動畫")
+        val own = styles.map[currentId()]?.effect
+        text("目前：" + (own?.let { effectName(it) } ?: "跟全部按鍵一樣"), 14f, dim = true)
+        button("✨ 設定${if (groupScope) group.title else "這顆鍵"}的動畫") { animMode = KEY; refresh() }
 
         clearAllButton()
     }
@@ -387,6 +400,14 @@ class StudioActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_EFFECT_IMAGE) {
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) return
+            val name = readImage(uri) ?: return
+            setCustom(currentCustom().copy(particle = Decal.FILE + name))
+            Decals.cleanup(this, decals)
+            return
+        }
         if (requestCode != REQ_IMAGE) return
         val target = pendingTarget
         pendingTarget = null
@@ -487,7 +508,7 @@ class StudioActivity : Activity() {
         saveDecals(list)
     }
 
-    private fun slider(label: String, value: Int, min: Int, max: Int, fmt: (Int) -> String, onChange: (Int) -> Unit) {
+    private fun slider(label: String, value: Int, min: Int, max: Int, fmt: (Int) -> String, onDone: (() -> Unit)? = null, onChange: (Int) -> Unit) {
         val t = text("$label：${fmt(value)}", 15f)
         t.setPadding(0, px(10f), 0, 0)
         panel.addView(SeekBar(this).apply {
@@ -500,7 +521,7 @@ class StudioActivity : Activity() {
                     onChange(p + min)
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) { onDone?.invoke() }
             })
         })
     }
@@ -519,8 +540,201 @@ class StudioActivity : Activity() {
         }
     }
 
+    private fun readImage(uri: android.net.Uri): String? {
+        val name = try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = input.readBytes()
+                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes)
+            }
+        } catch (_: Exception) { null }
+        if (name == null) android.widget.Toast.makeText(this, "這個檔案讀不出來，換一張圖試試", android.widget.Toast.LENGTH_LONG).show()
+        return name
+    }
+
+    // ---------- 按鍵動畫 ----------
+
+    private fun effectName(e: KeyEffect) = PressEffects.ALL.firstOrNull { it.first == e.kind }?.second?.substringBefore("（") ?: e.kind
+
+    /** 正在調的那一份動畫設定（null = 單顆鍵跟全部按鍵一樣） */
+    private fun currentEffect(): KeyEffect? =
+        if (animMode == GLOBAL) KeyEffect(prefs.pressEffect, prefs.customEffect)
+        else styles.map[currentId()]?.effect
+
+    private fun currentCustom(): CustomEffect = currentEffect()?.custom ?: prefs.customEffect
+
+    private fun setEffect(e: KeyEffect?) {
+        if (animMode == GLOBAL) {
+            if (e != null) {
+                prefs.pressEffect = e.kind
+                e.custom?.let { prefs.customEffect = it }
+            }
+            kv.reloadPrefs()
+            refresh()
+        } else {
+            update({ it.copy(effect = e) })
+        }
+        playPreview()
+    }
+
+    /** 自訂動畫改了一個地方：存起來（rebuild = 要不要重畫面板） */
+    private fun setCustom(c: CustomEffect, rebuild: Boolean = true) {
+        if (animMode == GLOBAL) {
+            prefs.pressEffect = "custom"
+            prefs.customEffect = c
+            kv.reloadPrefs()
+            if (rebuild) refresh()
+        } else {
+            update({ it.copy(effect = KeyEffect("custom", c)) }, rebuild)
+        }
+    }
+
+    /** 在要試的那顆鍵上放一次動畫 */
+    private fun playPreview() {
+        if (animMode == GLOBAL) {
+            // 全部按鍵：在中間附近的鍵放（用全部按鍵共用的那一種，就算那顆鍵有自己的動畫）
+            val key = kv.rows.getOrNull(1)?.getOrNull(4) ?: return
+            kv.previewEffect(key, KeyEffect(prefs.pressEffect, prefs.customEffect))
+        } else {
+            selected?.let { kv.previewEffect(it) }
+        }
+        zoom.invalidate()
+    }
+
+    private fun animPanel() {
+        val key = selected
+        val global = animMode == GLOBAL
+        if (global) kv.editHighlight = null
+        val who = when {
+            global -> "全部按鍵"
+            groupScope && key != null -> KeyStyles.groupOf(key).title
+            key != null -> KeyStyles.nameOf(key)
+            else -> ""
+        }
+        text("按鍵動畫：$who", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        if (!global) text("單獨設定的鍵會用自己的動畫，其他鍵照「全部按鍵」的設定。", 13f, dim = true)
+        button("▶ 試按看看") { playPreview() }
+
+        val cur = currentEffect()
+        val options = (if (global) emptyList() else listOf("same" to "跟全部按鍵一樣")) + PressEffects.ALL
+        val selKind = cur?.kind ?: "same"
+        val rg = RadioGroup(this)
+        for ((id, label) in options) {
+            rg.addView(RadioButton(this).apply {
+                this.id = View.generateViewId()
+                text = label
+                tag = id
+                isChecked = id == selKind
+            })
+        }
+        rg.setOnCheckedChangeListener { g, checked ->
+            val kind = g.findViewById<View>(checked).tag as String
+            setEffect(when (kind) {
+                "same" -> null
+                "custom" -> KeyEffect("custom", cur?.custom ?: prefs.customEffect)
+                else -> KeyEffect(kind)
+            })
+        }
+
+        if (cur?.kind == "custom") customEditor(cur.custom ?: CustomEffect())
+        section("選一種動畫")
+        panel.addView(rg)
+        button(if (global) "← 回去" else "← 回到$who") { animMode = null; refresh() }
+    }
+
+    /** 自訂動畫的各種調整 */
+    private fun customEditor(c: CustomEffect) {
+        section("🎨 自訂動畫")
+
+        // 動作
+        text("怎麼動", 15f).setPadding(0, px(6f), 0, px(2f))
+        chipRow(CustomEffect.MOTIONS.map { it.second }, CustomEffect.MOTIONS.indexOfFirst { it.first == c.motion }) { i ->
+            setCustom(c.copy(motion = CustomEffect.MOTIONS[i].first)); playPreview()
+        }
+
+        // 飛出來的東西
+        text("飛出來的東西", 15f).setPadding(0, px(12f), 0, px(2f))
+        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val thumbs = Decals.SHAPES.map { Decal.SHAPE + it.first } + listOfNotNull(c.particle.takeIf { c.isImage })
+        val bmps = if (c.isImage) Decals.bitmaps(this, listOf(Decal("", "", c.particle))) else emptyMap()
+        for (img in thumbs) {
+            val d = Decal("", "", img, color = c.color)
+            strip.addView(DecalThumb(this, d, bmps[d.fileName]).apply {
+                bgColor = if (img == c.particle) 0x55FF8FA9 else 0x14888888
+                setOnClickListener { setCustom(c.copy(particle = img)); playPreview() }
+            }, LinearLayout.LayoutParams(px(52f), px(52f)).apply { marginEnd = px(6f) })
+        }
+        strip.addView(Button(this).apply {
+            text = "📷 選圖片"
+            isAllCaps = false
+            setOnClickListener {
+                val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(i, REQ_EFFECT_IMAGE)
+            }
+        })
+        panel.addView(android.widget.HorizontalScrollView(this).apply { addView(strip) })
+
+        // 顏色（自己的圖不用顏色）
+        if (!c.isImage) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, px(10f), 0, px(4f))
+            }
+            row.addView(TextView(this).apply { text = "顏色"; textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(CheckBox(this).apply {
+                text = "彩虹 🌈"
+                isChecked = c.rainbow
+                setOnCheckedChangeListener { _, on -> setCustom(c.copy(rainbow = on)); playPreview() }
+            })
+            row.addView(View(this).apply {
+                background = GradientDrawable().apply { cornerRadius = 10 * dp; setColor(c.color); setStroke(px(1.5f), 0x33000000) }
+                alpha = if (c.rainbow) 0.35f else 1f
+                setOnClickListener { ColorDialog.show(this@StudioActivity, "動畫顏色", c.color) { col -> setCustom(c.copy(color = col, rainbow = false)); playPreview() } }
+            }, LinearLayout.LayoutParams(px(72f), px(40f)).apply { marginStart = px(8f) })
+            panel.addView(row)
+        }
+
+        // 數量、大小、速度：拖的時候先存，放開才試播
+        fun live(f: (CustomEffect) -> CustomEffect) = setCustom(f(currentCustom()), rebuild = false)
+        slider("數量", c.count, 1, 15, { "$it 個" }, onDone = ::playPreview) { v -> live { it.copy(count = v) } }
+        slider("大小", c.size.toInt(), 4, 40, { "$it" }, onDone = ::playPreview) { v -> live { it.copy(size = v.toFloat()) } }
+        slider("速度", (c.speed * 10).toInt(), 4, 25, { String.format("%.1f 倍", it / 10f) }, onDone = ::playPreview) { v -> live { it.copy(speed = v / 10f) } }
+
+        panel.addView(CheckBox(this).apply {
+            text = "飛的時候會旋轉"
+            isChecked = c.spin
+            setOnCheckedChangeListener { _, on -> setCustom(c.copy(spin = on)); playPreview() }
+        })
+        panel.addView(CheckBox(this).apply {
+            text = "按鍵也彈一下"
+            isChecked = c.bounce
+            setOnCheckedChangeListener { _, on -> setCustom(c.copy(bounce = on)); playPreview() }
+        })
+    }
+
+    /** 一排可以選一個的按鈕（選到的比較亮） */
+    private fun chipRow(labels: List<String>, selected: Int, onPick: (Int) -> Unit) {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        labels.forEachIndexed { i, l ->
+            row.addView(Button(this).apply {
+                text = (if (i == selected) "✓ " else "") + l
+                isAllCaps = false
+                alpha = if (i == selected) 1f else 0.55f
+                setOnClickListener { onPick(i) }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = px(6f) })
+        }
+        panel.addView(android.widget.HorizontalScrollView(this).apply { addView(row) })
+    }
+
     companion object {
         private const val REQ_IMAGE = 500
+        private const val REQ_EFFECT_IMAGE = 501
+        private const val GLOBAL = "global"
+        private const val KEY = "key"
     }
 
     private fun clearAllButton() {

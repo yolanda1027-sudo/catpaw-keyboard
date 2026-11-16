@@ -200,6 +200,8 @@ class CatKeyboardView(
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context)
         keyStyles = KeyStyles.load(prefs)
+        globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
+        effectBitmaps.clear()
         decals = Decals.load(prefs)
         decalBitmaps = Decals.bitmaps(context, decals, decalBitmaps)
         nativeCache.clear()
@@ -364,6 +366,50 @@ class CatKeyboardView(
         for (d in decals) if (d.target == id) Decals.draw(c, d, kr.rect, kr.rect.height(), decalBitmaps[d.fileName])
     }
 
+    // ---------- 按鍵動畫 ----------
+
+    /** 全部按鍵共用的動畫（設定頁選的）；每次按都讀一次太慢，換設定時才重讀 */
+    private var globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
+
+    /** 這顆鍵要用的動畫：主題工作室有單獨設定就用它，不然用全部按鍵共用的 */
+    fun effectFor(key: Key): KeyEffect = keyStyles.resolve(key)?.effect ?: globalEffect
+
+    private fun playEffect(kr: KeyRect) {
+        val e = effectFor(kr.key)
+        if (e.kind == "custom") {
+            val c = e.custom ?: CustomEffect()
+            val bmp = if (c.isImage) effectBitmap(c.fileName) else null
+            effects.addCustom(c, kr.rect, bmp)
+        } else {
+            val bg = theme.bg
+            val dark = (android.graphics.Color.red(bg) * 299 + android.graphics.Color.green(bg) * 587 + android.graphics.Color.blue(bg) * 114) / 1000 < 128
+            effects.add(e.kind, kr.rect, theme.popupSelBg, dark)
+        }
+        invalidate()
+    }
+
+    private val effectBitmaps = HashMap<String, android.graphics.Bitmap?>()
+    private fun effectBitmap(name: String): android.graphics.Bitmap? = effectBitmaps.getOrPut(name) {
+        decalBitmaps[name] ?: java.io.File(Decals.dir(context), name).takeIf { Decals.safeName(name) && it.exists() }
+            ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+    }
+
+    /** 主題工作室：「試按看看」，在這顆鍵上放一次動畫（effect = 指定要播哪一種，null = 照目前設定） */
+    fun previewEffect(key: Key, effect: KeyEffect? = null) {
+        val kr = keyRects.firstOrNull { it.key == key } ?: return
+        if (effect == null) { playEffect(kr); return }
+        val saved = globalEffect
+        val savedStyles = keyStyles
+        keyStyles = KeyStyles.EMPTY
+        globalEffect = effect
+        playEffect(kr)
+        globalEffect = saved
+        keyStyles = savedStyles
+    }
+
+    /** 放大畫面用：現在還有動畫在跑嗎 */
+    fun effectsActive(): Boolean = effects.active(android.os.SystemClock.uptimeMillis())
+
     // 主題工作室的放大編輯（KeyZoomView）借這幾個來畫
 
     fun keyRectOf(key: Key): RectF? = keyRects.firstOrNull { it.key == key }?.rect
@@ -381,6 +427,8 @@ class CatKeyboardView(
         c.translate(-kr.rect.left, -kr.rect.top)
         drawOneKey(c, kr)
         drawKeyDecals(c, kr)
+        // 動畫也一起放大畫（在這顆鍵上試按的才會出現在這裡）
+        effects.draw(c, android.os.SystemClock.uptimeMillis())
         c.restore()
     }
 
@@ -1082,9 +1130,7 @@ class CatKeyboardView(
         longFired = false
         previewLabel = if (kr.key.style == Style.CHAR) labelFor(kr.key) else null
         haptics.perform(this, prefs)
-        val bg = theme.bg
-        val dark = (android.graphics.Color.red(bg) * 299 + android.graphics.Color.green(bg) * 587 + android.graphics.Color.blue(bg) * 114) / 1000 < 128
-        effects.add(prefs.pressEffect, kr.rect, theme.popupSelBg, dark)
+        playEffect(kr)
         when {
             kr.key.act == Act.BACKSPACE -> handler.postDelayed(repeatRunnable, 400)
             kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP ->
