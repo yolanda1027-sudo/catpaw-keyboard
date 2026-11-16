@@ -195,21 +195,29 @@ class SettingsActivity : Activity() {
 
     // ---------- 分頁 ----------
 
-    /** 設定的分類：代號、標題、說明、要不要在上面放預覽鍵盤 */
-    private class PageInfo(val id: String, val title: String, val desc: String, val preview: Boolean)
+    /**
+     * 設定的分類：代號、標題、說明、要不要在上面放預覽鍵盤、
+     * 按返回要回到哪一頁、要不要列在首頁
+     */
+    private class PageInfo(
+        val id: String, val title: String, val desc: String, val preview: Boolean,
+        val parent: String = "home", val listed: Boolean = true,
+    )
 
     private val pages = listOf(
         PageInfo("haptic", "🎵 震動手感", "震動方式、強度、長度", false),
-        PageInfo("theme", "🎨 主題與外觀", "主題、按鍵高度、長按時間", true),
-        PageInfo("font", "🔤 字體", "按鍵字體、選字字體、上傳自己的字體", true),
+        PageInfo("look", "🎨 外觀", "主題、按鍵大小、字體、功能鍵貼圖", true),
         PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true),
-        PageInfo("sticker", "🖼 功能鍵貼圖", "在 Enter、空白鍵貼自己的圖", true),
-        PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true),
         PageInfo("candidate", "📝 選字與記憶", "組字方式、清除學習紀錄", false),
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
+        // 從「外觀」的主題清單跳進來，不列在首頁
+        PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true, parent = "look", listed = false),
     )
+
+    private fun parentOf(id: String) = pages.firstOrNull { it.id == id }?.parent ?: "home"
+    private var scroll: ScrollView? = null
 
     private var page = "home"
 
@@ -229,12 +237,12 @@ class SettingsActivity : Activity() {
 
     @Deprecated("Activity 的返回鍵處理")
     override fun onBackPressed() {
-        if (page != "home") showPage("home")
+        if (page != "home") showPage(parentOf(page))
         else @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) { showPage("home"); return true }
+        if (item.itemId == android.R.id.home) { showPage(parentOf(page)); return true }
         return super.onOptionsItemSelected(item)
     }
 
@@ -260,17 +268,16 @@ class SettingsActivity : Activity() {
             val p = (20 * dp).toInt()
             setPadding(p, ((if (info?.preview == true) 8 else 20) * dp).toInt(), p, p * 3)
         }
-        outer.addView(ScrollView(this).apply { addView(root) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val sv = ScrollView(this).apply { addView(root) }
+        scroll = sv
+        outer.addView(sv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(outer)
         actionBar?.title = info?.title?.substringAfter(' ') ?: "貓爪鍵盤"
         actionBar?.setDisplayHomeAsUpEnabled(info != null)
         when (id) {
             "haptic" -> pageHaptic()
-            "theme" -> pageTheme()
-            "font" -> pageFont()
+            "look" -> pageLook()
             "effect" -> pageEffect()
-            "sticker" -> pageSticker()
             "color" -> pageColor()
             "quick" -> pageQuick()
             "candidate" -> pageCandidate()
@@ -301,7 +308,7 @@ class SettingsActivity : Activity() {
         })
 
         section("設定")
-        for (p in pages) menuItem(p)
+        for (p in pages.filter { it.listed }) menuItem(p)
     }
 
     /** 首頁的分類按鈕：標題＋一行說明，點下去進到那一頁 */
@@ -355,18 +362,56 @@ class SettingsActivity : Activity() {
         button("試震一下") { haptics.perform(it, prefs) }
     }
 
+    /** 外觀：主題、按鍵、字體、功能鍵貼圖，最上面有跳轉按鈕 */
+    private fun pageLook() {
+        val anchors = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        root.addView(anchors)
+        val targets = LinkedHashMap<String, View>()
+        fun anchor(name: String) {
+            val v = TextView(this).apply {
+                text = name
+                textSize = 20f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(0, (22 * dp).toInt(), 0, (6 * dp).toInt())
+            }
+            root.addView(v)
+            targets[name] = v
+        }
+        anchor("主題")
+        pageTheme()
+        anchor("字體")
+        pageFont()
+        anchor("功能鍵貼圖")
+        pageSticker()
+        // 跳轉按鈕：點了直接捲到那一段
+        for ((name, v) in targets) {
+            anchors.addView(Button(this).apply {
+                text = name
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                setPadding((12 * dp).toInt(), 0, (12 * dp).toInt(), 0)
+                setOnClickListener { scroll?.smoothScrollTo(0, v.top) }
+            })
+        }
+    }
+
     private fun pageTheme() {
-        subTitle("主題")
         themeGroup = radios(
             listOf(
                 "classic" to "經典深色（Google 注音風）",
                 "stitch" to "粉紅縫線",
                 "catpaw" to "貓爪肉球",
             ) + MacaronTheme.PALETTES.map { it.id to it.title } + MagicTheme.PALETTES.map { it.id to it.title } + listOf(
-                "custom" to "自訂配色（到「自訂配色」頁調顏色）",
+                "custom" to "自訂配色",
             ),
             prefs.theme,
         ) { prefs.theme = it }
+        root.addView(Button(this).apply {
+            text = "🖌 調整自訂配色 ›"
+            isAllCaps = false
+            setOnClickListener { showPage("color") }
+        })
         subTitle("按鍵")
         slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（Google 注音約 45）") { prefs.keyHeightDp = it }
         slider("長按時間", 200, 700, prefs.longPressMs, " 毫秒") { prefs.longPressMs = it }

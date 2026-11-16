@@ -38,7 +38,7 @@ class SettingsScreenTest {
         val a = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
         shot(a, "settings-home")
         Prefs(a).quickBar = true
-        for (p in listOf("quick", "theme", "haptic", "font", "color")) {
+        for (p in listOf("quick", "look", "haptic", "color")) {
             showPage(a, p)
             shot(a, "settings-$p")
         }
