@@ -120,11 +120,30 @@ class SettingsActivity : Activity() {
 
     // ---------- 自訂配色 ----------
 
-    private val palette = listOf(
-        "#FFFFFF", "#FDF0F5", "#FFE4EC", "#F9C9D6", "#F49AB7", "#E0688E",
-        "#FFF3E0", "#FFE0B2", "#FFF9C4", "#E8F5E9", "#C8E6C9", "#E0F7FA",
-        "#B3E5FC", "#E1D5F5", "#C5B3E6", "#9E86C8", "#B59AAB", "#5B4B57",
-        "#3E3A4F", "#273238", "#000000",
+    /** 色票：每一行是一個色系，由淺到深 */
+    private val paletteFamilies = listOf(
+        "粉" to listOf("#FFE4EC", "#F9C9D6", "#F48FB1", "#D8577E"),
+        "橘" to listOf("#FFE8D9", "#FFC9A8", "#FFA06E", "#E07A45"),
+        "黃" to listOf("#FFF7CC", "#FFE98A", "#FFD54F", "#E0B12E"),
+        "綠" to listOf("#E3F5EA", "#B9E4C9", "#7FCFA0", "#3F9E6C"),
+        "藍" to listOf("#E3F0FF", "#B8D6FA", "#7BAAF0", "#3F72C8"),
+        "紫" to listOf("#EEE6FA", "#D5C4F2", "#B39CF0", "#7A5CC8"),
+        "棕" to listOf("#F3E8DC", "#DCC3A8", "#B08B68", "#6B4F3A"),
+        "灰" to listOf("#FFFFFF", "#D9D9DE", "#8E8E99", "#2E2E38"),
+    )
+
+    /** 整組配色：名稱、背景、按鍵、文字、小字、強調色 */
+    private class ColorPreset(val name: String, val bg: String, val key: String, val text: String, val sub: String, val accent: String)
+
+    private val colorPresets = listOf(
+        ColorPreset("🌸 粉色", "#FFE8EF", "#FFFFFF", "#8C4A5E", "#D08AA0", "#F48FB1"),
+        ColorPreset("🫐 藍色", "#E6F0FF", "#FFFFFF", "#3E5A86", "#8AA6CF", "#7BAAF0"),
+        ColorPreset("🌿 綠色", "#E5F5EC", "#FFFFFF", "#3D6B55", "#84B89D", "#6CC59A"),
+        ColorPreset("💜 紫色", "#EEE7FA", "#FFFFFF", "#5C4A85", "#A08CC8", "#B39CF0"),
+        ColorPreset("🍑 蜜桃", "#FFEDE2", "#FFFFFF", "#8A5038", "#D2957A", "#FFA987"),
+        ColorPreset("🍋 檸檬", "#FFF8D6", "#FFFFFF", "#7A6420", "#C2A64A", "#F5CF4A"),
+        ColorPreset("🍫 奶茶", "#F1E6DA", "#FFFAF3", "#6B4F3A", "#B0937A", "#C9A27E"),
+        ColorPreset("🌙 夜空", "#23243A", "#34365A", "#E8E6FF", "#9A98C8", "#A58CFF"),
     )
 
     private fun swatch(color: Int, sizeDp: Int) = View(this).apply {
@@ -138,39 +157,17 @@ class SettingsActivity : Activity() {
         }
     }
 
-    private fun colorRow(label: String, get: () -> Int, set: (Int) -> Unit) {
-        val head = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, (10 * dp).toInt(), 0, 0)
+    /** 一個可以調的顏色（背景、按鍵…）：目前的顏色、名稱、選色按鈕；點這一列＝選它當色票要套用的對象 */
+    private class ColorSlot(val label: String, val get: () -> Int, val set: (Int) -> Unit) {
+        lateinit var row: LinearLayout
+        lateinit var chip: View
+    }
+
+    private fun switchToCustom() {
+        if (prefs.theme != "custom") {
+            prefs.theme = "custom"
+            themeGroup?.findViewWithTag<RadioButton>("custom")?.isChecked = true
         }
-        val current = swatch(get(), 22)
-        head.addView(current)
-        head.addView(TextView(this).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        fun apply(c: Int) {
-            set(c)
-            (current.background as android.graphics.drawable.GradientDrawable).setColor(c)
-            if (prefs.theme != "custom") {
-                prefs.theme = "custom"
-                themeGroup?.findViewWithTag<RadioButton>("custom")?.isChecked = true
-            }
-        }
-        current.setOnClickListener { showColorPicker(label, get()) { apply(it) } }
-        head.addView(Button(this).apply {
-            text = "選色"
-            isAllCaps = false
-            setOnClickListener { showColorPicker(label, get()) { apply(it) } }
-        })
-        root.addView(head)
-        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (hex in palette) {
-            val c = android.graphics.Color.parseColor(hex)
-            strip.addView(swatch(c, 34).apply { setOnClickListener { apply(c) } })
-        }
-        root.addView(android.widget.HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(strip)
-        })
     }
 
     /** 選色器視窗：大色塊＋彩虹條、新舊顏色對照、色碼欄 */
@@ -533,12 +530,119 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageColor() {
-        note("點下面的色塊可以快速換色；按「選色」（或點左邊的小圓）會打開選色器，可以拖著選任何顏色，也能輸入色碼。換了顏色會自動切成「自訂配色」主題。")
-        colorRow("背景", { prefs.customBg }) { prefs.customBg = it }
-        colorRow("按鍵", { prefs.customKey }) { prefs.customKey = it }
-        colorRow("文字", { prefs.customText }) { prefs.customText = it }
-        colorRow("小字（數字、英文）", { prefs.customSub }) { prefs.customSub = it }
-        colorRow("強調色（Enter、選取）", { prefs.customAccent }) { prefs.customAccent = it }
+        val slots = listOf(
+            ColorSlot("背景", { prefs.customBg }) { prefs.customBg = it },
+            ColorSlot("按鍵", { prefs.customKey }) { prefs.customKey = it },
+            ColorSlot("文字", { prefs.customText }) { prefs.customText = it },
+            ColorSlot("小字（數字、英文）", { prefs.customSub }) { prefs.customSub = it },
+            ColorSlot("強調色（Enter、選取）", { prefs.customAccent }) { prefs.customAccent = it },
+        )
+        var selected = slots[0]
+
+        fun refreshChips() {
+            for (sl in slots) {
+                (sl.chip.background as android.graphics.drawable.GradientDrawable).setColor(sl.get())
+                sl.row.background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = 12 * dp
+                    setColor(if (sl === selected) 0x22F48FB1 else 0x00000000)
+                    if (sl === selected) setStroke((1.5f * dp).toInt(), 0x99F48FB1.toInt())
+                }
+            }
+        }
+
+        fun applyTo(sl: ColorSlot, c: Int) {
+            sl.set(c)
+            switchToCustom()
+            refreshChips()
+        }
+
+        // 快速套用整組
+        subTitle("快速套用整組配色")
+        var line: LinearLayout? = null
+        colorPresets.forEachIndexed { i, p ->
+            if (i % 4 == 0) {
+                line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                root.addView(line)
+            }
+            line!!.addView(TextView(this).apply {
+                text = p.name
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(android.graphics.Color.parseColor(p.text))
+                val pad = (8 * dp).toInt()
+                setPadding(pad / 2, pad, pad / 2, pad)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = 12 * dp
+                    setColor(android.graphics.Color.parseColor(p.bg))
+                    setStroke((2 * dp).toInt(), android.graphics.Color.parseColor(p.accent))
+                }
+                setOnClickListener {
+                    prefs.customBg = android.graphics.Color.parseColor(p.bg)
+                    prefs.customKey = android.graphics.Color.parseColor(p.key)
+                    prefs.customText = android.graphics.Color.parseColor(p.text)
+                    prefs.customSub = android.graphics.Color.parseColor(p.sub)
+                    prefs.customAccent = android.graphics.Color.parseColor(p.accent)
+                    switchToCustom()
+                    refreshChips()
+                }
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins((3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt())
+            })
+        }
+
+        // 個別顏色
+        subTitle("調整個別顏色")
+        note("先點要改的部分，再點下面的色票；或按「選色」自由選。")
+        for (sl in slots) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val pad = (6 * dp).toInt()
+                setPadding(pad, pad / 2, pad, pad / 2)
+                isClickable = true
+                setOnClickListener { selected = sl; refreshChips() }
+            }
+            val chip = swatch(sl.get(), 26)
+            chip.setOnClickListener { selected = sl; refreshChips(); showColorPicker(sl.label, sl.get()) { applyTo(sl, it) } }
+            row.addView(chip)
+            row.addView(TextView(this).apply {
+                text = sl.label
+                textSize = 15f
+                setPadding((6 * dp).toInt(), 0, 0, 0)
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(Button(this).apply {
+                text = "選色"
+                isAllCaps = false
+                setOnClickListener { selected = sl; refreshChips(); showColorPicker(sl.label, sl.get()) { applyTo(sl, it) } }
+            })
+            sl.row = row
+            sl.chip = chip
+            root.addView(row)
+        }
+
+        // 色票表：一直行一個色系，由上到下淺到深
+        subTitle("色票")
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((name, _) in paletteFamilies) {
+            header.addView(TextView(this).apply {
+                text = name
+                textSize = 13f
+                gravity = Gravity.CENTER
+                alpha = 0.7f
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        root.addView(header)
+        for (shade in 0 until 4) {
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for ((_, colors) in paletteFamilies) {
+                val c = android.graphics.Color.parseColor(colors[shade])
+                val cell = LinearLayout(this).apply { gravity = Gravity.CENTER }
+                cell.addView(swatch(c, 34).apply { setOnClickListener { applyTo(selected, c) } })
+                r.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+            root.addView(r)
+        }
+        refreshChips()
     }
 
     private fun pageCandidate() {

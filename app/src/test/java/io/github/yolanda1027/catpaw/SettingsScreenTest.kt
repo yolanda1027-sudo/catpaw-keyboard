@@ -42,6 +42,12 @@ class SettingsScreenTest {
             showPage(a, p)
             shot(a, "settings-$p")
         }
+        // 自訂配色往下捲，看色票表
+        showPage(a, "color")
+        shot(a, "settings-color")
+        val f = SettingsActivity::class.java.getDeclaredField("scroll"); f.isAccessible = true
+        (f.get(a) as android.widget.ScrollView).scrollTo(0, 5000)
+        shot(a, "settings-color-scrolled")
     }
 
     @Test fun colorPicker() {
