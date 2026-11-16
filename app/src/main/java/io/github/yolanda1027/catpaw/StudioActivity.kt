@@ -148,10 +148,11 @@ class StudioActivity : Activity() {
         }
 
         val cur = styles.map[currentId()] ?: KeyStyle()
-        val theme = Themes.byName(prefs.theme, dp, prefs)
-        colorRow("底色", cur.bg, theme.bg.let { if (it == Color.TRANSPARENT) Color.WHITE else theme.pressedOf(it) }) { v -> update({ it.copy(bg = v) }) }
-        colorRow("文字顏色", cur.text, theme.text) { v -> update({ it.copy(text = v) }) }
-        colorRow("外框顏色", cur.border, Color.parseColor("#FF8FA9")) { v -> update({ it.copy(border = v) }) }
+        // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
+        val now = kv.sampleColors(key)
+        colorRow("底色", cur.bg, now?.bg ?: Color.WHITE) { v -> update({ it.copy(bg = v) }) }
+        colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
+        colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY) { v -> update({ it.copy(border = v) }) }
 
         // 圓角
         val radius = ((cur.radius ?: 0.3f) * 100).toInt()
@@ -203,28 +204,37 @@ class StudioActivity : Activity() {
         }
     }
 
-    /** 一列：名稱、色塊（點了選顏色）、還原 */
-    private fun colorRow(label: String, value: Int?, suggest: Int, onPick: (Int?) -> Unit) {
+    /**
+     * 一列：名稱（下面小字寫是不是自訂的）、色塊（顯示現在的顏色，點了選顏色）、還原
+     * @param now 沒自訂時，這顆鍵現在畫面上的顏色
+     */
+    private fun colorRow(label: String, value: Int?, now: Int, onPick: (Int?) -> Unit) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, px(6f), 0, px(6f))
         }
-        row.addView(TextView(this).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        val chip = TextView(this).apply {
-            gravity = Gravity.CENTER
+        val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        names.addView(TextView(this).apply { text = label; textSize = 15f })
+        names.addView(TextView(this).apply {
+            text = if (value == null) "主題原本的顏色" else "已自訂"
             textSize = 12f
+            alpha = 0.65f
+        })
+        row.addView(names, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val shown = value ?: now
+        val chip = View(this).apply {
             background = GradientDrawable().apply {
                 cornerRadius = 10 * dp
-                setColor(value ?: Color.TRANSPARENT)
-                setStroke(px(1.5f), if (value == null) 0x55888888 else 0x33000000)
+                setColor(shown)
+                setStroke(px(1.5f), 0x33000000)
             }
-            text = if (value == null) "照主題" else ""
-            setOnClickListener { ColorDialog.show(this@StudioActivity, label, value ?: suggest) { onPick(it) } }
+            contentDescription = "$label：" + String.format("#%06X", 0xFFFFFF and shown)
+            setOnClickListener { ColorDialog.show(this@StudioActivity, label, shown) { onPick(it) } }
         }
         row.addView(chip, LinearLayout.LayoutParams(px(72f), px(40f)))
         val reset = Button(this).apply {
-            text = "還原"
+            text = "改回原色"
             isAllCaps = false
             visibility = if (value == null) View.INVISIBLE else View.VISIBLE
             setOnClickListener { onPick(null) }

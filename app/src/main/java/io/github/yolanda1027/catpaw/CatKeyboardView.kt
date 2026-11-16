@@ -286,11 +286,11 @@ class CatKeyboardView(
     }
 
     /** 畫一顆鍵：主題原本的樣子，再套上功能鍵貼圖、主題工作室的單鍵樣式 */
-    private fun drawOneKey(c: Canvas, kr: KeyRect) {
+    private fun drawOneKey(c: Canvas, kr: KeyRect, content: Boolean = true) {
         val isPressed = kr === pressed
         val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
         val st = keyStyles.resolve(kr.key)
-        val split = sticker != null || (st != null && (st.bg != null || st.text != null || st.hideLabel == true))
+        val split = !content || sticker != null || (st != null && (st.bg != null || st.text != null || st.hideLabel == true))
         if (!split) {
             theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), isPressed, shiftState, rowH)
         } else {
@@ -299,6 +299,7 @@ class CatKeyboardView(
             else theme.drawKey(c, kr.rect, kr.key.copy(label = "", icon = null, sub = null), "", isPressed, shiftState, rowH)
             // 內容：貼圖、或用自訂顏色畫字
             when {
+                !content -> Unit
                 sticker != null -> Stickers.draw(c, sticker, kr.rect, isPressed, 5 * dp)
                 st?.hideLabel == true -> Unit
                 else -> {
@@ -312,6 +313,76 @@ class CatKeyboardView(
     }
 
     // ---------- 主題工作室：點按鍵來編輯 ----------
+
+    /** 這顆鍵「現在看起來」的顏色（主題工作室打開選色器時當起點） */
+    class KeyColors(val bg: Int, val text: Int, val border: Int)
+
+    /**
+     * 直接把這顆鍵畫在一張小圖上量顏色，所以不管哪個主題（羊皮紙、肉球…）量到的都是畫面上真正的顏色：
+     * - 底色：按鍵中間最常出現的顏色（先畫一次不含字的）
+     * - 文字：有字和沒字兩張圖差最多的那一點
+     * - 外框：按鍵邊緣的顏色
+     */
+    fun sampleColors(key: Key): KeyColors? {
+        val kr = keyRects.firstOrNull { it.key == key } ?: return null
+        val r = kr.rect
+        val w = r.width().toInt()
+        val h = r.height().toInt()
+        if (w <= 0 || h <= 0) return null
+        theme.fonts = fontSet
+        val base = theme.bg or (0xFF shl 24)
+        fun render(content: Boolean): android.graphics.Bitmap {
+            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            c.drawColor(base)
+            c.translate(-r.left, -r.top)
+            drawOneKey(c, kr, content)
+            return bmp
+        }
+        val body = render(false)
+        val full = render(true)
+        fun opaque(c: Int) = c or (0xFF shl 24)
+
+        // 底色：中間區域分成小格子統計，取最多的那一組平均
+        val count = HashMap<Int, IntArray>() // 格子 → [數量, r 總和, g 總和, b 總和]
+        for (y in (h * 0.2f).toInt() until (h * 0.8f).toInt()) for (x in (w * 0.2f).toInt() until (w * 0.8f).toInt()) {
+            val p = body.getPixel(x, y)
+            val k = (android.graphics.Color.red(p) shr 4 shl 8) or (android.graphics.Color.green(p) shr 4 shl 4) or (android.graphics.Color.blue(p) shr 4)
+            val a = count.getOrPut(k) { IntArray(4) }
+            a[0]++; a[1] += android.graphics.Color.red(p); a[2] += android.graphics.Color.green(p); a[3] += android.graphics.Color.blue(p)
+        }
+        val top = count.values.maxByOrNull { it[0] }
+        val bg = if (top == null) base else android.graphics.Color.rgb(top[1] / top[0], top[2] / top[0], top[3] / top[0])
+
+        // 文字：差最多的那一點（字的正中間）
+        var best = -1
+        var text = theme.text
+        for (y in 0 until h) for (x in 0 until w) {
+            val a = full.getPixel(x, y)
+            val b = body.getPixel(x, y)
+            val d = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
+                kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
+                kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+            if (d > best) { best = d; text = a }
+        }
+        if (best < 30) text = theme.text // 這顆沒有字（或字被藏起來）
+
+        // 外框：從按鍵左邊中間往內找，第一個跟鍵盤背景不一樣的顏色（按鍵最外圈）
+        fun dist(a: Int, b: Int) = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
+            kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
+            kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+        var border = text // 沒有底框的主題（像經典版）：外框就先用字的顏色
+        for (x in 0 until w / 2) {
+            if (dist(body.getPixel(x, h / 2), base) > 60) {
+                // 往內 1 點，避開邊緣半透明的那一圈
+                border = body.getPixel(minOf(x + 1, w - 1), h / 2)
+                break
+            }
+        }
+        body.recycle()
+        full.recycle()
+        return KeyColors(opaque(bg), opaque(text), opaque(border))
+    }
 
     /** 有設定的話，鍵盤變成「編輯模式」：點按鍵不會打字，而是選到那顆鍵 */
     var editPicker: ((Key) -> Unit)? = null

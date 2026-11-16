@@ -83,6 +83,24 @@ class KeyStylesTest {
         render(kv, "keystyles-butter")
     }
 
+    @Test fun samplesCurrentColors() {
+        val p = Prefs(ctx)
+        p.theme = "classic"
+        val kv = CatKeyboardView(ctx, p, Haptics(ctx))
+        kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val c = kv.sampleColors(b)!!
+        assertEquals(Color.parseColor("#273238"), c.bg)
+        assertEquals(Color.parseColor("#D3D7DA"), c.text)
+        // 自訂過的顏色，量到的就是自訂的顏色
+        KeyStyles.save(p, KeyStyles.EMPTY.with("@zhuyin", KeyStyle(bg = 0xFFFFE08A.toInt(), text = 0xFF6B4F2A.toInt())))
+        kv.reloadPrefs()
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val c2 = kv.sampleColors(b)!!
+        assertEquals(0xFFFFE08A.toInt(), c2.bg)
+        assertEquals(0xFF6B4F2A.toInt(), c2.text)
+    }
+
     @Test fun studioScreen() {
         val p = Prefs(ctx)
         KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = 0xFFFF8FA9.toInt(), radius = 0.6f)))
@@ -94,6 +112,11 @@ class KeyStylesTest {
         render(a.window.decorView, "studio-enter")
         kv.editPicker!!.invoke(b)
         render(a.window.decorView, "studio-zhuyin")
+        // 魔法學院主題：選色器的起點要是羊皮紙的顏色
+        Prefs(ctx).theme = "magic_yellow"
+        kv.reloadPrefs()
+        kv.editPicker!!.invoke(b)
+        render(a.window.decorView, "studio-magic")
         // 桌面圖示
         val d = ctx.getDrawable(R.drawable.ic_studio_fg)!!
         val bmp = Bitmap.createBitmap(432, 432, Bitmap.Config.ARGB_8888)
