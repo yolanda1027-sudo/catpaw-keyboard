@@ -99,6 +99,24 @@ class SettingsActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_EXPORT) {
+            val uri = data?.data
+            val content = pendingExport
+            pendingExport = null
+            if (resultCode != RESULT_OK || uri == null || content == null) return
+            try {
+                contentResolver.openOutputStream(uri, "wt")?.use { it.write(content.toByteArray(Charsets.UTF_8)) }
+                android.widget.Toast.makeText(this, "主題已匯出，可以把檔案傳給別人了", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(this, "存檔失敗：${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        if (requestCode == REQ_IMPORT) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) handleImport(uri)
+            return
+        }
         if (requestCode == REQ_FONT) {
             val uri = data?.data
             if (resultCode != RESULT_OK || uri == null) return
@@ -240,6 +258,8 @@ class SettingsActivity : Activity() {
     companion object {
         private const val REQ_STICKER = 100
         private const val REQ_FONT = 200
+        private const val REQ_EXPORT = 300
+        private const val REQ_IMPORT = 301
     }
     private val dp get() = resources.displayMetrics.density
 
@@ -256,7 +276,7 @@ class SettingsActivity : Activity() {
 
     private val pages = listOf(
         PageInfo("haptic", "🎵 震動手感", "震動方式、強度、長度", false),
-        PageInfo("look", "🎨 外觀", "主題、按鍵大小、字體、功能鍵貼圖", true),
+        PageInfo("look", "🎨 外觀", "主題、按鍵大小、字體、功能鍵貼圖、主題匯入匯出", true),
         PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true),
         PageInfo("candidate", "📝 選字與記憶", "組字方式、清除學習紀錄", false),
@@ -433,6 +453,8 @@ class SettingsActivity : Activity() {
         pageFont()
         anchor("功能鍵貼圖")
         pageSticker()
+        anchor("匯入／匯出")
+        pageShare()
         // 跳轉按鈕：點了直接捲到那一段
         for ((name, v) in targets) {
             anchors.addView(Button(this).apply {
@@ -444,6 +466,84 @@ class SettingsActivity : Activity() {
                 setOnClickListener { scroll?.smoothScrollTo(0, v.top) }
             })
         }
+    }
+
+    // ---------- 主題匯入／匯出 ----------
+
+    /** 匯出時先把內容準備好，等使用者選好存檔位置再寫進去 */
+    private var pendingExport: String? = null
+
+    private fun pageShare() {
+        note("把現在的鍵盤外觀存成一個主題檔（.json），傳給家人朋友，對方匯入就能套用一模一樣的樣子。自己上傳的字體不會放進檔案。")
+        button("📤 匯出目前的主題") { showExportDialog() }
+        button("📥 匯入主題檔") {
+            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*" // 從 LINE 存下來的 .json 常常不會被標成 application/json
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_IMPORT)
+        }
+    }
+
+    private fun showExportDialog() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (20 * dp).toInt()
+            setPadding(p, (8 * dp).toInt(), p, 0)
+        }
+        val name = EditText(this).apply { hint = "主題名稱，例如：奶油黃貓爪"; isSingleLine = true }
+        box.addView(name)
+        box.addView(TextView(this).apply {
+            text = "一定會包含主題和配色，另外要放："
+            setPadding(0, (10 * dp).toInt(), 0, 0)
+        })
+        val checks = ThemeIO.Part.values().associateWith { part ->
+            android.widget.CheckBox(this).apply { text = part.title; isChecked = true }.also { box.addView(it) }
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("匯出主題")
+            .setView(box)
+            .setPositiveButton("下一步：選存檔位置") { _, _ ->
+                val parts = checks.filterValues { it.isChecked }.keys
+                val n = name.text.toString().trim().ifEmpty { "我的貓爪鍵盤" }
+                pendingExport = ThemeIO.export(this, prefs, n, parts)
+                val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_TITLE, "貓爪鍵盤主題_" + n.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".json")
+                }
+                @Suppress("DEPRECATION")
+                startActivityForResult(i, REQ_EXPORT)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun handleImport(uri: android.net.Uri) {
+        val text = try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = input.readBytes()
+                if (bytes.size > ThemeIO.MAX_BYTES) null else String(bytes, Charsets.UTF_8)
+            }
+        } catch (_: Exception) { null }
+        val o = text?.let { ThemeIO.parse(it) }
+        if (o == null) {
+            android.widget.Toast.makeText(this, "這不是貓爪鍵盤的主題檔", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val (name, parts) = ThemeIO.describe(o)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("匯入「$name」？")
+            .setMessage("包含：" + parts.joinToString("、") + "\n\n套用後會取代你目前的這些設定。")
+            .setPositiveButton("套用") { _, _ ->
+                val warnings = ThemeIO.apply(this, prefs, o)
+                showPage("look") // 重新整理畫面，讓選項跟著變
+                val msg = if (warnings.isEmpty()) "已套用「$name」🎉" else "已套用「$name」\n\n" + warnings.joinToString("\n")
+                android.app.AlertDialog.Builder(this).setMessage(msg).setPositiveButton("好", null).show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun pageTheme() {
