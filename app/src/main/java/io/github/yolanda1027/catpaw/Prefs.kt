@@ -101,6 +101,22 @@ class Prefs(context: Context) {
         get() = sp.getString("cand_font", "system") ?: "system"
         set(v) = sp.edit().putString("cand_font", v).apply()
 
+    /** 快捷符號列：開關、內容（用空白分開） */
+    var quickBar: Boolean
+        get() = sp.getBoolean("quick_bar", false)
+        set(v) = sp.edit().putBoolean("quick_bar", v).apply()
+
+    var quickItems: String
+        get() = sp.getString("quick_items", DEFAULT_QUICK) ?: DEFAULT_QUICK
+        set(v) = sp.edit().putString("quick_items", v).apply()
+
+    fun quickList(): List<String> = quickItems.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.take(12)
+
+    companion object {
+        /** ⇤ 跳到最前、⇥ 跳到最後、◀ ▶ 游標左右移一格；其他是要打出的符號 */
+        const val DEFAULT_QUICK = "⇤ () 「」 『』 【】 “” ⇥"
+    }
+
     /** 上次用的是中文還是英文 */
     var chinese: Boolean
         get() = sp.getBoolean("chinese", true)

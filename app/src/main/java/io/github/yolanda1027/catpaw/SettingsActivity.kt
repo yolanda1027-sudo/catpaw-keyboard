@@ -326,6 +326,39 @@ class SettingsActivity : Activity() {
         colorRow("小字（數字、英文）", { prefs.customSub }) { prefs.customSub = it }
         colorRow("強調色（Enter、選取）", { prefs.customAccent }) { prefs.customAccent = it }
 
+        section("快捷符號列")
+        root.addView(Switch(this).apply {
+            text = "在按鍵上面多一排快捷符號"
+            isChecked = prefs.quickBar
+            setOnCheckedChangeListener { _, b -> prefs.quickBar = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("用空白分開，最多 12 個：\n・兩個字（像 () 或 「」）：一次打出一組，游標停在中間；先選取文字再按會把它包起來\n・用 | 標游標位置，例如 **|**\n・⇤ 跳到最前面、⇥ 跳到最後面、◀ ▶ 游標左右移一格")
+        val quickInput = EditText(this).apply {
+            setText(prefs.quickItems)
+            textSize = 18f
+        }
+        root.addView(quickInput)
+        val quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        quickRow.addView(Button(this).apply {
+            text = "儲存"
+            isAllCaps = false
+            setOnClickListener {
+                prefs.quickItems = quickInput.text.toString().trim().ifEmpty { Prefs.DEFAULT_QUICK }
+                quickInput.setText(prefs.quickItems)
+                android.widget.Toast.makeText(this@SettingsActivity, "已儲存", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        })
+        quickRow.addView(Button(this).apply {
+            text = "恢復預設"
+            isAllCaps = false
+            setOnClickListener {
+                prefs.quickItems = Prefs.DEFAULT_QUICK
+                quickInput.setText(Prefs.DEFAULT_QUICK)
+            }
+        })
+        root.addView(quickRow)
+
         section("選字")
         root.addView(Switch(this).apply {
             text = "注音直接顯示在輸入框裡（關掉＝像 Google 注音，顯示在鍵盤上方，選了字才送出）"

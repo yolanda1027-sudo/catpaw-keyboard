@@ -269,6 +269,7 @@ class RenderTest {
             override fun onCandidate(index: Int) {}
             override fun onSymbolTab(index: Int) {}
             override fun onClipboard() {}
+            override fun onQuick(item: String) {}
             override fun onSymbolSwipe(direction: Int) {
                 v.symbolPage += direction
                 v.rows = Symbols.rows(cat.pages[v.symbolPage], false)
@@ -292,6 +293,18 @@ class RenderTest {
         snap("swipe-sliding-in")
         org.robolectric.shadows.ShadowLooper.idleMainLooper(400, java.util.concurrent.TimeUnit.MILLISECONDS)
         snap("swipe-done")
+    }
+
+    @Test
+    fun renderQuickBar() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        for (t in listOf("classic", "magic_red", "macaron_butter")) {
+            prefs.theme = t
+            val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+            v.quickItems = prefs.quickList()
+            renderView(v, "$t-quickbar")
+        }
     }
 
     @Test

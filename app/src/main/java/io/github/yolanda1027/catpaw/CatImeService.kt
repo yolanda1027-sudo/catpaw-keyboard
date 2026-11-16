@@ -14,6 +14,7 @@ import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputMethodManager
 import io.github.yolanda1027.catpaw.engine.Bpmf
 import io.github.yolanda1027.catpaw.engine.Candidate
@@ -121,6 +122,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
             "chinese", "recent_symbols", "recent_kaomoji" -> Unit
+            "quick_bar", "quick_items" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
                 File(filesDir, "clips.json").delete()
@@ -204,6 +206,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
             Page.NUMPAD -> Layouts.NUMPAD
         }
+        // 快捷符號列：只在注音／英文鍵盤顯示
+        v.quickItems = if (prefs.quickBar && page == Page.MAIN) prefs.quickList() else emptyList()
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
             v.symbolTabs = kaoTabs()
             v.symbolTab = kaoTab + 1
@@ -495,6 +499,60 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             if (page == Page.CLIP) refresh()
         } catch (_: Exception) {
             // 沒有權限讀剪貼簿（例如鍵盤不是目前的輸入法）就算了
+        }
+    }
+
+    // ---------- 快捷符號列 ----------
+
+    override fun onQuick(item: String) {
+        val ic = currentInputConnection ?: return
+        if (isComposing) commitComposingAll()
+        if (associated.isNotEmpty()) { associated = emptyList(); refresh() }
+        when (item) {
+            "⇤" -> moveCursorToEdge(start = true)
+            "⇥" -> moveCursorToEdge(start = false)
+            "◀" -> sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
+            "▶" -> sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
+            else -> {
+                val (open, close) = splitQuick(item)
+                // 有選取文字的話，就把它包起來
+                val selected = ic.getSelectedText(0)?.toString() ?: ""
+                ic.beginBatchEdit()
+                ic.commitText(open + selected, 1)
+                // newCursorPosition = 0：游標停在這段文字的前面，也就是兩個符號中間
+                if (close.isNotEmpty()) ic.commitText(close, 0)
+                ic.endBatchEdit()
+            }
+        }
+    }
+
+    /**
+     * 「(|)」→ ("(", ")")：| 是游標位置
+     * 「()」兩個字 → 游標放中間
+     * 其他 → 整個打出來，游標在最後
+     */
+    private fun splitQuick(item: String): Pair<String, String> {
+        val bar = item.indexOf('|')
+        if (bar >= 0) return item.substring(0, bar) to item.substring(bar + 1)
+        if (item.codePointCount(0, item.length) == 2) {
+            val mid = item.offsetByCodePoints(0, 1)
+            return item.substring(0, mid) to item.substring(mid)
+        }
+        return item to ""
+    }
+
+    private fun moveCursorToEdge(start: Boolean) {
+        val ic = currentInputConnection ?: return
+        val et = ic.getExtractedText(ExtractedTextRequest(), 0)
+        if (et?.text != null) {
+            val pos = if (start) 0 else et.startOffset + et.text.length
+            ic.setSelection(pos, pos)
+        } else {
+            // 有些 App 不給讀全文：改用 Ctrl+Home／Ctrl+End
+            val code = if (start) KeyEvent.KEYCODE_MOVE_HOME else KeyEvent.KEYCODE_MOVE_END
+            val now = SystemClock.uptimeMillis()
+            ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0, KeyEvent.META_CTRL_ON))
+            ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0, KeyEvent.META_CTRL_ON))
         }
     }
 

@@ -32,6 +32,7 @@ class CatKeyboardView(
         fun onSymbolTab(index: Int)
         fun onSymbolSwipe(direction: Int)
         fun onClipboard()
+        fun onQuick(item: String)
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -205,7 +206,7 @@ class CatKeyboardView(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val h = (floatH + topH + padTop + keyAreaH + padBottom).toInt()
+        val h = (floatH + topH + quickH + padTop + keyAreaH + padBottom).toInt()
         setMeasuredDimension(w, h)
     }
 
@@ -222,7 +223,7 @@ class CatKeyboardView(
         rows.forEachIndexed { ri, row ->
             val total = row.sumOf { it.weight.toDouble() }.toFloat()
             val unit = w / total
-            val top = topH + padTop + ri * rowH
+            val top = topH + quickH + padTop + ri * rowH
             var x = 0f
             for (k in row) {
                 val kw = unit * k.weight
@@ -251,6 +252,8 @@ class CatKeyboardView(
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
         if (candidates.isEmpty() || symbolTabs != null) theme.font = keyFace
         drawTopBar(c, w)
+        theme.font = keyFace
+        drawQuickBar(c)
         if (expanded) {
             theme.font = candFace
             drawPanel(c, w)
@@ -259,7 +262,7 @@ class CatKeyboardView(
             val now = android.os.SystemClock.uptimeMillis()
             // 翻頁中：符號那幾排跟著偏移（最下面那排返回、空白不動）
             val sliding = pageOffset != 0f && symbolTabs != null
-            val gridBottom = topH + padTop + rowH * (rows.size - 1)
+            val gridBottom = topH + quickH + padTop + rowH * (rows.size - 1)
             for (kr in keyRects) {
                 if (kr.key.act == Act.GAP) continue
                 val inGrid = sliding && kr.rect.top < gridBottom - 1f
@@ -385,6 +388,37 @@ class CatKeyboardView(
 
     private var downX = 0f
 
+    // ---------- 快捷符號列 ----------
+    /** 快捷符號列的內容（空的＝不顯示這一排） */
+    var quickItems: List<String> = emptyList()
+        set(v) {
+            if (field != v) {
+                field = v
+                requestLayout()
+                layoutKeys()
+                invalidate()
+            }
+        }
+    private val quickH get() = if (quickItems.isEmpty()) 0f else 40 * dp
+    private var quickPressed = -1
+
+    private fun quickRect(i: Int): RectF {
+        val w = width.toFloat() / quickItems.size.coerceAtLeast(1)
+        return RectF(w * i, topH + 3 * dp, w * (i + 1), topH + quickH - 1 * dp)
+    }
+
+    /** 顯示用：把游標位置的 | 拿掉 */
+    private fun quickLabel(item: String) = item.replace("|", "")
+
+    private fun drawQuickBar(c: Canvas) {
+        if (quickItems.isEmpty()) return
+        quickItems.forEachIndexed { i, item ->
+            val r = quickRect(i)
+            val k = Key(quickLabel(item), Act.TEXT, style = Style.FUNC)
+            theme.drawKey(c, r, k, k.label, i == quickPressed, 0, quickH * 1.6f)
+        }
+    }
+
     // ---------- 符號頁左右滑：整頁跟著手指走 ----------
     /** 目前這一頁往左右偏了多少（正 = 往右） */
     private var pageOffset = 0f
@@ -433,7 +467,7 @@ class CatKeyboardView(
     /** 符號鍵盤：最後一排上面的小線，顯示目前在第幾頁 */
     private fun drawPageIndicator(c: Canvas, w: Float) {
         if (symbolTabs == null || symbolPageCount <= 1) return
-        val y = topH + padTop + rowH * (rows.size - 1) - 1.5f * dp
+        val y = topH + quickH + padTop + rowH * (rows.size - 1) - 1.5f * dp
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 3 * dp }
         p.color = theme.textDim
         p.alpha = 60
@@ -537,8 +571,16 @@ class CatKeyboardView(
                 val y = e.getY(i)
                 if (y < topH) {
                     onTopBarTap(x)
+                } else if (y < topH + quickH) {
+                    // 快捷符號列：按下去馬上送出
+                    val idx = (x / (width.toFloat() / quickItems.size)).toInt().coerceIn(0, quickItems.size - 1)
+                    haptics.perform(this, prefs)
+                    quickPressed = idx
+                    invalidate()
+                    handler.postDelayed({ quickPressed = -1; invalidate() }, 120)
+                    listener?.onQuick(quickItems[idx])
                 } else {
-                    val firstTop = topH + padTop
+                    val firstTop = topH + quickH + padTop
                     val lastBottom = firstTop + keyAreaH - 1f
                     downX = x
                     keyAt(x, y.coerceIn(firstTop, lastBottom))?.let { press(it, e.getPointerId(i)) }
