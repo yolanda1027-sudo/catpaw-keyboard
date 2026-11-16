@@ -102,7 +102,13 @@ object Decals {
     fun newId(): String = "d" + System.currentTimeMillis().toString(36) + (counter++).toString(36)
 
     /** 只接受自己產生的檔名（避免主題檔裡夾帶奇怪的路徑） */
-    fun safeName(n: String) = n.matches(Regex("[A-Za-z0-9_\\-]{1,64}\\.png"))
+    fun safeName(n: String) = n.matches(Regex("[A-Za-z0-9_\\-]{1,64}\\.(png|gif)"))
+
+    /** 會動的 GIF 最大多大（太大的話，主題檔會超過匯入的上限） */
+    const val MAX_GIF_BYTES = 4 * 1024 * 1024
+
+    fun isGif(bytes: ByteArray) = bytes.size > 6 && bytes[0] == 'G'.code.toByte() && bytes[1] == 'I'.code.toByte() &&
+        bytes[2] == 'F'.code.toByte() && bytes[3] == '8'.code.toByte()
 
     fun dir(ctx: Context) = File(ctx.filesDir, "decals").apply { mkdirs() }
 
@@ -131,8 +137,19 @@ object Decals {
     }
 
     /** 從檔案位元組（例如主題檔裡的）存一張圖；不是圖片就回傳 null */
-    fun storeBytes(ctx: Context, bytes: ByteArray): String? {
-        val bmp = decodeCapped(bytes) ?: return null
+    /**
+     * @param keepGif true = GIF 照原檔存（按鍵動畫用，會動）；false = 一律轉成 PNG（只留第一格）
+     *   GIF 太大（超過 MAX_GIF_BYTES）也會轉成 PNG。
+     */
+    fun storeBytes(ctx: Context, bytes: ByteArray, keepGif: Boolean = false): String? {
+        val bmp = decodeCapped(bytes) ?: return null // 順便確認真的是圖片
+        if (keepGif && isGif(bytes) && bytes.size <= MAX_GIF_BYTES) {
+            var name = "decal_${System.currentTimeMillis()}.gif"
+            var n = 1
+            while (File(dir(ctx), name).exists()) name = "decal_${System.currentTimeMillis()}_${n++}.gif"
+            File(dir(ctx), name).writeBytes(bytes)
+            return name
+        }
         return storeBitmap(ctx, bmp)
     }
 
@@ -146,7 +163,8 @@ object Decals {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 
-    fun pngBytes(ctx: Context, name: String): ByteArray? =
+    /** 存起來的圖檔原本的內容（PNG 或 GIF） */
+    fun fileBytes(ctx: Context, name: String): ByteArray? =
         File(dir(ctx), name).takeIf { safeName(name) && it.exists() }?.readBytes()
 
     /** 讀圖（有快取：同一張圖不會一直重讀） */
@@ -232,7 +250,7 @@ object Decals {
     fun exportJson(ctx: Context, list: List<Decal>): JSONObject {
         val images = JSONObject()
         for (d in list) if (!d.isShape && !images.has(d.fileName)) {
-            pngBytes(ctx, d.fileName)?.let { images.put(d.fileName, android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)) }
+            fileBytes(ctx, d.fileName)?.let { images.put(d.fileName, android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)) }
         }
         return JSONObject().put("items", toJson(list)).put("images", images)
     }

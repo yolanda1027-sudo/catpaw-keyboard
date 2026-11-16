@@ -212,6 +212,7 @@ class CatKeyboardView(
         keyStyles = KeyStyles.load(prefs)
         globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
         effectBitmaps.clear()
+        stopEffectAnims()
         decals = Decals.load(prefs)
         decalBitmaps = Decals.bitmaps(context, decals, decalBitmaps)
         nativeCache.clear()
@@ -345,7 +346,8 @@ class CatKeyboardView(
             else -> {
                 val main = st?.text ?: native?.text ?: theme.text
                 val dim = if (st?.text != null || native != null) (main and 0x00FFFFFF) or (0xA8 shl 24) else theme.textDim
-                theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, bodyColor)
+                // 透明的底色不能拿來挖刪除鍵的 X（不然 X 會不見）
+                theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, bodyColor?.takeIf { android.graphics.Color.alpha(it) > 0 })
             }
         }
     }
@@ -397,7 +399,7 @@ class CatKeyboardView(
     private fun drawLabel(c: Canvas, kr: KeyRect, e: KbTheme.LabelElem, st: KeyStyle?) {
         val ls = st?.labels?.get(e.id) ?: LabelStyle()
         val shaped = st != null && (st.bg != null || st.radius != null || st.border != null)
-        val body = st?.bg ?: nativeColors(kr)?.takeIf { shaped && it.hasBody }?.bg
+        val body = (st?.bg ?: nativeColors(kr)?.takeIf { shaped && it.hasBody }?.bg)?.takeIf { android.graphics.Color.alpha(it) > 0 }
         c.save()
         c.translate(e.cx + ls.dx * kr.rect.width(), e.cy + ls.dy * kr.rect.height())
         c.rotate(ls.rotation)
@@ -510,13 +512,36 @@ class CatKeyboardView(
         if (e.kind == "custom") {
             val c = e.custom ?: CustomEffect()
             val bmp = if (c.isImage) effectBitmap(c.fileName) else null
-            effects.addCustom(c, kr.rect, bmp)
+            val anim = if (c.isImage && c.fileName.endsWith(".gif")) effectAnim(c.fileName) else null
+            effects.addCustom(c, kr.rect, bmp, anim)
         } else {
             val bg = theme.bg
             val dark = (android.graphics.Color.red(bg) * 299 + android.graphics.Color.green(bg) * 587 + android.graphics.Color.blue(bg) * 114) / 1000 < 128
             effects.add(e.kind, kr.rect, theme.popupSelBg, dark)
         }
         invalidate()
+    }
+
+    /** 按鍵動畫用的 GIF（會一直播；換設定時停掉重讀） */
+    private val effectAnims = HashMap<String, android.graphics.drawable.Drawable?>()
+
+    private fun effectAnim(name: String): android.graphics.drawable.Drawable? = effectAnims.getOrPut(name) {
+        try {
+            val f = java.io.File(Decals.dir(context), name).takeIf { Decals.safeName(name) && it.exists() } ?: return@getOrPut null
+            val d = android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(f))
+            if (d is android.graphics.drawable.AnimatedImageDrawable) {
+                d.repeatCount = android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE
+                d.start()
+                d
+            } else null // 只有一格的 GIF：當一般圖片畫就好
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun stopEffectAnims() {
+        for (d in effectAnims.values) (d as? android.graphics.drawable.AnimatedImageDrawable)?.stop()
+        effectAnims.clear()
     }
 
     private val effectBitmaps = HashMap<String, android.graphics.Bitmap?>()
@@ -1294,6 +1319,7 @@ class CatKeyboardView(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        stopEffectAnims()
         handler.removeCallbacks(longPressRunnable)
         handler.removeCallbacks(repeatRunnable)
     }

@@ -364,9 +364,9 @@ class StudioActivity : Activity() {
         val cur = styles.map[currentId()] ?: KeyStyle()
         // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
         val now = kv.sampleColors(key)
-        colorRow("底色", cur.bg, now?.bg ?: Color.WHITE) { v -> update({ it.copy(bg = v) }) }
+        colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) }
         colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
-        colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY) { v -> update({ it.copy(border = v) }) }
+        colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY, allowTransparent = true) { v -> update({ it.copy(border = v) }) }
 
         // 圓角
         val radius = ((cur.radius ?: 0.3f) * 100).toInt()
@@ -799,14 +799,20 @@ class StudioActivity : Activity() {
         }
     }
 
+    /** 按鍵動畫用的圖：GIF 會照原檔留著（飛出來時會動） */
     private fun readImage(uri: android.net.Uri): String? {
+        var tooBigGif = false
         val name = try {
             contentResolver.openInputStream(uri)?.use { input ->
                 val bytes = input.readBytes()
-                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes)
+                tooBigGif = Decals.isGif(bytes) && bytes.size > Decals.MAX_GIF_BYTES
+                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes, keepGif = true)
             }
         } catch (_: Exception) { null }
-        if (name == null) android.widget.Toast.makeText(this, "這個檔案讀不出來，換一張圖試試", android.widget.Toast.LENGTH_LONG).show()
+        when {
+            name == null -> android.widget.Toast.makeText(this, "這個檔案讀不出來，換一張圖試試", android.widget.Toast.LENGTH_LONG).show()
+            tooBigGif -> android.widget.Toast.makeText(this, "這個 GIF 太大了（超過 4MB），先用它的第一格（不會動）", android.widget.Toast.LENGTH_LONG).show()
+        }
         return name
     }
 
@@ -935,6 +941,7 @@ class StudioActivity : Activity() {
             }
         })
         panel.addView(android.widget.HorizontalScrollView(this).apply { addView(strip) })
+        text("可以選 GIF 動圖，飛出來的時候會一直動（4MB 以內）。" + if (c.isImage && c.fileName.endsWith(".gif")) "　目前用的是 GIF ✓" else "", 12f, dim = true)
 
         // 顏色（自己的圖不用顏色）
         if (!c.isImage) {
@@ -1017,10 +1024,11 @@ class StudioActivity : Activity() {
     }
 
     /**
-     * 一列：名稱（下面小字寫是不是自訂的）、色塊（顯示現在的顏色，點了選顏色）、還原
+     * 一列：名稱（下面小字寫是不是自訂的）、（透明）、色塊（顯示現在的顏色，點了選顏色）、還原
      * @param now 沒自訂時，這顆鍵現在畫面上的顏色
+     * @param allowTransparent 多一顆「透明」（底色、外框用：等於拿掉）
      */
-    private fun colorRow(label: String, value: Int?, now: Int, onPick: (Int?) -> Unit) {
+    private fun colorRow(label: String, value: Int?, now: Int, allowTransparent: Boolean = false, onPick: (Int?) -> Unit) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1028,21 +1036,39 @@ class StudioActivity : Activity() {
         }
         val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         names.addView(TextView(this).apply { text = label; textSize = 15f })
+        val clear = value != null && Color.alpha(value) == 0
         names.addView(TextView(this).apply {
-            text = if (value == null) "主題原本的顏色" else "已自訂"
+            text = when {
+                value == null -> "主題原本的顏色"
+                clear -> "透明（拿掉了）"
+                else -> "已自訂"
+            }
             textSize = 12f
             alpha = 0.65f
         })
         row.addView(names, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        if (allowTransparent && !clear) row.addView(Button(this).apply {
+            text = "透明"
+            isAllCaps = false
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(px(10f), 0, px(10f), 0)
+            setOnClickListener { onPick(Color.TRANSPARENT) }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = px(6f) })
         val shown = value ?: now
-        val chip = View(this).apply {
+        // 透明的話，選色器從「本來的顏色」開始
+        val start = if (clear) now else shown
+        val chip = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 12f
+            text = if (clear) "透明" else ""
             background = GradientDrawable().apply {
                 cornerRadius = 10 * dp
-                setColor(shown)
+                setColor(if (clear) 0x14888888 else shown)
                 setStroke(px(1.5f), 0x33000000)
             }
-            contentDescription = "$label：" + String.format("#%06X", 0xFFFFFF and shown)
-            setOnClickListener { ColorDialog.show(this@StudioActivity, label, shown) { onPick(it) } }
+            contentDescription = "$label：" + if (clear) "透明" else String.format("#%06X", 0xFFFFFF and shown)
+            setOnClickListener { ColorDialog.show(this@StudioActivity, label, start or (0xFF shl 24)) { onPick(it) } }
         }
         row.addView(chip, LinearLayout.LayoutParams(px(72f), px(40f)))
         val reset = Button(this).apply {

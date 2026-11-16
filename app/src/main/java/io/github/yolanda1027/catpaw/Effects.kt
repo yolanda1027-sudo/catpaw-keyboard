@@ -63,6 +63,8 @@ class PressEffects(private val dp: Float) {
         val shapeName: String = "",
         val bmp: android.graphics.Bitmap? = null,
         val grow: Boolean = false,
+        /** 會動的圖（GIF）：每個粒子共用同一份，畫的時候放到各自的位置 */
+        val anim: android.graphics.drawable.Drawable? = null,
     )
 
     private class Bounce(val rect: RectF, val start: Long)
@@ -186,8 +188,9 @@ class PressEffects(private val dp: Float) {
     /**
      * 自訂動畫（主題工作室調的）。
      * @param bmp 粒子用自己的圖時的圖片（null = 用內建圖案）
+     * @param anim 會動的圖（GIF）；有的話優先用它
      */
-    fun addCustom(e: CustomEffect, rect: RectF, bmp: android.graphics.Bitmap?) {
+    fun addCustom(e: CustomEffect, rect: RectF, bmp: android.graphics.Bitmap?, anim: android.graphics.drawable.Drawable? = null) {
         val now = SystemClock.uptimeMillis()
         val cx = rect.centerX()
         val cy = rect.centerY()
@@ -223,21 +226,30 @@ class PressEffects(private val dp: Float) {
                     r(-20f, 20f) * dp * sp, -r(130f, 210f) * dp * sp, 0f, size * r(0.85f, 1.1f), col,
                     now + delay, (850 / sp).toLong(), rot0 = rot0, vrot = spinV, sway = r(3f, 6f) * dp, phase = r(0f, 6f))
             }
-            particles.add(p.copyWith(e.shapeName, bmp))
+            particles.add(p.copyWith(e.shapeName, bmp, anim))
         }
         while (particles.size > MAX_PARTICLES) particles.removeAt(0)
         while (bounces.size > 10) bounces.removeAt(0)
     }
 
-    private fun P.copyWith(name: String, bmp: android.graphics.Bitmap?) = P(
+    private fun P.copyWith(name: String, bmp: android.graphics.Bitmap?, anim: android.graphics.drawable.Drawable?) = P(
         shape, x0, y0, vx, vy, gravity, size, color, start, life, rot0, vrot, sway, phase, text, false,
-        shapeName = name, bmp = bmp, grow = grow,
+        shapeName = name, bmp = bmp, grow = grow, anim = anim,
     )
 
     private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     private fun custom(c: Canvas, p: P, prog: Float, alpha: Int) {
         val s = p.size * if (p.grow) 0.4f + 1.0f * prog else 1f + 0.2f * prog
+        val a = p.anim
+        if (a != null && a.intrinsicWidth > 0) {
+            // GIF：畫它現在播到的那一格
+            val h = s * a.intrinsicHeight / a.intrinsicWidth
+            a.setBounds(-s.toInt(), -h.toInt(), s.toInt(), h.toInt())
+            a.alpha = alpha
+            a.draw(c)
+            return
+        }
         val b = p.bmp
         if (b != null && b.width > 0) {
             val h = s * b.height / b.width

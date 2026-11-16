@@ -102,12 +102,12 @@ class CustomEffectTest {
         assertEquals("custom", q.pressEffect)
         assertEquals("burst", q.customEffect.motion)
         assertTrue(q.customEffect.isImage)
-        assertNotNull(Decals.pngBytes(ctx, q.customEffect.fileName))
+        assertNotNull(Decals.fileBytes(ctx, q.customEffect.fileName))
         val keyEffect = KeyStyles.load(q).map["enter"]!!.effect!!.custom!!
-        assertNotNull(Decals.pngBytes(ctx, keyEffect.fileName))
+        assertNotNull(Decals.fileBytes(ctx, keyEffect.fileName))
         // 清理圖案用的圖時，動畫的圖要留著
         Decals.cleanup(ctx, emptyList())
-        assertNotNull(Decals.pngBytes(ctx, q.customEffect.fileName))
+        assertNotNull(Decals.fileBytes(ctx, q.customEffect.fileName))
     }
 
     @Test fun studioAnimationPanel() {

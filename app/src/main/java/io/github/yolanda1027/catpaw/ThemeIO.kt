@@ -74,7 +74,7 @@ object ThemeIO {
         }
         if (effectImages.isNotEmpty()) {
             val imgs = JSONObject()
-            for (n in effectImages) Decals.pngBytes(ctx, n)?.let { imgs.put(n, Base64.encodeToString(it, Base64.NO_WRAP)) }
+            for (n in effectImages) Decals.fileBytes(ctx, n)?.let { imgs.put(n, Base64.encodeToString(it, Base64.NO_WRAP)) }
             o.put("effectImages", imgs)
         }
         if (Part.STICKERS in parts) {
@@ -208,7 +208,7 @@ object ThemeIO {
         val rename = HashMap<String, String>()
         o.optJSONObject("effectImages")?.let { imgs ->
             for (n in imgs.keys()) {
-                val newName = try { Decals.storeBytes(ctx, Base64.decode(imgs.optString(n), Base64.DEFAULT)) } catch (_: Exception) { null }
+                val newName = try { Decals.storeBytes(ctx, Base64.decode(imgs.optString(n), Base64.DEFAULT), keepGif = true) } catch (_: Exception) { null }
                 if (newName != null) rename[n] = newName else warnings.add("有一張按鍵動畫的圖片壞掉了，改用愛心")
             }
         }

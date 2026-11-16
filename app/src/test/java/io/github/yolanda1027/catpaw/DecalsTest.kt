@@ -214,7 +214,7 @@ class DecalsTest {
         val back = Decals.load(Prefs(ctx))
         assertEquals(list.size, back.size)
         val img = back.first { !it.isShape }
-        assertNotNull(Decals.pngBytes(ctx, img.fileName))
+        assertNotNull(Decals.fileBytes(ctx, img.fileName))
         assertEquals(list.map { it.copy(img = "") }, back.map { it.copy(img = "") })
     }
 
@@ -306,7 +306,7 @@ class DecalsTest {
 
         undo.invoke(a) // 救回 k1
         assertEquals(false, k1().flip)
-        assertTrue(Decals.pngBytes(ctx, k1().fileName) != null) // 圖檔還在
+        assertTrue(Decals.fileBytes(ctx, k1().fileName) != null) // 圖檔還在
         undo.invoke(a) // 回到翻轉狀態
         assertEquals(true, k1().flip)
         undo.invoke(a) // 回到只有 1 個
