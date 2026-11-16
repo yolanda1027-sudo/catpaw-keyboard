@@ -142,6 +142,9 @@ class StudioActivity : Activity() {
         }
         outer.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(outer)
+        // 上次離開時沒清掉的圖檔（例如 App 被系統關掉）先清一清；之後要等離開工作室才清，「上一步」才救得回刪掉的圖
+        Decals.cleanup(this, decals)
+        committed = snapshot()
         switchLayout(english)
     }
 
@@ -185,9 +188,94 @@ class StudioActivity : Activity() {
         if (rebuild) refresh()
     }
 
+    // ---------- 上一步／下一步（最多 3 步） ----------
+
+    /** 工作室改得到的東西：按鍵樣式、圖案、全部按鍵的動畫 */
+    private data class Snap(val styles: Map<String, KeyStyle>, val decals: List<Decal>, val effect: String, val custom: CustomEffect)
+
+    private fun snapshot() = Snap(styles.map, decals, prefs.pressEffect, prefs.customEffect)
+
+    /** 上一次「做完一個動作」時的樣子 */
+    private lateinit var committed: Snap
+    private val undoStack = ArrayDeque<Snap>()
+    private val redoStack = ArrayDeque<Snap>()
+
+    /**
+     * 一個動作做完了（放開手指、放開滑桿、按了按鈕）：跟上一次比，有變就記一步。
+     * 拖的過程中不會記，所以拖一次滑桿只算一步。
+     */
+    private fun commitHistory() {
+        if (!::committed.isInitialized) return
+        val now = snapshot()
+        if (now == committed) return
+        undoStack.addLast(committed)
+        while (undoStack.size > MAX_UNDO) undoStack.removeFirst()
+        redoStack.clear()
+        committed = now
+        invalidateOptionsMenu()
+    }
+
+    private fun undo() {
+        commitHistory() // 還沒記到的改動先記起來
+        val prev = undoStack.removeLastOrNull() ?: return
+        redoStack.addLast(committed)
+        restore(prev)
+    }
+
+    private fun redo() {
+        val next = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(committed)
+        while (undoStack.size > MAX_UNDO) undoStack.removeFirst()
+        restore(next)
+    }
+
+    private fun restore(s: Snap) {
+        styles = KeyStyles(s.styles)
+        KeyStyles.save(prefs, styles)
+        decals = s.decals
+        Decals.save(prefs, decals)
+        prefs.pressEffect = s.effect
+        prefs.customEffect = s.custom
+        committed = s
+        if (decals.none { it.id == decalSel }) decalSel = null
+        kv.reloadPrefs()
+        kv.setDecalsLive(decals)
+        zoom.invalidate()
+        invalidateOptionsMenu()
+        refresh()
+    }
+
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menu.add(0, MENU_UNDO, 0, "↶ 上一步").apply {
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+            isEnabled = undoStack.isNotEmpty()
+        }
+        menu.add(0, MENU_REDO, 1, "下一步 ↷").apply {
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+            isEnabled = redoStack.isNotEmpty()
+        }
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        when (item.itemId) {
+            MENU_UNDO -> undo()
+            MENU_REDO -> redo()
+            else -> return super.onOptionsItemSelected(item)
+        }
+        return true
+    }
+
+    override fun onDestroy() {
+        // 離開工作室才清掉沒在用的圖檔（在工作室裡刪掉的圖，按上一步還救得回來）
+        if (isFinishing) Decals.cleanup(this, Decals.load(prefs))
+        super.onDestroy()
+    }
+
     // ---------- 下面的編輯面板 ----------
 
     private fun refresh() {
+        commitHistory()
         panel.removeAllViews()
         // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
         val zoomKey = selected?.takeIf { !bgSelected && !groupScope && animMode != GLOBAL }
@@ -257,7 +345,7 @@ class StudioActivity : Activity() {
                     update({ it.copy(radius = p / 100f) }, rebuild = false)
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) { commitHistory() }
             })
         })
         text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
@@ -411,7 +499,6 @@ class StudioActivity : Activity() {
             if (resultCode != RESULT_OK || uri == null) return
             val name = readImage(uri) ?: return
             setCustom(currentCustom().copy(particle = Decal.FILE + name))
-            Decals.cleanup(this, decals)
             return
         }
         if (requestCode != REQ_IMAGE) return
@@ -490,7 +577,6 @@ class StudioActivity : Activity() {
         button("🗑 刪除這個圖案") {
             decalSel = null
             saveDecals(decals.filter { it.id != d.id })
-            Decals.cleanup(this, decals)
         }
         button(if (d.onBackground) "← 回到鍵盤背景" else "← 回到$where") { decalSel = null; refresh() }
     }
@@ -503,7 +589,6 @@ class StudioActivity : Activity() {
             "delete" -> {
                 decalSel = null
                 saveDecals(decals.filter { it.id != d.id })
-                Decals.cleanup(this, decals)
             }
         }
     }
@@ -536,7 +621,10 @@ class StudioActivity : Activity() {
                     onChange(p + min)
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) { onDone?.invoke() }
+                override fun onStopTrackingTouch(s: SeekBar?) {
+                    commitHistory() // 放開滑桿＝一步
+                    onDone?.invoke()
+                }
             })
         })
     }
@@ -575,7 +663,6 @@ class StudioActivity : Activity() {
         styles = KeyStyles.EMPTY
         KeyStyles.save(prefs, styles)
         saveDecals(emptyList(), rebuild = false)
-        Decals.cleanup(this, decals)
         kv.reloadPrefs()
         refresh()
         android.widget.Toast.makeText(this, "已恢復成主題預設", android.widget.Toast.LENGTH_SHORT).show()
@@ -588,7 +675,6 @@ class StudioActivity : Activity() {
                 .setPositiveButton("全部清除") { _, _ ->
                     decalSel = null
                     saveDecals(emptyList())
-                    Decals.cleanup(this, decals)
                 }
                 .setNegativeButton("取消", null)
                 .show()
@@ -787,6 +873,9 @@ class StudioActivity : Activity() {
 
     companion object {
         private const val REQ_IMAGE = 500
+        private const val MAX_UNDO = 3
+        private const val MENU_UNDO = 1
+        private const val MENU_REDO = 2
         private const val REQ_EFFECT_IMAGE = 501
         private const val GLOBAL = "global"
         private const val KEY = "key"

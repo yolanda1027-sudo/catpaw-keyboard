@@ -276,8 +276,65 @@ class DecalsTest {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         assertTrue(Decals.load(Prefs(ctx)).isEmpty())
         assertTrue(KeyStyles.load(Prefs(ctx)).map.isEmpty())
-        assertTrue(Decals.dir(ctx).listFiles()!!.isEmpty())
         assertEquals("spell", Prefs(ctx).pressEffect)
+        // 圖檔要等離開工作室才清（在工作室裡還能按上一步救回來）
+        assertTrue(Decals.dir(ctx).listFiles()!!.isNotEmpty())
+        a.finish()
+        StudioActivity::class.java.getDeclaredMethod("onDestroy").apply { isAccessible = true }.invoke(a)
+        assertTrue(Decals.dir(ctx).listFiles()!!.isEmpty())
+    }
+
+    /** 上一步／下一步：最多 3 步；刪掉的圖片圖案按上一步可以救回來 */
+    @Test fun undoRedoUpToThreeSteps() {
+        val p = Prefs(ctx)
+        val img = Decals.storeBytes(ctx, photo())!!
+        Decals.save(p, listOf(Decal("k1", "zy:ㄅ", Decal.FILE + img, size = 0.4f)))
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val cls = StudioActivity::class.java
+        val action = cls.getDeclaredMethod("decalAction", String::class.java, Decal::class.java).apply { isAccessible = true }
+        val undo = cls.getDeclaredMethod("undo").apply { isAccessible = true }
+        val redo = cls.getDeclaredMethod("redo").apply { isAccessible = true }
+        fun now() = Decals.load(Prefs(ctx))
+        fun k1() = now().first { it.id == "k1" }
+        fun step(name: String) { action.invoke(a, name, k1()); org.robolectric.shadows.ShadowLooper.idleMainLooper() }
+
+        step("flip")   // 1：翻轉
+        step("copy")   // 2：複製（變 2 個）
+        step("flip")   // 3：翻回來
+        step("delete") // 4：刪掉 k1
+        assertTrue(now().none { it.id == "k1" })
+
+        undo.invoke(a) // 救回 k1
+        assertEquals(false, k1().flip)
+        assertTrue(Decals.pngBytes(ctx, k1().fileName) != null) // 圖檔還在
+        undo.invoke(a) // 回到翻轉狀態
+        assertEquals(true, k1().flip)
+        undo.invoke(a) // 回到只有 1 個
+        assertEquals(1, now().size)
+        undo.invoke(a) // 只記 3 步：這次沒有作用
+        assertEquals(1, now().size)
+        assertEquals(true, k1().flip)
+
+        redo.invoke(a)
+        assertEquals(2, now().size)
+        redo.invoke(a); redo.invoke(a)
+        assertTrue(now().none { it.id == "k1" })
+        redo.invoke(a) // 沒得再下一步了
+        assertEquals(1, now().size)
+
+        // 做了新的動作，下一步就清掉
+        undo.invoke(a)
+        step("flip")
+        val before = now()
+        redo.invoke(a)
+        assertEquals(before, now())
+
+        // 上方的按鈕：有東西可以還原時才能按
+        val m = org.robolectric.fakes.RoboMenu(a)
+        a.onCreateOptionsMenu(m)
+        assertTrue(m.findItem(1).isEnabled)
+        assertTrue(!m.findItem(2).isEnabled)
+        render(a.window.decorView, "studio-undo")
     }
 
     private fun findButton(v: View, text: String): android.widget.Button? {
