@@ -122,7 +122,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
             "chinese", "recent_symbols", "recent_kaomoji" -> Unit
-            "quick_bar", "quick_items" -> refresh()
+            "quick_bar", "quick_items", "quick_config" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
                 File(filesDir, "clips.json").delete()

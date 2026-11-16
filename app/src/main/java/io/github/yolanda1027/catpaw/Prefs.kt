@@ -110,11 +110,39 @@ class Prefs(context: Context) {
         get() = sp.getString("quick_items", DEFAULT_QUICK) ?: DEFAULT_QUICK
         set(v) = sp.edit().putString("quick_items", v).apply()
 
-    fun quickList(): List<String> = quickItems.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.take(12)
+    /** 快捷符號列的一個按鈕：內容、要不要顯示 */
+    data class QuickEntry(val text: String, val on: Boolean)
+
+    /** 每個按鈕分開存（JSON）；舊版是一串用空白分開的文字，第一次讀的時候轉過來 */
+    fun quickEntries(): List<QuickEntry> {
+        val raw = sp.getString("quick_config", null)
+            ?: return quickItems.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.map { QuickEntry(it, true) }
+        return try {
+            val arr = org.json.JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                QuickEntry(o.optString("t"), o.optBoolean("on", true))
+            }
+        } catch (_: Exception) {
+            defaultQuickEntries()
+        }
+    }
+
+    fun setQuickEntries(list: List<QuickEntry>) {
+        val arr = org.json.JSONArray()
+        for (q in list.take(MAX_QUICK)) arr.put(org.json.JSONObject().put("t", q.text).put("on", q.on))
+        sp.edit().putString("quick_config", arr.toString()).apply()
+    }
+
+    /** 鍵盤上實際顯示的按鈕（有勾選、不是空白的） */
+    fun quickList(): List<String> = quickEntries().filter { it.on && it.text.isNotBlank() }.map { it.text.trim() }.take(MAX_QUICK)
 
     companion object {
         /** ⇤ 跳到最前、⇥ 跳到最後、◀ ▶ 游標左右移一格；其他是要打出的符號 */
         const val DEFAULT_QUICK = "⇤ () 「」 『』 【】 “” ⇥"
+        const val MAX_QUICK = 7
+
+        fun defaultQuickEntries() = DEFAULT_QUICK.split(" ").map { QuickEntry(it, true) }
     }
 
     /** 上次用的是中文還是英文 */

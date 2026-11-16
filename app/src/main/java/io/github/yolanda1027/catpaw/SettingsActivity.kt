@@ -24,15 +24,18 @@ class SettingsActivity : Activity() {
     private lateinit var prefs: Prefs
     private lateinit var haptics: Haptics
     private lateinit var root: LinearLayout
-    private lateinit var status: TextView
+    private var status: TextView? = null
     private lateinit var customMsRow: View
-    private lateinit var preview: CatKeyboardView
-    private lateinit var themeGroup: RadioGroup
+    private var preview: CatKeyboardView? = null
+    private var themeGroup: RadioGroup? = null
     private val stickerThumbs = HashMap<StickerSlot, android.widget.ImageView>()
 
     /** 設定一改，預覽就重畫（要存成欄位，不然會被系統回收掉） */
     private val previewListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        preview.reloadPrefs()
+        preview?.let {
+            it.reloadPrefs()
+            it.quickItems = if (prefs.quickBar) prefs.quickList() else emptyList()
+        }
     }
 
     override fun onDestroy() {
@@ -149,7 +152,7 @@ class SettingsActivity : Activity() {
             (current.background as android.graphics.drawable.GradientDrawable).setColor(c)
             if (prefs.theme != "custom") {
                 prefs.theme = "custom"
-                themeGroup.findViewWithTag<RadioButton>("custom")?.isChecked = true
+                themeGroup?.findViewWithTag<RadioButton>("custom")?.isChecked = true
             }
         }
         head.addView(Button(this).apply {
@@ -190,21 +193,96 @@ class SettingsActivity : Activity() {
     }
     private val dp get() = resources.displayMetrics.density
 
+    // ---------- 分頁 ----------
+
+    /** 設定的分類：代號、標題、說明、要不要在上面放預覽鍵盤 */
+    private class PageInfo(val id: String, val title: String, val desc: String, val preview: Boolean)
+
+    private val pages = listOf(
+        PageInfo("haptic", "🎵 震動手感", "震動方式、強度、長度", false),
+        PageInfo("theme", "🎨 主題與外觀", "主題、按鍵高度、長按時間", true),
+        PageInfo("font", "🔤 字體", "按鍵字體、選字字體、上傳自己的字體", true),
+        PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true),
+        PageInfo("sticker", "🖼 功能鍵貼圖", "在 Enter、空白鍵貼自己的圖", true),
+        PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true),
+        PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true),
+        PageInfo("candidate", "📝 選字與記憶", "組字方式、清除學習紀錄", false),
+        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
+        PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
+    )
+
+    private var page = "home"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         prefs.migrate()
         haptics = Haptics(this)
+        prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
+        showPage(savedInstanceState?.getString("page") ?: "home")
+    }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("page", page) // 換字體會重新整理畫面，要記得停在哪一頁
+    }
+
+    @Deprecated("Activity 的返回鍵處理")
+    override fun onBackPressed() {
+        if (page != "home") showPage("home")
+        else @Suppress("DEPRECATION") super.onBackPressed()
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) { showPage("home"); return true }
+        return super.onOptionsItemSelected(item)
+    }
+
+    /** 換頁：有需要的頁面，預覽鍵盤固定在最上面，下面的設定可以捲動 */
+    private fun showPage(id: String) {
+        page = id
+        val info = pages.firstOrNull { it.id == id }
+        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        preview = null
+        status = null
+        themeGroup = null
+        if (info?.preview == true) {
+            val v = CatKeyboardView(this, prefs, haptics)
+            // 預覽裡放幾個選字，才看得到「選字字體」
+            v.reading = "ㄇㄠ ㄓㄠˇ"
+            v.candidates = listOf("貓爪", "毛", "貓", "帽子", "冒")
+            v.quickItems = if (prefs.quickBar) prefs.quickList() else emptyList()
+            outer.addView(v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            preview = v
+        }
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val p = (20 * dp).toInt()
-            setPadding(p, p, p, p * 3)
+            setPadding(p, ((if (info?.preview == true) 8 else 20) * dp).toInt(), p, p * 3)
         }
-        setContentView(ScrollView(this).apply { addView(root) })
+        outer.addView(ScrollView(this).apply { addView(root) },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        setContentView(outer)
+        actionBar?.title = info?.title?.substringAfter(' ') ?: "貓爪鍵盤"
+        actionBar?.setDisplayHomeAsUpEnabled(info != null)
+        when (id) {
+            "haptic" -> pageHaptic()
+            "theme" -> pageTheme()
+            "font" -> pageFont()
+            "effect" -> pageEffect()
+            "sticker" -> pageSticker()
+            "color" -> pageColor()
+            "quick" -> pageQuick()
+            "candidate" -> pageCandidate()
+            "clip" -> pageClip()
+            "tips" -> pageTips()
+            else -> pageHome()
+        }
+        updateStatus()
+    }
 
+    private fun pageHome() {
         title("🐾 貓爪鍵盤")
-        note("第三階段：功能鍵貼圖、按鍵動畫、自訂配色都在「外觀」裡，上面有即時預覽可以直接按按看。")
 
         section("開始使用")
         status = note("")
@@ -217,12 +295,48 @@ class SettingsActivity : Activity() {
 
         section("試打區")
         root.addView(EditText(this).apply {
-            hint = "在這裡打字試手感…調整下面的設定後，再回來打打看"
-            minLines = 3
+            hint = "在這裡打字試手感…"
+            minLines = 2
             gravity = Gravity.TOP
         })
 
-        section("震動手感")
+        section("設定")
+        for (p in pages) menuItem(p)
+    }
+
+    /** 首頁的分類按鈕：標題＋一行說明，點下去進到那一頁 */
+    private fun menuItem(p: PageInfo) {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val pad = (14 * dp).toInt()
+            setPadding(pad, pad, pad, pad)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 14 * dp
+                setColor(0x0F000000)
+            }
+            isClickable = true
+            setOnClickListener { showPage(p.id) }
+        }
+        val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(TextView(this).apply {
+            text = p.title
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        texts.addView(TextView(this).apply {
+            text = p.desc
+            textSize = 13f
+            alpha = 0.7f
+        })
+        box.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(TextView(this).apply { text = "›"; textSize = 24f; alpha = 0.5f })
+        root.addView(box, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = (8 * dp).toInt()
+        })
+    }
+
+    private fun pageHaptic() {
         val modes = listOf(
             "click" to "清脆",
             "tick" to "輕點（更短更輕）",
@@ -239,26 +353,21 @@ class SettingsActivity : Activity() {
         customMsRow = slider("長度", 1, 60, prefs.vibrateMs, " 毫秒") { prefs.vibrateMs = it }
         customMsRow.visibility = if (prefs.hapticMode == "custom") View.VISIBLE else View.GONE
         button("試震一下") { haptics.perform(it, prefs) }
+    }
 
-        section("外觀")
-        note("預覽（可以直接按按看動畫和震動）：")
-        preview = CatKeyboardView(this, prefs, haptics)
-        // 預覽裡放幾個選字，才看得到「選字字體」
-        preview.reading = "ㄇㄠ ㄓㄠˇ"
-        preview.candidates = listOf("貓爪", "毛", "貓", "帽子", "冒")
-        root.addView(preview, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
-
+    private fun pageTheme() {
+        subTitle("主題")
         themeGroup = radios(
             listOf(
                 "classic" to "經典深色（Google 注音風）",
                 "stitch" to "粉紅縫線",
                 "catpaw" to "貓爪肉球",
             ) + MacaronTheme.PALETTES.map { it.id to it.title } + MagicTheme.PALETTES.map { it.id to it.title } + listOf(
-                "custom" to "自訂配色（在下面調顏色）",
+                "custom" to "自訂配色（到「自訂配色」頁調顏色）",
             ),
             prefs.theme,
         ) { prefs.theme = it }
+        subTitle("按鍵")
         slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（Google 注音約 45）") { prefs.keyHeightDp = it }
         slider("長按時間", 200, 700, prefs.longPressMs, " 毫秒") { prefs.longPressMs = it }
         root.addView(Switch(this).apply {
@@ -267,9 +376,10 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.preview = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
+    }
 
-        section("字體")
-        note("按鍵上的字和選字列可以用不同字體。字體附在 App 裡，不用另外下載。")
+    private fun pageFont() {
+        note("按鍵上的字和選字列可以用不同字體。")
         subTitle("按鍵字體")
         radios(Fonts.options(this), prefs.keyFont) { prefs.keyFont = it }
         subTitle("選字字體（選字列、注音小框框）")
@@ -309,57 +419,28 @@ class SettingsActivity : Activity() {
             root.addView(row)
         }
         note("字體授權：jf open 粉圓（justfont）、芫荽 Iansui、霞鶩文楷 TC（LXGW），都是 SIL Open Font License 1.1。芫荽和霞鶩文楷只保留常用字，比較少見的字會用系統字體顯示。")
+    }
 
-        section("按鍵動畫")
+    private fun pageEffect() {
         note("選好之後，在上面的預覽鍵盤按按看。")
         radios(PressEffects.ALL, prefs.pressEffect) { prefs.pressEffect = it }
+    }
 
-        section("功能鍵貼圖")
+    private fun pageSticker() {
         note("從相簿選圖片貼在功能鍵上（去背的 PNG 效果最好）。圖片會縮小後存在 App 裡，相簿的原圖刪掉也沒關係。")
         for (slot in StickerSlot.values()) stickerRow(slot)
+    }
 
-        section("自訂配色")
+    private fun pageColor() {
         note("點色塊就會換成「自訂配色」主題，上面的預覽會跟著變。也可以按「色碼」輸入像 #F49AB7 這樣的顏色。")
         colorRow("背景", { prefs.customBg }) { prefs.customBg = it }
         colorRow("按鍵", { prefs.customKey }) { prefs.customKey = it }
         colorRow("文字", { prefs.customText }) { prefs.customText = it }
         colorRow("小字（數字、英文）", { prefs.customSub }) { prefs.customSub = it }
         colorRow("強調色（Enter、選取）", { prefs.customAccent }) { prefs.customAccent = it }
+    }
 
-        section("快捷符號列")
-        root.addView(Switch(this).apply {
-            text = "在按鍵上面多一排快捷符號"
-            isChecked = prefs.quickBar
-            setOnCheckedChangeListener { _, b -> prefs.quickBar = b }
-            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-        })
-        note("用空白分開，最多 12 個：\n・兩個字（像 () 或 「」）：一次打出一組，游標停在中間；先選取文字再按會把它包起來\n・用 | 標游標位置，例如 **|**\n・⇤ 跳到最前面、⇥ 跳到最後面、◀ ▶ 游標左右移一格")
-        val quickInput = EditText(this).apply {
-            setText(prefs.quickItems)
-            textSize = 18f
-        }
-        root.addView(quickInput)
-        val quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        quickRow.addView(Button(this).apply {
-            text = "儲存"
-            isAllCaps = false
-            setOnClickListener {
-                prefs.quickItems = quickInput.text.toString().trim().ifEmpty { Prefs.DEFAULT_QUICK }
-                quickInput.setText(prefs.quickItems)
-                android.widget.Toast.makeText(this@SettingsActivity, "已儲存", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        })
-        quickRow.addView(Button(this).apply {
-            text = "恢復預設"
-            isAllCaps = false
-            setOnClickListener {
-                prefs.quickItems = Prefs.DEFAULT_QUICK
-                quickInput.setText(Prefs.DEFAULT_QUICK)
-            }
-        })
-        root.addView(quickRow)
-
-        section("選字")
+    private fun pageCandidate() {
         root.addView(Switch(this).apply {
             text = "注音直接顯示在輸入框裡（關掉＝像 Google 注音，顯示在鍵盤上方，選了字才送出）"
             isChecked = prefs.inlineComposing
@@ -372,8 +453,9 @@ class SettingsActivity : Activity() {
             prefs.sp.edit().putLong("clear_learning", System.currentTimeMillis()).apply()
             android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
 
-        section("剪貼簿")
+    private fun pageClip() {
         root.addView(Switch(this).apply {
             text = "記錄複製過的文字（鍵盤上方的剪貼簿按鈕）"
             isChecked = prefs.clipboardHistory
@@ -386,9 +468,117 @@ class SettingsActivity : Activity() {
             prefs.sp.edit().putLong("clear_clips", System.currentTimeMillis()).apply()
             android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
 
-        section("小提示")
-        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・長按注音鍵會跳出選單（像 Google 注音），手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫")
+    private fun pageTips() {
+        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・分段選字：選好的字會先留在注音小框框，全部選完才送出；按刪除鍵會先把選好的字退回成注音\n・長按注音鍵會跳出選單（像 Google 注音），手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫\n・符號鍵盤可以左右滑換頁")
+    }
+
+    // ---------- 快捷符號列（一個按鈕一行） ----------
+
+    private fun pageQuick() {
+        root.addView(Switch(this).apply {
+            text = "在按鍵上面多一排快捷符號"
+            isChecked = prefs.quickBar
+            setOnCheckedChangeListener { _, b -> prefs.quickBar = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("每一行是一個按鈕，最多 ${Prefs.MAX_QUICK} 個：\n・兩個字（像 () 或 「」）：一次打出一組，游標停在中間；先選取文字再按會把它包起來\n・用 | 標游標位置，例如 **|**\n・⇤ 跳到最前面、⇥ 跳到最後面、◀ ▶ 游標左右移一格\n・取消勾選＝暫時不顯示，不用刪掉")
+
+        val items = prefs.quickEntries().toMutableList()
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(list)
+        lateinit var addButton: Button
+        lateinit var render: () -> Unit
+
+        fun smallButton(label: String, onClick: () -> Unit) = Button(this).apply {
+            text = label
+            isAllCaps = false
+            minWidth = 0
+            minimumWidth = 0
+            setPadding((10 * dp).toInt(), 0, (10 * dp).toInt(), 0)
+            setOnClickListener { onClick() }
+        }
+
+        render = {
+            list.removeAllViews()
+            items.forEachIndexed { i, q ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                row.addView(android.widget.CheckBox(this).apply {
+                    isChecked = q.on
+                    setOnCheckedChangeListener { _, b -> items[i] = items[i].copy(on = b) }
+                })
+                row.addView(EditText(this).apply {
+                    setText(q.text)
+                    textSize = 18f
+                    isSingleLine = true
+                    hint = "例如 「」"
+                    addTextChangedListener(object : android.text.TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                        override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                        override fun afterTextChanged(s: android.text.Editable?) {
+                            items[i] = items[i].copy(text = s?.toString()?.replace(" ", "") ?: "")
+                        }
+                    })
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                row.addView(smallButton("↑") {
+                    if (i > 0) { items.add(i - 1, items.removeAt(i)); render() }
+                })
+                row.addView(smallButton("↓") {
+                    if (i < items.size - 1) { items.add(i + 1, items.removeAt(i)); render() }
+                })
+                row.addView(smallButton("刪除") { items.removeAt(i); render() })
+                list.addView(row)
+            }
+            addButton.isEnabled = items.size < Prefs.MAX_QUICK
+            addButton.text = if (items.size < Prefs.MAX_QUICK) "＋ 新增按鈕" else "最多 ${Prefs.MAX_QUICK} 個"
+        }
+
+        addButton = Button(this).apply {
+            isAllCaps = false
+            setOnClickListener { if (items.size < Prefs.MAX_QUICK) { items.add(Prefs.QuickEntry("", true)); render() } }
+        }
+        root.addView(addButton)
+
+        subTitle("快速加入游標按鈕")
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((sym, desc) in listOf("⇤" to "最前", "⇥" to "最後", "◀" to "左移", "▶" to "右移")) {
+            chips.addView(smallButton("$sym $desc") {
+                if (items.size < Prefs.MAX_QUICK) { items.add(Prefs.QuickEntry(sym, true)); render() }
+                else android.widget.Toast.makeText(this, "最多 ${Prefs.MAX_QUICK} 個", android.widget.Toast.LENGTH_SHORT).show()
+            })
+        }
+        root.addView(chips)
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, (16 * dp).toInt(), 0, 0)
+        }
+        actions.addView(Button(this).apply {
+            text = "儲存"
+            isAllCaps = false
+            setOnClickListener {
+                val cleaned = items.filter { it.text.isNotBlank() }
+                prefs.setQuickEntries(cleaned)
+                items.clear(); items.addAll(cleaned); render()
+                android.widget.Toast.makeText(this@SettingsActivity, "已儲存", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        })
+        actions.addView(Button(this).apply {
+            text = "取消"
+            isAllCaps = false
+            setOnClickListener { items.clear(); items.addAll(prefs.quickEntries()); render() }
+        })
+        actions.addView(Button(this).apply {
+            text = "恢復預設"
+            isAllCaps = false
+            setOnClickListener { items.clear(); items.addAll(Prefs.defaultQuickEntries()); render() }
+        })
+        root.addView(actions)
+        render()
     }
 
     override fun onResume() {
@@ -402,6 +592,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun updateStatus() {
+        val status = status ?: return
         val imm = getSystemService(InputMethodManager::class.java)
         val enabled = imm.enabledInputMethodList.any { it.packageName == packageName }
         val current = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
