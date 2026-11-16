@@ -8,6 +8,7 @@ import android.view.View
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -97,5 +98,54 @@ class ShapeStyleTest {
         val bmp = Bitmap.createBitmap(1080, 4200, Bitmap.Config.ARGB_8888)
         v.draw(Canvas(bmp))
         File("build/renders/studio-shape-style.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** 「複製到所有注音鍵」：每顆注音鍵都有一份；再按一次是更新不是重複；上下層跟著原本的；可以一次移除 */
+    @Test fun copyToAllZhuyinKeys() {
+        val p = Prefs(ctx)
+        p.theme = "classic"
+        val b = Layouts.ZHUYIN[0][0]
+        Decals.save(p, listOf(Decal("r1", "zy:ㄅ", "shape:roundrect", size = 0.86f).withStyle(ShapeStyle(pink, Color.WHITE, 0.045f, "stitch"))))
+        KeyStyles.save(p, KeyStyles.EMPTY.with("zy:ㄅ", KeyStyle(order = listOf("r1", "label:main", "label:sub"))))
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val cls = StudioActivity::class.java
+        val kv = cls.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        ShadowLooper.idleMainLooper()
+        val copy = cls.getDeclaredMethod("copyToGroup", Decal::class.java, Key::class.java, KeyStyles.Group::class.java).apply { isAccessible = true }
+        fun now() = Decals.load(Prefs(ctx))
+        val zhuyinKeys = Layouts.ZHUYIN.flatten().count { it.act == Act.ZHUYIN }
+
+        copy.invoke(a, now().first { it.id == "r1" }, b, KeyStyles.Group.ZHUYIN)
+        ShadowLooper.idleMainLooper()
+        assertEquals(zhuyinKeys, now().size) // 每顆注音鍵一個（含原本那顆）
+        // 原本壓在字底下 → 複製出去的也在字底下
+        val x = Layouts.ZHUYIN[3][3] // ㄒ
+        assertEquals("label:main", kv.elementOrder(x)[1])
+
+        // 改原本那個的顏色，再按一次：更新，不會變兩倍
+        Decals.save(Prefs(ctx), now().map { if (it.id == "r1") it.withStyle(it.shapeStyle().copy(fill = 0xFFB9E4C9.toInt())) else it })
+        cls.getDeclaredField("decals").apply { isAccessible = true }.set(a, Decals.load(Prefs(ctx)))
+        copy.invoke(a, now().first { it.id == "r1" }, b, KeyStyles.Group.ZHUYIN)
+        ShadowLooper.idleMainLooper()
+        assertEquals(zhuyinKeys, now().size)
+        assertTrue(now().all { it.color == 0xFFB9E4C9.toInt() })
+        render(a, "studio-copy-group")
+
+        // 上一步：回到第一次複製後的樣子（粉紅）
+        cls.getDeclaredMethod("undo").apply { isAccessible = true }.invoke(a)
+        ShadowLooper.idleMainLooper()
+        assertEquals(zhuyinKeys, now().size)
+        assertTrue(now().filter { it.id != "r1" }.all { it.color == pink })
+    }
+
+    private fun render(a: StudioActivity, name: String) {
+        val v = a.window.decorView
+        Ui.spaceButtons(v, 8)
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
+        v.layout(0, 0, 1080, 2340)
+        val bmp = Bitmap.createBitmap(1080, 2340, Bitmap.Config.ARGB_8888)
+        v.draw(Canvas(bmp))
+        File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }

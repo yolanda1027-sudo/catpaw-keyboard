@@ -31,6 +31,9 @@ class DecalHandles(private val dp: Float) {
     var onPick: ((Decal?) -> Unit)? = null
     /** 按了小工具（工具的代號見 Geo.tools） */
     var onAction: ((String, Decal) -> Unit)? = null
+    /** 畫面上被別的按鈕蓋住的地方（工具列不要放在那裡，不然會按到別的按鈕）；呼叫的人依畫面大小給 */
+    var blocked: (Float, Float) -> List<RectF> = { _, _ -> emptyList() }
+
     /** 點在空白的地方（沒點到圖案、把手、工具） */
     var onEmptyTap: ((Float, Float) -> Unit)? = null
 
@@ -154,13 +157,36 @@ class DecalHandles(private val dp: Float) {
         val pts = corners(f) + listOf(rotHandle(f))
         val top = pts.minOf { it.second }
         val bottom = pts.maxOf { it.second }
-        val bw = 50 * dp
+        val bw = 46 * dp
         val bh = 34 * dp
         val w = bw * tools.size
-        var y = top - 14 * dp - bh
-        if (y < 2 * dp) y = bottom + 14 * dp
-        if (y + bh > viewH - 2 * dp) y = (viewH - bh - 2 * dp).coerceAtLeast(2 * dp)
-        val x = (f.cx - w / 2).coerceIn(4 * dp, (viewW - w - 4 * dp).coerceAtLeast(4 * dp))
+        val x0 = (f.cx - w / 2).coerceIn(4 * dp, (viewW - w - 4 * dp).coerceAtLeast(4 * dp))
+        val blockedRects = blocked(viewW, viewH)
+        /** 在 yy 這個高度放得下的話，回傳 x（會蓋到按鈕就往旁邊挪一點）；放不下回傳 null */
+        fun place(yy: Float): Float? {
+            if (yy < 2 * dp || yy + bh > viewH - 2 * dp) return null
+            var xx = x0
+            for (b in blockedRects) {
+                if (!RectF.intersects(b, RectF(xx, yy, xx + w, yy + bh))) continue
+                xx = when {
+                    b.right + 4 * dp + w <= viewW - 4 * dp -> b.right + 4 * dp
+                    b.left - 4 * dp - w >= 4 * dp -> b.left - 4 * dp - w
+                    else -> return null
+                }
+            }
+            return xx.takeIf { nx -> blockedRects.none { RectF.intersects(it, RectF(nx, yy, nx + w, yy + bh)) } }
+        }
+        // 先放框的上面；放不下或會蓋到按鈕（「← 整個鍵盤」「＋ 加圖案」）就挪一挪或改放下面
+        val above = top - 14 * dp - bh
+        val below = bottom + 14 * dp
+        val pa = place(above)
+        val pb = if (pa == null) place(below) else null
+        val y = when {
+            pa != null -> above
+            pb != null -> below
+            else -> above.coerceIn(2 * dp, (viewH - bh - 2 * dp).coerceAtLeast(2 * dp))
+        }
+        val x = pa ?: pb ?: x0
         val bar = RectF(x, y, x + w, y + bh)
         fill.color = 0x30000000
         c.drawRoundRect(RectF(bar.left, bar.top + 2 * dp, bar.right, bar.bottom + 2 * dp), bh / 2, bh / 2, fill)

@@ -117,6 +117,13 @@ class StudioActivity : Activity() {
                 if (done) panel.post { refresh() }
             }
         }
+        // 工具列不要蓋到左上角的「← 整個鍵盤」按鈕
+        zoom.handles.blocked = { w, h ->
+            listOf(
+                android.graphics.RectF(0f, 0f, 104 * dp, 62 * dp), // 左上「← 整個鍵盤」
+                android.graphics.RectF(w - 140 * dp, h - 82 * dp, w, h), // 右下「＋ 加圖案」
+            )
+        }
         // GIF 圖案換下一格時，放大的按鍵也要重畫
         kv.onAnimFrame = { zoom.invalidate() }
         zoomBox = android.widget.FrameLayout(this).apply {
@@ -603,6 +610,7 @@ class StudioActivity : Activity() {
         small("左右翻轉") { decalAction("flip", d) }
         panel.addView(row)
         if (d.stretch != 1f) button("↔ 恢復原本的寬高比例") { saveDecals(decals.map { if (it.id == d.id) it.copy(stretch = 1f) else it }) }
+        if (!d.onBackground) copyButtons(d)
         button("🗑 刪除這個圖案") {
             decalSel = null
             saveDecals(decals.filter { it.id != d.id })
@@ -667,6 +675,63 @@ class StudioActivity : Activity() {
         }
         slider("外框粗細", (st.width * 100).toInt().coerceIn(1, 20), 1, 20, { "$it" }) { v -> set({ it.copy(width = v / 100f) }, false) }
         if (d.shapeName != "roundrect") text("💡 想做「粉紅縫線」那種按鍵：加一個「圓角方形」，填粉紅色、外框選「縫線」配白色，再用四邊的拉把拉成跟按鍵一樣大。", 12f, dim = true)
+    }
+
+    // ---------- 把圖案複製到同一類的所有鍵 ----------
+
+    /** 複製出去的圖案 id 長這樣：cp_<原本的 id>_<新 id>，再複製一次時用來找到舊的、換成新的 */
+    private fun copyRoot(d: Decal) = if (d.id.startsWith("cp_")) d.id.split("_").getOrElse(1) { d.id } else d.id
+    private fun copyPrefix(d: Decal) = "cp_" + copyRoot(d) + "_"
+
+    private fun copyButtons(d: Decal) {
+        val key = selected ?: return
+        val group = KeyStyles.groupOf(key)
+        if (group != KeyStyles.Group.ZHUYIN && group != KeyStyles.Group.CHAR && group != KeyStyles.Group.FUNC) return
+        val existing = decals.count { it.id.startsWith(copyPrefix(d)) && it.id != d.id }
+        section("套用到其他鍵")
+        button("📋 複製到" + group.title + if (existing > 0) "（更新）" else "") { copyToGroup(d, key, group) }
+        if (existing > 0) {
+            text("已經複製到 $existing 顆鍵。改了這個圖案之後再按一次，其他鍵會一起更新。", 12f, dim = true)
+            button("移除複製出去的 $existing 個圖案") {
+                saveDecals(decals.filter { !(it.id.startsWith(copyPrefix(d)) && it.id != d.id) })
+            }
+        }
+    }
+
+    /** 在同一類的每一顆鍵上放一個一樣的圖案（位置、大小、樣式、上下層都一樣）；之前複製過的會換成新的 */
+    private fun copyToGroup(d: Decal, key: Key, group: KeyStyles.Group) {
+        val prefix = copyPrefix(d)
+        val srcId = KeyStyles.idOf(key)
+        val targets = kv.rows.flatten()
+            .filter { it.act != Act.GAP && KeyStyles.groupOf(it) == group && KeyStyles.idOf(it) != srcId }
+            .distinctBy { KeyStyles.idOf(it) }
+        // 原本的圖案壓在字底下的話，複製出去的也壓在字底下
+        val order = kv.elementOrder(key)
+        val idx = order.indexOf(d.id)
+        val below = idx >= 0 && order.any { it.startsWith(LABEL) } && order.take(idx).none { it.startsWith(LABEL) }
+        val old = decals.filter { it.id.startsWith(prefix) && it.id != d.id }
+        val copies = targets.map { k -> d.copy(id = prefix + Decals.newId(), target = KeyStyles.idOf(k)) }
+        // 舊的複製品如果剛好放在原本那顆鍵上（從複製品再複製），也一起換掉
+        saveDecals(decals.filter { it !in old } + copies, rebuild = false)
+        // 每顆鍵的上下層：舊複製品的位置拿掉；要壓在字底下的放最下面
+        var st = styles
+        for ((k, cp) in targets.zip(copies)) {
+            val id = KeyStyles.idOf(k)
+            val cur = st.map[id]
+            val saved = cur?.order?.filter { o -> old.none { it.id == o } }
+            val newOrder = when {
+                below -> listOf(cp.id) + kv.elementOrder(k).filter { it != cp.id }
+                saved != null -> saved
+                else -> null
+            }
+            if (newOrder != cur?.order) st = st.with(id, (cur ?: KeyStyle()).copy(order = newOrder))
+        }
+        styles = st
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        zoom.invalidate()
+        refresh()
+        android.widget.Toast.makeText(this, "已經複製到 ${targets.size} 顆鍵", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     /** 編輯框上面的小工具（圖案：複製、翻轉、上下層、刪除；字：顏色、上下層、重設） */
