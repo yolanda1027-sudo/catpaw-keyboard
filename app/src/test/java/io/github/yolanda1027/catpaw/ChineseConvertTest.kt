@@ -39,45 +39,61 @@ class ChineseConvertTest {
         assertEquals(listOf(0, 2, 3, 4), index)
     }
 
-    @Test fun toggleKeyOnTopBar() {
+    @Test fun toggleKeyInExpandedPanel() {
         val p = Prefs(ctx)
         p.theme = "classic"
         p.simplified = true
         val kv = CatKeyboardView(ctx, p, Haptics(ctx))
+        kv.candidates = listOf("头发", "头", "投", "透", "偷", "头发很长", "图", "土", "吐", "兔", "途", "突", "涂", "徒")
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val expanded = CatKeyboardView::class.java.getDeclaredField("expanded").apply { isAccessible = true }
+        expanded.set(kv, true)
         val bmp = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)
         kv.draw(Canvas(bmp))
         File("build/renders").mkdirs()
-        File("build/renders/sc-toggle.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File("build/renders/sc-toggle-panel.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
 
         var toggled = 0
+        var picked = -1
         kv.listener = object : CatKeyboardView.Listener {
             override fun onKey(key: Key, longPress: Boolean) {}
             override fun onTabChinese() {}
             override fun onTabEnglish() {}
             override fun onHide() {}
-            override fun onCandidate(index: Int) {}
+            override fun onCandidate(index: Int) { picked = index }
             override fun onSymbolTab(index: Int) {}
             override fun onSymbolSwipe(direction: Int) {}
             override fun onClipboard() {}
             override fun onQuick(item: String) {}
             override fun onToggleSimplified() { toggled++ }
         }
-        // 「中」「En」各一格寬，第三格是「簡」；上方列在透明區（34dp）下面
-        val tabW = 1080f * 0.2f // 「中」「En」一格是鍵盤寬的 1/5
-        val y = 34 * 2.625f + 20 * 2.625f
-        val t = SystemClock.uptimeMillis()
-        kv.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, tabW * 2.5f, y, 0))
-        kv.dispatchTouchEvent(MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, tabW * 2.5f, y, 0))
+        val d = 2.625f
+        fun tap(x: Float, y: Float) {
+            val t = SystemClock.uptimeMillis()
+            kv.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
+            kv.dispatchTouchEvent(MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, x, y, 0))
+        }
+        // 左下角：面板最下面（下方留白 10dp 上面那一格）
+        val bottomY = kv.measuredHeight - 10 * d - 45 * 0.95f * d / 2
+        tap(40f, bottomY)
         assertEquals(1, toggled)
+        assertEquals(-1, picked) // 不會選到字
+        // 左邊那一欄的上面：沒作用
+        tap(40f, 34 * d + 40 * d + 30 * d)
+        assertEquals(1, toggled)
+        // 點第一個候選字（左邊那欄右邊）
+        tap(1080f / 7 + 60f, 34 * d + 40 * d + 30 * d)
+        assertEquals(0, picked)
 
-        // 設定裡關掉切換鍵：按同一個地方沒反應
+        // 設定裡關掉切換鍵：沒有左邊那一欄，同一個位置變成候選字
         p.showScToggle = false
-        kv.dispatchTouchEvent(MotionEvent.obtain(t, t + 100, MotionEvent.ACTION_DOWN, tabW * 2.5f, y, 0))
-        kv.dispatchTouchEvent(MotionEvent.obtain(t, t + 150, MotionEvent.ACTION_UP, tabW * 2.5f, y, 0))
+        kv.reloadPrefs()
+        kv.candidates = listOf("頭", "投")
+        expanded.set(kv, true)
+        tap(40f, 34 * d + 40 * d + 30 * d)
         assertEquals(1, toggled)
-        assertTrue(tabW > 0)
+        assertEquals(0, picked)
     }
 }
 

@@ -643,17 +643,24 @@ class CatKeyboardView(
     }
 
     /** 展開面板裡每個選項的位置（還沒加上捲動） */
+    /** 展開面板左邊那一欄（放「簡」切換鍵）；設定裡關掉切換鍵就沒有這欄 */
+    private val panelLeft get() = if (prefs.showScToggle) width / 7f else 0f
+
+    /** 「簡」切換鍵的位置：左邊那一欄的最下面 */
+    private fun scToggleRect() = RectF(0f, kbH - padBottom - panelRowH, panelLeft, kbH - padBottom)
+
     private fun panelLayout(): List<RectF> = panelCache ?: run {
         val w = width.toFloat()
-        val cell = w / 6f
+        val left = panelLeft
+        val cell = (w - left) / 6f
         val size = keyH * 0.42f
-        var x = 0f
+        var x = left
         var y = topH + 2 * dp
         candidates.map { t ->
             var iw = max(textWidth(t, size) + 24 * dp, cell)
             iw = kotlin.math.ceil(iw / cell) * cell // 對齊格子，看起來比較整齊
-            if (iw > w) iw = w
-            if (x + iw > w + 1f) { x = 0f; y += panelRowH }
+            if (iw > w - left) iw = w - left
+            if (x + iw > w + 1f) { x = left; y += panelRowH }
             RectF(x, y, x + iw, y + panelRowH).also { x += iw }
         }.also { panelCache = it }
     }
@@ -701,8 +708,9 @@ class CatKeyboardView(
     private fun drawPanel(c: Canvas, w: Float) {
         val items = panelLayout()
         val line = android.graphics.Paint().apply { color = theme.textDim; alpha = 50; strokeWidth = 1 * dp }
+        drawScToggle(c, line)
         c.save()
-        c.clipRect(0f, topH, w, kbH)
+        c.clipRect(panelLeft, topH, w, kbH)
         val size = keyH * 0.42f
         items.forEachIndexed { i, r0 ->
             val r = RectF(r0.left, r0.top - panelScroll, r0.right, r0.bottom - panelScroll)
@@ -712,6 +720,24 @@ class CatKeyboardView(
             if (r.right < w - 1f) c.drawLine(r.right, r.top + 8 * dp, r.right, r.bottom - 8 * dp, line)
         }
         c.restore()
+    }
+
+    /** 左下角的「簡」：開著＝亮色字＋底下一條線；關著＝淡淡的 */
+    private fun drawScToggle(c: Canvas, line: android.graphics.Paint) {
+        if (panelLeft <= 0f) return
+        c.drawLine(panelLeft, topH + 8 * dp, panelLeft, kbH - 8 * dp, line)
+        val r = scToggleRect()
+        val on = prefs.simplified
+        theme.drawText(c, "簡", r.centerX(), r.centerY(), keyH * 0.4f, if (on) theme.text else theme.textDim)
+        if (on) {
+            val u = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = theme.popupSelBg
+                strokeWidth = 2.5f * dp
+                strokeCap = android.graphics.Paint.Cap.ROUND
+            }
+            val y = r.centerY() + keyH * 0.32f
+            c.drawLine(r.centerX() - keyH * 0.2f, y, r.centerX() + keyH * 0.2f, y, u)
+        }
     }
 
     private val tabW get() = width * 0.2f
@@ -831,20 +857,7 @@ class CatKeyboardView(
         val ts = topH * 0.1f
         c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
         theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) theme.textDim else theme.text)
-        // 簡繁切換：開著＝亮色字＋底下一條線；關著＝淡淡的
-        if (isChinese && prefs.showScToggle) {
-            val on = prefs.simplified
-            val sx = tabW * 2.5f
-            theme.drawText(c, "簡", sx, topH / 2, topH * 0.44f, if (on) theme.text else theme.textDim)
-            if (on) {
-                val u = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = theme.popupSelBg
-                    strokeWidth = 2.5f * dp
-                    strokeCap = android.graphics.Paint.Cap.ROUND
-                }
-                c.drawLine(sx - topH * 0.22f, topH * 0.82f, sx + topH * 0.22f, topH * 0.82f, u)
-            }
-        }
+
         // 剪貼簿按鈕（在 ▽ 左邊）
         theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, theme.textDim)
         // 右邊的 ▽：收起鍵盤
@@ -1028,8 +1041,15 @@ class CatKeyboardView(
                     }
                     1 -> stripLayout().indexOfFirst { e.x + candScroll in it.left..it.right }
                         .takeIf { it >= 0 }?.let { pick(it) }
-                    2 -> panelLayout().indexOfFirst { it.contains(e.x, e.y + panelScroll) }
-                        .takeIf { it >= 0 }?.let { pick(it) }
+                    2 -> when {
+                        // 左邊那一欄：只有最下面的「簡」有作用
+                        e.x < panelLeft -> if (scToggleRect().contains(e.x, e.y)) {
+                            haptics.perform(this, prefs)
+                            listener?.onToggleSimplified()
+                        }
+                        else -> panelLayout().indexOfFirst { it.contains(e.x, e.y + panelScroll) }
+                            .takeIf { it >= 0 }?.let { pick(it) }
+                    }
                 }
                 return true
             }
@@ -1061,7 +1081,6 @@ class CatKeyboardView(
         when {
             x < tabW -> { haptics.perform(this, prefs); l.onTabChinese() }
             x < tabW * 2 -> { haptics.perform(this, prefs); l.onTabEnglish() }
-            x < tabW * 3 && isChinese && prefs.showScToggle -> { haptics.perform(this, prefs); l.onToggleSimplified() }
             x > width - tabW * 0.8f -> { haptics.perform(this, prefs); l.onHide() }
             x > width - tabW * 1.6f -> { haptics.perform(this, prefs); l.onClipboard() }
         }

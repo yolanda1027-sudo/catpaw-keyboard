@@ -123,6 +123,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
             "chinese", "recent_symbols", "recent_kaomoji" -> Unit
+            "simplified" -> refresh() // 簡繁切換：選字列馬上換
             "quick_bar", "quick_items", "quick_config" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」

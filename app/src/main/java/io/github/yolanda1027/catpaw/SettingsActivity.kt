@@ -698,18 +698,15 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         root.addView(Switch(this).apply {
-            text = "鍵盤上方顯示「簡」切換鍵（按一下切換簡體／繁體）"
+            text = "選字面板左下角放「簡」切換鍵"
             isChecked = prefs.showScToggle
-            setOnCheckedChangeListener { _, b -> prefs.showScToggle = b }
+            setOnCheckedChangeListener { _, b ->
+                prefs.showScToggle = b
+                if (!b) prefs.simplified = false // 拿掉切換鍵就回到繁體，不會卡在簡體
+            }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
-        root.addView(Switch(this).apply {
-            text = "打出簡體字"
-            isChecked = prefs.simplified
-            setOnCheckedChangeListener { _, b -> prefs.simplified = b }
-            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-        })
-        note("簡體模式：一樣用注音、一樣的選字，選字列和打出去的字會變成簡體（繁簡對照表來自 OpenCC）。把切換鍵關掉的話，也可以在這裡開關簡體。")
+        note("打字時把選字面板展開（選字列右邊的箭頭），左下角的「簡」按一下就切換簡體／繁體，面板上的字會馬上換。選字一樣用繁體詞庫，只有顯示和打出去的字變簡體（對照表來自 OpenCC）。關掉這個開關會拿掉切換鍵，並回到繁體。")
         note("記憶選字：你從選字列挑的字，下次會排第一個；同一次打字裡分段挑的字（例如先選「妳」再選「好」）會記成新詞「妳好」。直接按空白／Enter 接受預設的不算。只存在這支手機裡。")
         button("清除學習紀錄") {
             java.io.File(filesDir, "user_scores.txt").delete()
