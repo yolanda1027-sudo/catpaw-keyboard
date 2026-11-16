@@ -175,5 +175,24 @@ class DecalsTest {
         render(a.window.decorView, "studio-key-decals")
         kv.onDecalPicked!!.invoke(Decals.load(p).first { it.id == "k1" })
         render(a.window.decorView, "studio-decal")
+
+        // 放大的按鍵上拖曳圖案：往右拖 1/4 個按鍵寬
+        val zf = StudioActivity::class.java.getDeclaredField("zoom"); zf.isAccessible = true
+        val zoom = zf.get(a) as KeyZoomView
+        val box = KeyZoomView::class.java.getDeclaredMethod("keyBox").apply { isAccessible = true }.invoke(zoom) as android.graphics.RectF
+        val before = Decals.load(p).first { it.id == "k1" }
+        val sx = box.left + before.x * box.width()
+        val sy = box.top + before.y * box.height()
+        zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, sx to sy))
+        zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, sx + box.width() / 4 to sy))
+        zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, sx + box.width() / 4 to sy))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(before.x + 0.25f, Decals.load(Prefs(ctx)).first { it.id == "k1" }.x, 0.01f)
+        render(a.window.decorView, "studio-zoom-moved")
+
+        // 點另一個圖案（Enter 鍵上的愛心）：放大畫面換成 Enter
+        kv.onDecalPicked!!.invoke(Decals.load(p).first { it.id == "k2" })
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        render(a.window.decorView, "studio-zoom-enter")
     }
 }

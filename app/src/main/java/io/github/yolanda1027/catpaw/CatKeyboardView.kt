@@ -363,6 +363,26 @@ class CatKeyboardView(
         for (d in decals) if (d.target == id) Decals.draw(c, d, kr.rect, kr.rect.height(), decalBitmaps[d.fileName])
     }
 
+    // 主題工作室的放大編輯（KeyZoomView）借這幾個來畫
+
+    fun keyRectOf(key: Key): RectF? = keyRects.firstOrNull { it.key == key }?.rect
+    val keyboardBg: Int get() = theme.bg
+    fun decalBitmap(d: Decal): android.graphics.Bitmap? = decalBitmaps[d.fileName]
+
+    /** 把某顆鍵（含圖案）放大畫到 dst 這個框裡，跟鍵盤上看到的一模一樣 */
+    fun drawKeyZoomed(c: Canvas, key: Key, dst: RectF) {
+        val kr = keyRects.firstOrNull { it.key == key } ?: return
+        theme.fonts = fontSet
+        val s = dst.width() / kr.rect.width()
+        c.save()
+        c.translate(dst.left, dst.top)
+        c.scale(s, s)
+        c.translate(-kr.rect.left, -kr.rect.top)
+        drawOneKey(c, kr)
+        drawKeyDecals(c, kr)
+        c.restore()
+    }
+
     /** 主題工作室改了圖案（拖曳、滑桿）：直接換掉，不用重讀設定 */
     fun setDecalsLive(list: List<Decal>) {
         decals = list

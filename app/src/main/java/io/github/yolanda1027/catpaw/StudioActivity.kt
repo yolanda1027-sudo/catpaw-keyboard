@@ -27,6 +27,9 @@ class StudioActivity : Activity() {
     private lateinit var panel: LinearLayout
     private lateinit var tabZhuyin: Button
     private lateinit var tabEnglish: Button
+    /** 放大的單顆按鍵（蓋在鍵盤上面） */
+    private lateinit var zoom: KeyZoomView
+    private lateinit var zoomBox: android.widget.FrameLayout
 
     private var styles = KeyStyles.EMPTY
     private var selected: Key? = null
@@ -84,7 +87,47 @@ class StudioActivity : Activity() {
                 }
             }
         }
-        outer.addView(kv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        // 鍵盤和「放大的按鍵」疊在一起：選到單顆鍵時，放大的那個蓋在鍵盤上
+        val stage = android.widget.FrameLayout(this)
+        stage.addView(kv, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+        zoom = KeyZoomView(this, kv).apply {
+            decals = { this@StudioActivity.decals }
+            onPick = { d ->
+                decalSel = d?.id
+                panel.post { refresh() }
+            }
+            onChange = { d, done ->
+                this@StudioActivity.decals = this@StudioActivity.decals.map { if (it.id == d.id) d else it }
+                kv.setDecalsLive(this@StudioActivity.decals)
+                if (done) {
+                    Decals.save(prefs, this@StudioActivity.decals)
+                    panel.post { refresh() }
+                }
+            }
+        }
+        zoomBox = android.widget.FrameLayout(this).apply {
+            addView(zoom, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+            fun corner(label: String, gravity: Int, onClick: () -> Unit) = addView(Button(this@StudioActivity).apply {
+                text = label
+                isAllCaps = false
+                textSize = 13f
+                alpha = 0.92f
+                setOnClickListener { onClick() }
+            }, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, gravity).apply {
+                setMargins(px(6f), px(6f), px(6f), px(26f))
+            })
+            corner("← 整個鍵盤", Gravity.TOP or Gravity.START) {
+                selected = null
+                decalSel = null
+                refresh()
+            }
+            corner("＋ 加圖案", Gravity.BOTTOM or Gravity.END) {
+                selected?.let { showAddDialog(KeyStyles.idOf(it)) }
+            }
+            visibility = View.GONE
+        }
+        stage.addView(zoomBox, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+        outer.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -137,6 +180,11 @@ class StudioActivity : Activity() {
 
     private fun refresh() {
         panel.removeAllViews()
+        // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
+        val zoomKey = selected?.takeIf { !bgSelected && !groupScope }
+        zoomBox.visibility = if (zoomKey != null) View.VISIBLE else View.GONE
+        zoom.key = zoomKey
+        zoom.selectedId = decalSel
         kv.decalEditId = decalSel
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
@@ -362,7 +410,9 @@ class StudioActivity : Activity() {
         val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
         text("正在編輯：${shapeName(d)}", 18f, bold = true).setPadding(0, px(10f), 0, 0)
         text("貼在：$where", 14f, dim = true)
-        text("👆 在鍵盤上用一隻手指拖曳＝移動，兩隻手指＝放大縮小、旋轉", 14f).setPadding(0, px(8f), 0, px(4f))
+        val tip = if (d.onBackground) "👆 在鍵盤上用一隻手指拖曳＝移動，兩隻手指＝放大縮小、旋轉"
+        else "👆 在上面放大的按鍵上：一隻手指拖曳＝移動，兩隻手指＝放大縮小、旋轉"
+        text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
 
         fun change(f: (Decal) -> Decal, rebuild: Boolean = false) {
             val cur = decals.firstOrNull { it.id == d.id } ?: return
