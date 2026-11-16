@@ -83,6 +83,7 @@ class StudioActivity : Activity() {
                 refresh()
             }
             onDecalPicked = { d -> selectDecal(d) }
+            onDecalAction = { a, d -> decalAction(a, d) }
             onDecalChanged = { d, done ->
                 decals = decals.map { if (it.id == d.id) d else it }
                 if (done) {
@@ -96,11 +97,12 @@ class StudioActivity : Activity() {
         stage.addView(kv, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
         zoom = KeyZoomView(this, kv).apply {
             decals = { this@StudioActivity.decals }
-            onPick = { d ->
+            handles.onAction = { a, d -> decalAction(a, d) }
+            handles.onPick = { d ->
                 decalSel = d?.id
                 panel.post { refresh() }
             }
-            onChange = { d, done ->
+            handles.onChange = { d, done ->
                 this@StudioActivity.decals = this@StudioActivity.decals.map { if (it.id == d.id) d else it }
                 kv.setDecalsLive(this@StudioActivity.decals)
                 if (done) {
@@ -432,8 +434,7 @@ class StudioActivity : Activity() {
         val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
         text("正在編輯：${shapeName(d)}", 18f, bold = true).setPadding(0, px(10f), 0, 0)
         text("貼在：$where", 14f, dim = true)
-        val tip = if (d.onBackground) "👆 在鍵盤上用一隻手指拖曳＝移動，兩隻手指＝放大縮小、旋轉"
-        else "👆 在上面放大的按鍵上：一隻手指拖曳＝移動，兩隻手指＝放大縮小、旋轉"
+        val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、刪除"
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
 
         fun change(f: (Decal) -> Decal, rebuild: Boolean = false) {
@@ -480,10 +481,7 @@ class StudioActivity : Activity() {
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         small("往上一層") { moveLayer(d, +1) }
         small("往下一層") { moveLayer(d, -1) }
-        small("複製") {
-            val copy = d.copy(id = Decals.newId(), x = d.x + 0.06f, y = d.y + 0.06f)
-            addDecal(copy)
-        }
+        small("左右翻轉") { decalAction("flip", d) }
         panel.addView(row)
         button("🗑 刪除這個圖案") {
             decalSel = null
@@ -491,6 +489,19 @@ class StudioActivity : Activity() {
             Decals.cleanup(this, decals)
         }
         button(if (d.onBackground) "← 回到鍵盤背景" else "← 回到$where") { decalSel = null; refresh() }
+    }
+
+    /** 編輯框上面的小工具：複製、左右翻轉、刪除 */
+    private fun decalAction(action: String, d: Decal) {
+        when (action) {
+            "copy" -> addDecal(d.copy(id = Decals.newId(), x = d.x + 0.08f, y = d.y + 0.08f))
+            "flip" -> saveDecals(decals.map { if (it.id == d.id) it.copy(flip = !it.flip) else it })
+            "delete" -> {
+                decalSel = null
+                saveDecals(decals.filter { it.id != d.id })
+                Decals.cleanup(this, decals)
+            }
+        }
     }
 
     /** 跟同一個位置上的下一個（或上一個）圖案交換順序：後面的畫在上面 */

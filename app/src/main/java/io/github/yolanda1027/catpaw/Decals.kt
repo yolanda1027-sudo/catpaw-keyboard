@@ -36,6 +36,8 @@ data class Decal(
     val alpha: Float = 1f,
     val color: Int = 0xFFFF8FA9.toInt(),
     val front: Boolean = false,
+    /** 左右翻轉（鏡像） */
+    val flip: Boolean = false,
 ) {
     val isShape get() = img.startsWith(SHAPE)
     val shapeName get() = img.removePrefix(SHAPE)
@@ -46,7 +48,7 @@ data class Decal(
         .put("id", id).put("target", target).put("img", img)
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size.toDouble())
         .put("rotation", rotation.toDouble()).put("alpha", alpha.toDouble())
-        .put("color", String.format("#%08X", color)).put("front", front)
+        .put("color", String.format("#%08X", color)).put("front", front).put("flip", flip)
 
     companion object {
         const val BG = "@bg"
@@ -70,6 +72,7 @@ data class Decal(
                 alpha = f("alpha", 1f, 0.05f, 1f),
                 color = try { Color.parseColor(o.optString("color", "#FFFF8FA9")) } catch (_: Exception) { 0xFFFF8FA9.toInt() },
                 front = o.optBoolean("front", false),
+                flip = o.optBoolean("flip", false),
             )
         }
     }
@@ -189,6 +192,7 @@ object Decals {
         c.save()
         c.translate(cx, cy)
         c.rotate(d.rotation)
+        if (d.flip) c.scale(-1f, 1f)
         val r = RectF(-w / 2, -h / 2, w / 2, h / 2)
         if (bmp != null) {
             paint.alpha = (d.alpha * 255).toInt()

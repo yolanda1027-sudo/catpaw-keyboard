@@ -106,21 +106,74 @@ class DecalsTest {
         kv.onDecalChanged = { d, done -> last = d; if (done) finished++ }
         kv.decalEditId = "bg1"
 
-        // 一隻手指往右拖 108px（鍵盤寬的 10%）
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, 300f to 600f))
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, 408f to 600f))
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, 408f to 600f))
+        // 按住圖案中間往右拖 108px（鍵盤寬的 10%）
+        val floatH = 34 * 2.625f
+        val cx = 540f
+        val cy = floatH + (kv.measuredHeight - floatH) * 0.5f
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, cx to cy))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, cx + 108f to cy))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, cx + 108f to cy))
         assertEquals(0.6f, last!!.x, 0.01f)
         assertEquals(1, finished)
 
         // 兩隻手指拉開成兩倍距離、再轉 90 度
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, 400f to 600f))
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 400f to 600f, 600f to 600f))
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, 500f to 500f, 500f to 900f))
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 500f to 500f, 500f to 900f))
-        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, 500f to 500f))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, 648f to cy))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 548f to cy, 748f to cy))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, 648f to cy - 200f, 648f to cy + 200f))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 648f to cy - 200f, 648f to cy + 200f))
+        kv.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, 648f to cy - 200f))
         assertEquals(0.4f, last!!.size, 0.01f)
         assertEquals(90f, last!!.rotation, 0.5f)
+    }
+
+    /** 放大的按鍵上，用 Canva 那種把手：拖角縮放、拖圓圈旋轉、小工具複製／翻轉／刪除 */
+    @Test fun canvaStyleHandles() {
+        val p = Prefs(ctx)
+        Decals.save(p, listOf(Decal("k1", "zy:ㄅ", "shape:cat", x = 0.5f, y = 0.5f, size = 0.4f)))
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        val zoom = StudioActivity::class.java.getDeclaredField("zoom").apply { isAccessible = true }.get(a) as KeyZoomView
+        kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        render(a.window.decorView, "studio-handles")
+        fun now() = Decals.load(Prefs(ctx)).first { it.id == "k1" }
+        fun drag(from: Pair<Float, Float>, to: Pair<Float, Float>) {
+            zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, from))
+            zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, to))
+            zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, to))
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            render(a.window.decorView, "studio-handles")
+        }
+        val box = KeyZoomView::class.java.getDeclaredMethod("keyBox").apply { isAccessible = true }.invoke(zoom) as android.graphics.RectF
+        val d0 = now()
+        val half = d0.size * box.height() / 2 + 5 * 2.625f
+        val cx = box.centerX()
+        val cy = box.centerY()
+        // 右下角往外拖到兩倍距離 → 變兩倍大
+        drag(cx + half to cy + half, cx + half * 2 to cy + half * 2)
+        assertEquals(d0.size * 2, now().size, 0.02f)
+        // 旋轉把手（框下面 30dp）拖到右邊 → 轉 -90 度（從正下方轉到正右方）
+        val h2 = now().size * box.height() / 2 + 5 * 2.625f
+        drag(cx to cy + h2 + 30 * 2.625f, cx + 300f to cy)
+        assertEquals(-90f, now().rotation, 1f)
+
+        // 小工具：位置從畫出來的框拿
+        @Suppress("UNCHECKED_CAST")
+        val tools = DecalHandles::class.java.getDeclaredField("toolRects").apply { isAccessible = true }.get(zoom.handles) as List<Pair<String, android.graphics.RectF>>
+        fun tap(id: String) {
+            val r = tools.first { it.first == id }.second
+            zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, r.centerX() to r.centerY()))
+            zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, r.centerX() to r.centerY()))
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            render(a.window.decorView, "studio-handles")
+        }
+        tap("flip")
+        assertTrue(now().flip)
+        render(a.window.decorView, "studio-handles-flip")
+        tap("copy")
+        assertEquals(2, Decals.load(Prefs(ctx)).size)
+        tap("delete") // 刪掉的是複製出來、現在選到的那個
+        assertEquals(listOf("k1"), Decals.load(Prefs(ctx)).map { it.id })
     }
 
     @Test fun tapSelectsDecalOrKey() {
