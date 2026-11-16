@@ -148,4 +148,32 @@ class ShapeStyleTest {
         v.draw(Canvas(bmp))
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+
+    /** 縫線：外框加粗時，縫線不會跟著往內縮（離邊緣的距離固定）；蝴蝶結這種形狀也貼著自己的邊 */
+    @Test fun stitchStaysNearTheEdge() {
+        val cell = 220f
+        val names = listOf("roundrect", "bow", "cat", "heart", "flower")
+        val widths = listOf(0.03f, 0.07f, 0.12f)
+        val bmp = Bitmap.createBitmap((cell * names.size).toInt(), (cell * widths.size).toInt(), Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(0xFF3B302A.toInt())
+        names.forEachIndexed { i, n ->
+            widths.forEachIndexed { j, w ->
+                DecalShapes.draw(c, n, RectF(i * cell + 20, j * cell + 20, (i + 1) * cell - 20, (j + 1) * cell - 20), ShapeStyle(pink, Color.WHITE, w, "stitch"), 1f)
+            }
+        }
+        File("build/renders/stitch-widths.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // 圓角方形：細的、中的縫線離左邊的距離一樣（中間那一列往右找第一個白點）
+        fun firstWhite(row: Int, y: Float): Int {
+            for (x in 20 until cell.toInt()) {
+                val p = bmp.getPixel(x, (row * cell + y).toInt())
+                if (Color.red(p) > 240 && Color.green(p) > 240 && Color.blue(p) > 240) return x
+            }
+            return -1
+        }
+        val thinX = (0..120).map { firstWhite(0, 60f + it) }.filter { it > 0 }.minOrNull()!!
+        val midX = (0..120).map { firstWhite(1, 60f + it) }.filter { it > 0 }.minOrNull()!!
+        // 粗的線本身比較寬，左邊緣會稍微往外，但線的中心位置一樣 → 左邊緣只差半條線寬以內
+        assertTrue("細 $thinX 中 $midX", kotlin.math.abs(thinX - midX) <= (0.07f - 0.03f) * 180 / 2 + 2)
+    }
 }

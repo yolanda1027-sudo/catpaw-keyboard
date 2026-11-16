@@ -30,6 +30,8 @@ class StudioActivity : Activity() {
     /** 放大的單顆按鍵（蓋在鍵盤上面） */
     private lateinit var zoom: KeyZoomView
     private lateinit var zoomBox: android.widget.FrameLayout
+    /** 放大畫面上的按鈕（「← 整個鍵盤」「＋ 加圖案」），編輯框的工具列要避開 */
+    private val zoomButtons = ArrayList<View>()
 
     private var styles = KeyStyles.EMPTY
     private var selected: Key? = null
@@ -117,12 +119,11 @@ class StudioActivity : Activity() {
                 if (done) panel.post { refresh() }
             }
         }
-        // 工具列不要蓋到左上角的「← 整個鍵盤」按鈕
-        zoom.handles.blocked = { w, h ->
-            listOf(
-                android.graphics.RectF(0f, 0f, 104 * dp, 62 * dp), // 左上「← 整個鍵盤」
-                android.graphics.RectF(w - 140 * dp, h - 82 * dp, w, h), // 右下「＋ 加圖案」
-            )
+        // 工具列不要蓋到「← 整個鍵盤」「＋ 加圖案」：照按鈕真正的位置算（字放大的手機按鈕會比較寬）
+        zoom.handles.blocked = { _, _ ->
+            zoomButtons.filter { it.width > 0 }.map {
+                android.graphics.RectF(it.left - 4 * dp, it.top - 4 * dp, it.right + 4 * dp, it.bottom + 4 * dp)
+            }
         }
         // GIF 圖案換下一格時，放大的按鍵也要重畫
         kv.onAnimFrame = { zoom.invalidate() }
@@ -134,6 +135,7 @@ class StudioActivity : Activity() {
                 textSize = 13f
                 alpha = 0.92f
                 setOnClickListener { onClick() }
+                zoomButtons.add(this)
             }, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, gravity).apply {
                 setMargins(px(6f), px(6f), px(6f), px(26f))
             })

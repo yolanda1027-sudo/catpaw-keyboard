@@ -383,14 +383,14 @@ object DecalShapes {
             fill.alpha = Color.alpha(st.fill) * a / 255
             c.drawPath(path, fill)
         }
-        st.outline?.let { drawOutline(c, path, r, it, st.width, st.dash, a) }
+        st.outline?.let { drawOutline(c, name, path, r, it, st.width, st.dash, a) }
         // 臉、花心這些小細節：有填色就用填色深一點／淺一點的顏色，沒有填色就用外框的顏色
         val ink = st.outline ?: st.fill
         val base = if (Color.alpha(st.fill) > 0) st.fill else ink
         details(c, name, r, base, ink, Color.alpha(st.fill) > 0, a)
     }
 
-    private fun drawOutline(c: Canvas, path: Path, r: RectF, color: Int, widthFrac: Float, dash: String, a: Int) {
+    private fun drawOutline(c: Canvas, name: String, path: Path, r: RectF, color: Int, widthFrac: Float, dash: String, a: Int) {
         val w = (widthFrac * minOf(r.width(), r.height())).coerceAtLeast(0.5f)
         stroke.color = color
         stroke.alpha = Color.alpha(color) * a / 255
@@ -402,18 +402,44 @@ object DecalShapes {
             else -> null
         }
         if (dash == "stitch") {
-            // 縫線：往內縮一點，像布邊車的線
-            val inset = w * 2.2f
-            val sx = ((r.width() - 2 * inset) / r.width()).coerceAtLeast(0.1f)
-            val sy = ((r.height() - 2 * inset) / r.height()).coerceAtLeast(0.1f)
-            val p = Path(path)
-            matrix.setScale(sx, sy, r.centerX(), r.centerY())
-            p.transform(matrix)
-            c.drawPath(p, stroke)
+            // 縫線：離邊緣固定的距離（線變粗不會跟著往內縮），太粗的時候才往內讓一點，免得超出圖案
+            val gap = minOf(r.width(), r.height()) * 0.09f
+            val inset = maxOf(gap, w * 0.5f + 0.5f)
+            insetPath(name, path, r, inset)?.let { c.drawPath(it, stroke) }
         } else {
             c.drawPath(path, stroke)
         }
         stroke.pathEffect = null
+    }
+
+    // 縫線用的「往內縮」輪廓：算起來比較慢，同樣的圖案、大小只算一次（例如 40 顆鍵貼一樣的就只算一次）
+    private val insetCache = object : LinkedHashMap<String, Path?>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Path?>?) = size > 64
+    }
+    private val insetStroke = Paint().apply {
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    /**
+     * 跟邊緣平行、往內 inset 的輪廓（不是把整個圖縮小，蝴蝶結、貓臉這種形狀才會貼著自己的邊）。
+     * 做法：圖案減掉「沿著邊緣畫一條 2×inset 粗的線」佔到的範圍，剩下那塊的邊就是往內縮的輪廓。
+     */
+    private fun insetPath(name: String, path: Path, r: RectF, inset: Float): Path? {
+        val key = name + "|" + r.width().toInt() + "x" + r.height().toInt() + "|" + (inset * 4).toInt()
+        val cached = insetCache[key]
+        val local: Path? = if (insetCache.containsKey(key)) cached else {
+            // 在原點附近算（存起來的跟位置無關），用的時候再移過去
+            val p = Path(path)
+            p.offset(-r.left, -r.top)
+            val band = Path()
+            insetStroke.strokeWidth = inset * 2
+            insetStroke.getFillPath(p, band)
+            val inner = Path(p)
+            inner.op(band, Path.Op.DIFFERENCE)
+            (if (inner.isEmpty) null else inner).also { insetCache[key] = it }
+        }
+        return local?.let { Path(it).apply { offset(r.left, r.top) } }
     }
 
     /** 圖案的輪廓（填色、外框都用它） */
