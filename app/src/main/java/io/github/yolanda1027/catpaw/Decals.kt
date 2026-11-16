@@ -48,13 +48,15 @@ data class Decal(
     val outlineWidth: Float = 0.06f,
     /** 外框樣式：solid、dash、dot、stitch */
     val outlineStyle: String = "solid",
+    /** 縫線離邊緣多遠（圖案短邊的幾分之幾；0 = 貼在最外面的邊上） */
+    val outlineInset: Float = 0.09f,
 ) {
     /** 內建圖案要怎麼畫 */
     fun shapeStyle(): ShapeStyle =
-        if (!styled) DecalShapes.defaultStyle(shapeName, color) else ShapeStyle(color, outline, outlineWidth, outlineStyle)
+        if (!styled) DecalShapes.defaultStyle(shapeName, color) else ShapeStyle(color, outline, outlineWidth, outlineStyle, outlineInset)
 
     /** 換成新的樣式（之後就照這個畫） */
-    fun withStyle(st: ShapeStyle) = copy(styled = true, color = st.fill, outline = st.outline, outlineWidth = st.width, outlineStyle = st.dash)
+    fun withStyle(st: ShapeStyle) = copy(styled = true, color = st.fill, outline = st.outline, outlineWidth = st.width, outlineStyle = st.dash, outlineInset = st.inset)
 
     val isShape get() = img.startsWith(SHAPE)
     val shapeName get() = img.removePrefix(SHAPE)
@@ -72,6 +74,7 @@ data class Decal(
                 outline?.let { put("outline", String.format("#%08X", it)) }
                 put("outlineWidth", outlineWidth.toDouble())
                 put("outlineStyle", outlineStyle)
+                put("outlineInset", outlineInset.toDouble())
             }
         }
 
@@ -103,6 +106,7 @@ data class Decal(
                 outline = o.optString("outline").takeIf { it.isNotEmpty() }?.let { try { Color.parseColor(it) } catch (_: Exception) { null } },
                 outlineWidth = f("outlineWidth", 0.06f, 0.005f, 0.3f),
                 outlineStyle = o.optString("outlineStyle", "solid").takeIf { st -> DecalShapes.DASHES.any { it.first == st } } ?: "solid",
+                outlineInset = f("outlineInset", 0.09f, 0f, 0.3f),
             )
         }
     }
@@ -337,9 +341,10 @@ object Decals {
 /**
  * 內建圖案的樣式（像小畫家）：填色（可以透明）、外框（可以沒有）、外框的樣式和粗細。
  * @param width 外框粗細：圖案短邊的幾分之幾
- * @param dash solid 實線｜dash 虛線｜dot 點點｜stitch 縫線（往內縮一點的短虛線）
+ * @param dash solid 實線｜dash 虛線｜dot 點點｜stitch 縫線（短虛線，可以往內縮）
+ * @param inset 縫線離邊緣多遠：圖案短邊的幾分之幾（0 = 貼在最外面的邊上）
  */
-data class ShapeStyle(val fill: Int, val outline: Int?, val width: Float = 0.06f, val dash: String = "solid")
+data class ShapeStyle(val fill: Int, val outline: Int?, val width: Float = 0.06f, val dash: String = "solid", val inset: Float = 0.09f)
 
 /** 內建的小圖案：全部用線條和形狀畫，所有手機看起來都一樣，可以換填色、加外框 */
 object DecalShapes {
@@ -383,14 +388,14 @@ object DecalShapes {
             fill.alpha = Color.alpha(st.fill) * a / 255
             c.drawPath(path, fill)
         }
-        st.outline?.let { drawOutline(c, name, path, r, it, st.width, st.dash, a) }
+        st.outline?.let { drawOutline(c, name, path, r, it, st.width, st.dash, st.inset, a) }
         // 臉、花心這些小細節：有填色就用填色深一點／淺一點的顏色，沒有填色就用外框的顏色
         val ink = st.outline ?: st.fill
         val base = if (Color.alpha(st.fill) > 0) st.fill else ink
         details(c, name, r, base, ink, Color.alpha(st.fill) > 0, a)
     }
 
-    private fun drawOutline(c: Canvas, name: String, path: Path, r: RectF, color: Int, widthFrac: Float, dash: String, a: Int) {
+    private fun drawOutline(c: Canvas, name: String, path: Path, r: RectF, color: Int, widthFrac: Float, dash: String, insetFrac: Float, a: Int) {
         val w = (widthFrac * minOf(r.width(), r.height())).coerceAtLeast(0.5f)
         stroke.color = color
         stroke.alpha = Color.alpha(color) * a / 255
@@ -401,10 +406,9 @@ object DecalShapes {
             "stitch" -> android.graphics.DashPathEffect(floatArrayOf(w * 1.8f, w * 1.9f), 0f)
             else -> null
         }
-        if (dash == "stitch") {
-            // 縫線：離邊緣固定的距離（線變粗不會跟著往內縮），太粗的時候才往內讓一點，免得超出圖案
-            val gap = minOf(r.width(), r.height()) * 0.09f
-            val inset = maxOf(gap, w * 0.5f + 0.5f)
+        val inset = minOf(r.width(), r.height()) * insetFrac
+        if (dash == "stitch" && inset >= 0.5f) {
+            // 縫線：照「離邊距離」往內縮（跟線的粗細無關，加粗不會往內跑）
             insetPath(name, path, r, inset)?.let { c.drawPath(it, stroke) }
         } else {
             c.drawPath(path, stroke)

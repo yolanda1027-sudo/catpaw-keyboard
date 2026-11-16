@@ -27,7 +27,7 @@ class ShapeStyleTest {
     private val pink = 0xFFF7A8C0.toInt()
 
     @Test fun jsonRoundTrip() {
-        val styled = Decal("a", "zy:ㄅ", "shape:roundrect").withStyle(ShapeStyle(Color.TRANSPARENT, Color.WHITE, 0.08f, "stitch"))
+        val styled = Decal("a", "zy:ㄅ", "shape:roundrect").withStyle(ShapeStyle(Color.TRANSPARENT, Color.WHITE, 0.08f, "stitch", 0.15f))
         assertEquals(styled, Decal.fromJson(JSONObject(styled.toJson().toString())))
         // 舊的圖案（沒調過樣式）讀回來一樣是舊的樣子
         val old = Decal("b", "zy:ㄅ", "shape:catline", color = Color.RED)
@@ -153,13 +153,15 @@ class ShapeStyleTest {
     @Test fun stitchStaysNearTheEdge() {
         val cell = 220f
         val names = listOf("roundrect", "bow", "cat", "heart", "flower")
-        val widths = listOf(0.03f, 0.07f, 0.12f)
+        val widths = listOf(0.03f, 0.07f, 0.12f, 0.07f)
         val bmp = Bitmap.createBitmap((cell * names.size).toInt(), (cell * widths.size).toInt(), Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.drawColor(0xFF3B302A.toInt())
         names.forEachIndexed { i, n ->
             widths.forEachIndexed { j, w ->
-                DecalShapes.draw(c, n, RectF(i * cell + 20, j * cell + 20, (i + 1) * cell - 20, (j + 1) * cell - 20), ShapeStyle(pink, Color.WHITE, w, "stitch"), 1f)
+                // 最後一排：離邊距離 0（縫線貼在最外面的邊上）
+                val inset = if (j == 3) 0f else 0.09f
+                DecalShapes.draw(c, n, RectF(i * cell + 20, j * cell + 20, (i + 1) * cell - 20, (j + 1) * cell - 20), ShapeStyle(pink, Color.WHITE, w, "stitch", inset), 1f)
             }
         }
         File("build/renders/stitch-widths.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }

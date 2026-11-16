@@ -676,6 +676,11 @@ class StudioActivity : Activity() {
             set({ it.copy(dash = DecalShapes.DASHES[i].first) }, true)
         }
         slider("外框粗細", (st.width * 100).toInt().coerceIn(1, 20), 1, 20, { "$it" }) { v -> set({ it.copy(width = v / 100f) }, false) }
+        if (st.dash == "stitch") {
+            slider("縫線離邊距離", (st.inset * 100).toInt().coerceIn(0, 25), 0, 25, { if (it == 0) "0（貼在最外面的邊上）" else "$it" }) { v ->
+                set({ it.copy(inset = v / 100f) }, false)
+            }
+        }
         if (d.shapeName != "roundrect") text("💡 想做「粉紅縫線」那種按鍵：加一個「圓角方形」，填粉紅色、外框選「縫線」配白色，再用四邊的拉把拉成跟按鍵一樣大。", 12f, dim = true)
     }
 
