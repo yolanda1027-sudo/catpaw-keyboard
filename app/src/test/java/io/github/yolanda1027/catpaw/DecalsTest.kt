@@ -257,4 +257,32 @@ class DecalsTest {
         StudioActivity::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }.invoke(a)
         render(a.window.decorView, "studio-bg-panel")
     }
+
+    /** 恢復主題預設：要先確認；按了才清掉圖案和按鍵設定，整體動畫不動 */
+    @Test fun resetToThemeDefault() {
+        val p = Prefs(ctx)
+        p.pressEffect = "spell"
+        Decals.save(p, sampleDecals())
+        KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED, effect = KeyEffect("snow"))))
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        render(a.window.decorView, "studio-home-reset")
+        val btn = findButton(a.window.decorView, "↺ 恢復主題預設")!!
+        btn.performClick()
+        val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(dialog.isShowing)
+        // 還沒按確認：什麼都沒清
+        assertEquals(sampleDecals().size, Decals.load(Prefs(ctx)).size)
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(Decals.load(Prefs(ctx)).isEmpty())
+        assertTrue(KeyStyles.load(Prefs(ctx)).map.isEmpty())
+        assertTrue(Decals.dir(ctx).listFiles()!!.isEmpty())
+        assertEquals("spell", Prefs(ctx).pressEffect)
+    }
+
+    private fun findButton(v: View, text: String): android.widget.Button? {
+        if (v is android.widget.Button && v.text.toString() == text) return v
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) findButton(v.getChildAt(i), text)?.let { return it }
+        return null
+    }
 }

@@ -212,6 +212,8 @@ class StudioActivity : Activity() {
                 clearAllButton()
             }
             if (decals.isNotEmpty()) clearDecalsButton()
+            section("重來")
+            resetButton()
             return
         }
         val group = KeyStyles.groupOf(key)
@@ -537,6 +539,46 @@ class StudioActivity : Activity() {
                 override fun onStopTrackingTouch(s: SeekBar?) { onDone?.invoke() }
             })
         })
+    }
+
+    /** 恢復主題預設：清掉所有圖案和按鍵的單獨設定（要再確認一次） */
+    private fun resetButton() {
+        button("↺ 恢復主題預設") {
+            val nDecals = decals.size
+            val nStyles = styles.map.size
+            if (nDecals == 0 && nStyles == 0) {
+                android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
+                return@button
+            }
+            val lines = buildList {
+                if (nDecals > 0) add("・貼上去的圖案（$nDecals 個）")
+                if (nStyles > 0) add("・按鍵的單獨設定（$nStyles 組，包含單顆鍵的動畫）")
+            }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("恢復主題預設？")
+                .setMessage("會清除：\n" + lines.joinToString("\n") +
+                    "\n\n整體主題、字體、全部按鍵共用的動畫不會變。\n清除後沒辦法復原，想留著的話可以先到設定的「外觀 → 匯入／匯出」存一份。")
+                .setPositiveButton("恢復預設") { _, _ -> resetAll() }
+                .setNegativeButton("取消", null)
+                .show()
+            // 會清掉東西的按鈕用紅色，比較不會按錯
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.parseColor("#E5484D"))
+        }
+    }
+
+    private fun resetAll() {
+        selected = null
+        decalSel = null
+        bgSelected = false
+        animMode = null
+        groupScope = false
+        styles = KeyStyles.EMPTY
+        KeyStyles.save(prefs, styles)
+        saveDecals(emptyList(), rebuild = false)
+        Decals.cleanup(this, decals)
+        kv.reloadPrefs()
+        refresh()
+        android.widget.Toast.makeText(this, "已恢復成主題預設", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun clearDecalsButton() {
