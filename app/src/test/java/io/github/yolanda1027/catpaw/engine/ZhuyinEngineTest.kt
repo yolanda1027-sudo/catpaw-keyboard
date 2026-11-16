@@ -84,11 +84,37 @@ class ZhuyinEngineTest {
         assertTrue("今 should be offered", "今" in c)
     }
 
-    @Test fun selectingPartialKeepsTheRest() {
+    @Test fun selectingPartialKeepsItUntilEverythingIsChosen() {
         val e = engine().type("ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ")
-        val jintian = e.candidates().first { it.text == "今天" }
-        assertEquals("今天", e.select(jintian))
-        assertEquals("天氣", e.composingText())
+        // 先選「今天」：還不送出，留在組字區
+        assertEquals("", e.select(e.candidates().first { it.text == "今天" }))
+        assertEquals("今天天氣", e.composingText())
+        assertEquals("今天ㄊㄧㄢ ㄑㄧˋ", e.readingText())
+        // 選字列只剩後面的
+        assertEquals("天氣", e.candidates()[0].text)
+        // 後面也選完：一起送出
+        assertEquals("今天天氣", e.select(e.candidates().first { it.text == "天氣" }))
+        assertTrue(e.isEmpty)
+    }
+
+    @Test fun backspaceFirstTurnsChosenWordsBackIntoZhuyin() {
+        val e = engine().type("ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ")
+        e.select(e.candidates().first { it.text == "今" })
+        e.select(e.candidates().first { it.text == "天" })
+        assertEquals("今天ㄊㄧㄢ ㄑㄧˋ", e.readingText())
+        e.backspace() // 「天」退回成注音
+        assertEquals("今ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ", e.readingText())
+        e.backspace() // 「今」退回成注音
+        assertEquals("ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ", e.readingText())
+        e.backspace() // 沒有選好的字了：刪最後一個注音（拿掉聲調）
+        assertEquals("ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧ", e.readingText())
+    }
+
+    @Test fun enterCommitsChosenAndConvertedTogether() {
+        val e = engine().type("ㄐㄧㄣ ㄊㄧㄢ ㄊㄧㄢ ㄑㄧˋ")
+        e.select(e.candidates().first { it.text == "金" })
+        assertEquals("金天天氣", e.commitAll())
+        assertTrue(e.isEmpty)
     }
 
     @Test fun learningMovesPickedCandidateUp() {

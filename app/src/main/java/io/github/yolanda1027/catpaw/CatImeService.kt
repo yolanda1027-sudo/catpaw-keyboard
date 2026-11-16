@@ -304,8 +304,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         if (candidates.isNotEmpty()) {
             val c = candidates.getOrNull(index) ?: return
             val text = e.select(c)
-            // 送出選的字（直接打在輸入框模式下，會換掉底線那段）；如果只選了前半段，後面的繼續組字
-            ic.commitText(text, 1)
+            // 全部選完才送出（直接打在輸入框模式下，會換掉底線那段）；只選了前半段的話，選好的字先留在組字區
+            if (text.isNotEmpty()) ic.commitText(text, 1)
             if (e.isEmpty) {
                 candidates = emptyList()
                 showAssociated(text)
@@ -372,10 +372,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                         if (inline) ic.setComposingText(pending, 1)
                         refresh()
                     }
-                    else -> {
-                        if (associated.isNotEmpty()) { associated = emptyList(); refresh() }
-                        sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                    }
+                    // 有聯想詞的時候：刪除鍵只把聯想詞關掉，不刪字
+                    associated.isNotEmpty() -> { associated = emptyList(); refresh() }
+                    else -> sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
                 }
             }
             Act.SHIFT -> {

@@ -35,12 +35,23 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
         dict.setUserPhrases(user.userPhrases())
     }
 
-    val isEmpty: Boolean get() = done.isEmpty() && current.isEmpty()
+    /**
+     * 已經選好、但還沒送出的字（分段選字時）。
+     * 例如打了「ㄓㄜˋ ㄅㄧˇ」先選了「這」：「這」放在這裡，等後面的也選完才一起送出。
+     */
+    private class Locked(val text: String, val patterns: List<Pattern>, val entries: List<Entry>)
+
+    private val locked = ArrayList<Locked>()
+
+    val isEmpty: Boolean get() = done.isEmpty() && current.isEmpty() && locked.isEmpty()
+
+    private val lockedText: String get() = locked.joinToString("") { it.text }
 
     /** 放棄目前組的字（不學習） */
     fun clear() {
         session.clear()
         sessionPicked = false
+        locked.clear()
         clearInput()
     }
 
@@ -82,14 +93,22 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
     val hasPartial: Boolean get() = current.isNotEmpty()
 
     fun backspace(): Boolean {
+        // 有選好還沒送出的字：先把最後選的那段退回成注音
+        val last = locked.removeLastOrNull()
+        if (last != null) {
+            done.addAll(0, last.patterns)
+            repeat(minOf(last.entries.size, session.size)) { session.removeAt(session.size - 1) }
+            cache.clear()
+            return true
+        }
         if (current.isNotEmpty()) {
             current.setLength(current.length - 1)
             currentSlot = current.lastOrNull()?.let { Bpmf.slot(it) } ?: -1
             return true
         }
-        val last = done.removeLastOrNull() ?: return false
+        val lastDone = done.removeLastOrNull() ?: return false
         // 把上一個字拿回來繼續編輯：有聲調就先拿掉聲調，沒有就刪掉最後一個符號
-        val body = if (last.tone != null) last.body else last.body.dropLast(1)
+        val body = if (lastDone.tone != null) lastDone.body else lastDone.body.dropLast(1)
         current.append(body)
         currentSlot = current.lastOrNull()?.let { Bpmf.slot(it) } ?: -1
         return true
@@ -147,11 +166,11 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
     }
 
     /** 編輯區要顯示的字：已經結束的字轉成中文，正在打的那個字顯示注音 */
-    fun composingText(): String = convert(done).joinToString("") { it.text } + current
+    fun composingText(): String = lockedText + convert(done).joinToString("") { it.text } + current
 
     /** 目前打的注音（顯示在鍵盤上方的小框框），音節之間空一格 */
     fun readingText(): String =
-        (done.map { it.toString() } + if (current.isNotEmpty()) listOf(current.toString()) else emptyList())
+        lockedText + (done.map { it.toString() } + if (current.isNotEmpty()) listOf(current.toString()) else emptyList())
             .joinToString(" ")
 
     /** 全部轉成中文（按 Enter 或空白送出時用） */
@@ -159,9 +178,11 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
         val segs = convert()
         // 直接接受預設的轉換不算「學習」，只拿來組合分段選的詞
         session.addAll(segs.map { it.entry })
+        val text = lockedText + segs.joinToString("") { it.text }
+        locked.clear()
         clearInput()
         finishSession()
-        return segs.joinToString("") { it.text }
+        return text
     }
 
     /** 一次打字結束：如果中間有自己挑過字，就把整段記成一個自訂詞 */
@@ -205,7 +226,10 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
         return out
     }
 
-    /** 選了一個選項：回傳要送出的文字，剩下的音節繼續留著 */
+    /**
+     * 選了一個選項。
+     * 全部選完會回傳要送出的整段文字；只選了前半段會回傳 ""（選好的字先留在組字區）。
+     */
     fun select(c: Candidate): String {
         val p = allPatterns()
         if (c.entries.size == 1 && c.length <= p.size) {
@@ -218,14 +242,19 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
             }
         }
         session.addAll(c.entries)
+        cache.clear()
         if (c.length >= p.size) {
+            // 全部選完：連同前面選好的一起送出
+            val text = lockedText + c.text
+            locked.clear()
             clearInput()
             finishSession()
-        } else {
-            repeat(c.length) { done.removeAt(0) }
+            return text
         }
-        cache.clear()
-        return c.text
+        // 只選了前半段：先留著，不送出
+        locked.add(Locked(c.text, done.subList(0, c.length).toList(), c.entries))
+        repeat(c.length) { done.removeAt(0) }
+        return ""
     }
 
     companion object {

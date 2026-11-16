@@ -250,6 +250,51 @@ class RenderTest {
     }
 
     @Test
+    fun renderSymbolSwipe() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val prefs = Prefs(ctx)
+        prefs.theme = "classic"
+        val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
+        val cat = Symbols.categories[1]
+        v.rows = Symbols.rows(cat.pages[0], false)
+        v.symbolTabs = Symbols.categories.map { it.tab }
+        v.symbolTab = 1
+        v.symbolPageCount = cat.pages.size
+        v.symbolPage = 0
+        v.listener = object : CatKeyboardView.Listener {
+            override fun onKey(key: Key, longPress: Boolean) {}
+            override fun onTabChinese() {}
+            override fun onTabEnglish() {}
+            override fun onHide() {}
+            override fun onCandidate(index: Int) {}
+            override fun onSymbolTab(index: Int) {}
+            override fun onClipboard() {}
+            override fun onSymbolSwipe(direction: Int) {
+                v.symbolPage += direction
+                v.rows = Symbols.rows(cat.pages[v.symbolPage], false)
+            }
+        }
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        fun snap(name: String) {
+            val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+            v.draw(Canvas(bmp))
+            File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        val t = SystemClock.uptimeMillis()
+        val y = 89f + 105f + 16f + 150f
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 700f, y, 0))
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_MOVE, 600f, y, 0))
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_MOVE, 400f, y, 0))
+        snap("swipe-dragging")
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t + 90, MotionEvent.ACTION_UP, 400f, y, 0))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(60, java.util.concurrent.TimeUnit.MILLISECONDS)
+        snap("swipe-sliding-in")
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(400, java.util.concurrent.TimeUnit.MILLISECONDS)
+        snap("swipe-done")
+    }
+
+    @Test
     fun renderNumpad() {
         val ctx = RuntimeEnvironment.getApplication()
         for (t in listOf("classic", "stitch")) {

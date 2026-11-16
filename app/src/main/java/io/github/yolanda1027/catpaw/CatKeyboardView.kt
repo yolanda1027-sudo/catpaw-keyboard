@@ -257,8 +257,17 @@ class CatKeyboardView(
         } else {
             theme.font = keyFace
             val now = android.os.SystemClock.uptimeMillis()
+            // 翻頁中：符號那幾排跟著偏移（最下面那排返回、空白不動）
+            val sliding = pageOffset != 0f && symbolTabs != null
+            val gridBottom = topH + padTop + rowH * (rows.size - 1)
             for (kr in keyRects) {
                 if (kr.key.act == Act.GAP) continue
+                val inGrid = sliding && kr.rect.top < gridBottom - 1f
+                if (inGrid) {
+                    c.save()
+                    c.clipRect(0f, topH, w, gridBottom)
+                    c.translate(pageOffset, 0f)
+                }
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
                 val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
@@ -270,6 +279,7 @@ class CatKeyboardView(
                     Stickers.draw(c, sticker, kr.rect, kr === pressed, 5 * dp)
                 }
                 if (s != 1f) c.restore()
+                if (inGrid) c.restore()
             }
             drawPageIndicator(c, w)
             effects.draw(c, now)
@@ -375,6 +385,39 @@ class CatKeyboardView(
 
     private var downX = 0f
 
+    // ---------- 符號頁左右滑：整頁跟著手指走 ----------
+    /** 目前這一頁往左右偏了多少（正 = 往右） */
+    private var pageOffset = 0f
+    private var paging = false
+    private var pagingPointer = -1
+    private var pageAnim: android.animation.ValueAnimator? = null
+
+    private fun canPage(dx: Float) =
+        (dx < 0 && symbolPage < symbolPageCount - 1) || (dx > 0 && symbolPage > 0)
+
+    private fun animatePageOffsetTo(target: Float) {
+        pageAnim?.cancel()
+        pageAnim = android.animation.ValueAnimator.ofFloat(pageOffset, target).apply {
+            duration = 220
+            interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+            addUpdateListener { pageOffset = it.animatedValue as Float; invalidate() }
+            start()
+        }
+    }
+
+    /** 放開手指：滑夠遠就翻頁（新的一頁從另一邊滑進來），不夠就彈回去 */
+    private fun finishPaging() {
+        paging = false
+        pagingPointer = -1
+        val w = width.toFloat()
+        if (canPage(pageOffset) && kotlin.math.abs(pageOffset) > w * 0.22f) {
+            val dir = if (pageOffset < 0) 1 else -1
+            listener?.onSymbolSwipe(dir)
+            pageOffset += dir * w // 新的一頁先放在旁邊，再滑進來
+        }
+        animatePageOffsetTo(0f)
+    }
+
     /** 符號鍵盤：分類列 */
     private fun drawSymbolTabs(c: Canvas, w: Float, tabs: List<String?>) {
         val tw = w / tabs.size
@@ -397,7 +440,9 @@ class CatKeyboardView(
         c.drawLine(0f, y, w, y, p)
         p.color = theme.popupSelBg
         val seg = w / symbolPageCount
-        c.drawLine(seg * symbolPage, y, seg * (symbolPage + 1), y, p)
+        // 跟著手指滑動的進度一起移動
+        val pos = (symbolPage - pageOffset / w).coerceIn(0f, (symbolPageCount - 1).toFloat())
+        c.drawLine(seg * pos, y, seg * (pos + 1), y, p)
     }
 
     private fun drawTopBar(c: Canvas, w: Float) {
@@ -485,6 +530,8 @@ class CatKeyboardView(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 // 兩隻手指快速輪流打：前一顆還沒放開就先送出
                 if (pressed != null) release(cancel = false)
+                if (paging) return true // 翻頁中，不理會第二隻手指
+                if (pageAnim?.isRunning == true) { pageAnim?.end() }
                 val i = e.actionIndex
                 val x = e.getX(i)
                 val y = e.getY(i)
@@ -498,17 +545,31 @@ class CatKeyboardView(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                if (paging && e.getPointerId(e.actionIndex) == pagingPointer) { finishPaging(); return true }
                 if (e.getPointerId(e.actionIndex) == pressedPointer) release(cancel = false)
             }
             MotionEvent.ACTION_MOVE -> {
                 val o = popup
                 val i = e.findPointerIndex(pressedPointer)
-                // 符號鍵盤：左右滑換頁
+                // 符號鍵盤：左右滑換頁（整頁跟著手指走）
+                if (paging) {
+                    val pi = e.findPointerIndex(pagingPointer)
+                    if (pi >= 0) {
+                        val dx = e.getX(pi) - downX
+                        pageOffset = if (canPage(dx)) dx else dx * 0.25f // 沒有下一頁：只能拉一點點
+                        invalidate()
+                    }
+                    return true
+                }
                 if (o == null && i >= 0 && symbolTabs != null && pressed != null) {
                     val dx = e.getX(i) - downX
-                    if (kotlin.math.abs(dx) > 40 * dp) {
-                        release(cancel = true)
-                        listener?.onSymbolSwipe(if (dx < 0) 1 else -1)
+                    if (kotlin.math.abs(dx) > 14 * dp) {
+                        pagingPointer = pressedPointer
+                        release(cancel = true) // 開始翻頁，剛剛按的那顆鍵不算
+                        paging = true
+                        pageAnim?.cancel()
+                        pageOffset = if (canPage(dx)) dx else dx * 0.25f
+                        invalidate()
                         return true
                     }
                 }
@@ -522,7 +583,10 @@ class CatKeyboardView(
                     }
                 }
             }
-            MotionEvent.ACTION_CANCEL -> release(cancel = true)
+            MotionEvent.ACTION_CANCEL -> {
+                if (paging) finishPaging()
+                release(cancel = true)
+            }
         }
         return true
     }
