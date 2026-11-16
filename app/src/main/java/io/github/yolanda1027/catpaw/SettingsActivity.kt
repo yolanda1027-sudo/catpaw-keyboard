@@ -155,25 +155,11 @@ class SettingsActivity : Activity() {
                 themeGroup?.findViewWithTag<RadioButton>("custom")?.isChecked = true
             }
         }
+        current.setOnClickListener { showColorPicker(label, get()) { apply(it) } }
         head.addView(Button(this).apply {
-            text = "色碼"
+            text = "選色"
             isAllCaps = false
-            setOnClickListener {
-                val input = EditText(this@SettingsActivity).apply {
-                    setText(String.format("#%06X", 0xFFFFFF and get()))
-                }
-                android.app.AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle(label)
-                    .setView(input)
-                    .setPositiveButton("確定") { _, _ ->
-                        try { apply(android.graphics.Color.parseColor(input.text.toString().trim())) }
-                        catch (_: Exception) {
-                            android.widget.Toast.makeText(this@SettingsActivity, "色碼格式像 #F49AB7", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
+            setOnClickListener { showColorPicker(label, get()) { apply(it) } }
         })
         root.addView(head)
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -185,6 +171,73 @@ class SettingsActivity : Activity() {
             isHorizontalScrollBarEnabled = false
             addView(strip)
         })
+    }
+
+    /** 選色器視窗：大色塊＋彩虹條、新舊顏色對照、色碼欄 */
+    private fun showColorPicker(label: String, initial: Int, onPick: (Int) -> Unit) {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (16 * dp).toInt()
+            setPadding(p, p / 2, p, 0)
+        }
+        val picker = ColorPickerView(this, initial)
+        box.addView(picker, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        fun chip(c: Int) = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 10 * dp
+                setColor(c)
+                setStroke((1 * dp).toInt(), 0x33000000)
+            }
+        }
+        // 原本 ｜ 新的　＃色碼
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, (8 * dp).toInt(), 0, 0)
+        }
+        val oldChip = chip(initial)
+        val newChip = chip(initial)
+        val size = LinearLayout.LayoutParams((52 * dp).toInt(), (40 * dp).toInt()).apply { marginEnd = (6 * dp).toInt() }
+        row.addView(TextView(this).apply { text = "原本"; textSize = 12f; setPadding(0, 0, (4 * dp).toInt(), 0) })
+        row.addView(oldChip, size)
+        row.addView(TextView(this).apply { text = "新的"; textSize = 12f; setPadding((4 * dp).toInt(), 0, (4 * dp).toInt(), 0) })
+        row.addView(newChip, LinearLayout.LayoutParams(size))
+        val hex = EditText(this).apply {
+            textSize = 16f
+            isSingleLine = true
+            setText(String.format("#%06X", 0xFFFFFF and initial))
+        }
+        row.addView(hex, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(row)
+
+        var syncing = false
+        fun showNew(c: Int) = (newChip.background as android.graphics.drawable.GradientDrawable).setColor(c)
+        picker.onColorChanged = { c ->
+            showNew(c)
+            syncing = true
+            hex.setText(String.format("#%06X", 0xFFFFFF and c))
+            syncing = false
+        }
+        // 直接輸入色碼也可以
+        hex.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(e: android.text.Editable?) {
+                if (syncing) return
+                val t = e?.toString()?.trim() ?: return
+                val c = try { android.graphics.Color.parseColor(if (t.startsWith("#")) t else "#$t") } catch (_: Exception) { return }
+                picker.setColor(c)
+                showNew(c)
+            }
+        })
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle(label)
+            .setView(box)
+            .setPositiveButton("確定") { _, _ -> onPick(picker.color) }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     companion object {
@@ -480,7 +533,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageColor() {
-        note("點色塊就會換成「自訂配色」主題，上面的預覽會跟著變。也可以按「色碼」輸入像 #F49AB7 這樣的顏色。")
+        note("點下面的色塊可以快速換色；按「選色」（或點左邊的小圓）會打開選色器，可以拖著選任何顏色，也能輸入色碼。換了顏色會自動切成「自訂配色」主題。")
         colorRow("背景", { prefs.customBg }) { prefs.customBg = it }
         colorRow("按鍵", { prefs.customKey }) { prefs.customKey = it }
         colorRow("文字", { prefs.customText }) { prefs.customText = it }

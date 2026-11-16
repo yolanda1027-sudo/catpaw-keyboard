@@ -44,6 +44,28 @@ class SettingsScreenTest {
         }
     }
 
+    @Test fun colorPicker() {
+        val ctx = RuntimeEnvironment.getApplication()
+        val v = ColorPickerView(ctx, android.graphics.Color.parseColor("#F49AB7"))
+        v.measure(View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        val bmp = Bitmap.createBitmap(v.measuredWidth, v.measuredHeight, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(android.graphics.Color.WHITE)
+        v.draw(c)
+        File("build/renders/color-picker.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // 點彩虹條最左邊 → 紅色系；點大色塊右上角 → 最鮮豔最亮
+        var got = 0
+        v.onColorChanged = { got = it }
+        val t = android.os.SystemClock.uptimeMillis()
+        v.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, 40f, v.measuredHeight - 40f, 0))
+        v.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_UP, 40f, v.measuredHeight - 40f, 0))
+        v.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, 880f, 35f, 0))
+        val hsv = FloatArray(3); android.graphics.Color.colorToHSV(got, hsv)
+        assert(hsv[0] < 15f) { "hue ${hsv[0]}" }
+        assert(hsv[1] > 0.95f && hsv[2] > 0.95f) { "sat ${hsv[1]} val ${hsv[2]}" }
+    }
+
     @Test fun quickEntriesRoundTrip() {
         val prefs = Prefs(RuntimeEnvironment.getApplication())
         // 舊版用空白分開的設定，讀得出來
