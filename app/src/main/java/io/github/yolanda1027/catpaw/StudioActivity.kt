@@ -181,6 +181,7 @@ class StudioActivity : Activity() {
         styles = styles.with(id, change(styles.map[id] ?: KeyStyle()))
         KeyStyles.save(prefs, styles)
         kv.reloadPrefs()
+        zoom.invalidate() // 放大的按鍵也要跟著重畫（拖滑桿時不會重建面板）
         if (rebuild) refresh()
     }
 
@@ -304,6 +305,7 @@ class StudioActivity : Activity() {
         decals = list
         Decals.save(prefs, list)
         kv.setDecalsLive(list)
+        zoom.invalidate()
         if (rebuild) refresh()
     }
 

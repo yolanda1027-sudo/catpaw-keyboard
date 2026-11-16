@@ -18,6 +18,8 @@ data class Key(
     val weight: Float = 1f,
     val style: Style = Style.CHAR,
     val icon: Icon? = null,
+    /** true = 照原樣打出來，不管大寫開沒開（長按選單選的字） */
+    val exact: Boolean = false,
 ) {
     /** 長按的字畫在主字下面（注音鍵、英文字母鍵）；其他（標點）畫在上面 */
     val subBelow: Boolean

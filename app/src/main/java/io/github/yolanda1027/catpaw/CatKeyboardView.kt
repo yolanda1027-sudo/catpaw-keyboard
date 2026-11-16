@@ -166,9 +166,16 @@ class CatKeyboardView(
             // 英文字母：大寫、注音、小寫，預設停在注音
             PopupOptions(listOf(sub.uppercase(), key.label, sub.lowercase()), default = 1, main = 1)
         } else {
-            // 數字、符號：預設停在數字／符號（長按放開＝打數字，跟以前一樣）
-            // 英文字母鍵開了大寫時，選單裡的字母也是大寫
-            PopupOptions(listOf(sub, labelFor(key)), default = 0, main = 1)
+            val l = key.label
+            if (key.act == Act.TEXT && l.length == 1 && l[0].isLetter()) {
+                // 英文字母：符號、現在的大小寫、另一種大小寫（例如 @ a A），預設停在符號
+                val now = labelFor(key)
+                val other = if (now == l.uppercase()) l.lowercase() else l.uppercase()
+                PopupOptions(listOf(sub, now, other), default = 0, main = 1)
+            } else {
+                // 數字、符號：預設停在數字／符號（長按放開＝打數字，跟以前一樣）
+                PopupOptions(listOf(sub, key.label), default = 0, main = 1)
+            }
         }
     }
 
@@ -1072,7 +1079,7 @@ class CatKeyboardView(
         when {
             o != null -> {
                 // 長按選單：選到什麼就直接打出什麼（選注音就打出注音符號本身，不進選字）
-                listener?.onKey(Key(o.items[popupSel], Act.TEXT), false)
+                listener?.onKey(Key(o.items[popupSel], Act.TEXT, exact = true), false)
             }
             !longFired -> listener?.onKey(kr.key, false)
         }

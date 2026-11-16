@@ -346,7 +346,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 if (page == Page.SYMBOL) {
                     if (symCat == Symbols.KAOMOJI) addRecentKaomoji(key.text) else addRecentSymbol(key.text)
                 }
-                val upper = !chinese && page == Page.MAIN && shift > 0
+                val upper = !key.exact && !chinese && page == Page.MAIN && shift > 0
                 commitText(if (upper) key.text.uppercase() else key.text)
                 if (shift == 1 && page == Page.MAIN) {
                     shift = 0
