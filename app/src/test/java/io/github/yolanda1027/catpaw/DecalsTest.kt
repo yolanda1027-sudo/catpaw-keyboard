@@ -337,6 +337,32 @@ class DecalsTest {
         render(a.window.decorView, "studio-undo")
     }
 
+    /** 快捷符號列開或關，背景圖案都要貼在同一顆鍵上（大小也不變） */
+    @Test fun bgDecalFollowsKeysWithQuickBar() {
+        val p = Prefs(ctx)
+        p.theme = "magic_yellow"
+        Decals.save(p, listOf(Decal("bg", Decal.BG, "shape:cat", x = 0.6f, y = 0.32f, size = 0.12f, front = true)))
+        fun measure(quick: Boolean): Pair<android.graphics.RectF, android.graphics.RectF> {
+            val kv = CatKeyboardView(ctx, p, Haptics(ctx))
+            kv.quickItems = if (quick) listOf("()", "「」", "『』", "⇥") else emptyList()
+            kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+            render(kv, if (quick) "bgdecal-quick" else "bgdecal-noquick")
+            val bg = CatKeyboardView::class.java.getDeclaredMethod("getBgRect").apply { isAccessible = true }.invoke(kv) as android.graphics.RectF
+            val d = Decals.load(p).first()
+            val (cx, cy) = Decals.centerOf(d, bg)
+            val (w, h) = Decals.sizeOf(d, bg.height(), null)
+            val box = android.graphics.RectF(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+            return box to kv.keyRectOf(Layouts.ZHUYIN[0][6])!! // 「˙」那顆
+        }
+        val (a, keyA) = measure(false)
+        val (b, keyB) = measure(true)
+        // 跟那顆鍵的相對位置一樣、大小一樣
+        assertEquals(a.centerX() - keyA.centerX(), b.centerX() - keyB.centerX(), 1f)
+        assertEquals(a.centerY() - keyA.centerY(), b.centerY() - keyB.centerY(), 1f)
+        assertEquals(a.width(), b.width(), 1f)
+    }
+
     private fun findButton(v: View, text: String): android.widget.Button? {
         if (v is android.widget.Button && v.text.toString() == text) return v
         if (v is android.view.ViewGroup) for (i in 0 until v.childCount) findButton(v.getChildAt(i), text)?.let { return it }

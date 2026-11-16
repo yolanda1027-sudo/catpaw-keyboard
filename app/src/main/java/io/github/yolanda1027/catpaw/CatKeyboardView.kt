@@ -362,12 +362,17 @@ class CatKeyboardView(
 
     // ---------- 貼上的圖案 ----------
 
-    private val bgRect get() = RectF(0f, 0f, width.toFloat(), kbH)
+    /**
+     * 背景圖案的參考範圍：整個鍵盤，但「不算快捷符號列」那一條。
+     * 快捷列開著時，按鍵整個往下移一條，背景圖案也跟著往下移，才會一直貼在同一顆鍵旁邊，
+     * 大小也不會因為多了一條而變。
+     */
+    private val bgRect get() = RectF(0f, quickH, width.toFloat(), kbH)
 
     private fun drawBgDecals(c: Canvas, front: Boolean) {
         if (decals.isEmpty()) return
         val r = bgRect
-        for (d in decals) if (d.onBackground && d.front == front) Decals.draw(c, d, r, kbH, decalBitmaps[d.fileName])
+        for (d in decals) if (d.onBackground && d.front == front) Decals.draw(c, d, r, r.height(), decalBitmaps[d.fileName])
     }
 
     private fun drawKeyDecals(c: Canvas, kr: KeyRect) {
@@ -451,7 +456,7 @@ class CatKeyboardView(
 
     /** 圖案貼在哪（畫面上的範圍、參考高度）；那顆鍵不在目前的鍵盤上就是 null */
     private fun targetOf(d: Decal): Pair<RectF, Float>? =
-        if (d.onBackground) bgRect to kbH
+        if (d.onBackground) bgRect.let { it to it.height() }
         else keyRects.firstOrNull { it.key.act != Act.GAP && KeyStyles.idOf(it.key) == d.target }?.let { it.rect to it.rect.height() }
 
     /** 點到的圖案（最上面的那個優先） */

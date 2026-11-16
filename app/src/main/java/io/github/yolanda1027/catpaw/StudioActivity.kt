@@ -73,7 +73,8 @@ class StudioActivity : Activity() {
         outer.addView(tabs)
 
         kv = CatKeyboardView(this, prefs, Haptics(this)).apply {
-            quickItems = emptyList()
+            // 快捷符號列有開的話預覽也放上去，看起來才跟實際打字時一樣
+            quickItems = if (prefs.quickBar) prefs.quickList() else emptyList()
             editPicker = { key ->
                 if (selected?.let { KeyStyles.idOf(it) } != KeyStyles.idOf(key)) groupScope = false
                 selected = key
