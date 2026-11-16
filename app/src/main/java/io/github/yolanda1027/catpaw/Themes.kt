@@ -183,7 +183,7 @@ abstract class KbTheme(protected val dp: Float) {
     protected fun drawLabels(c: Canvas, key: Key, label: String, cx: Float, cy: Float, rowH: Float, main: Int, dim: Int, maxW: Float = 0f) {
         val sub = key.sub
         when {
-            sub != null && key.act == Act.ZHUYIN -> {
+            sub != null && key.subBelow -> {
                 drawText(c, label, cx, cy - rowH * 0.17f, rowH * 0.38f, main)
                 drawText(c, sub, cx, cy + rowH * 0.24f, rowH * 0.25f, dim, bold = true)
             }
@@ -455,7 +455,7 @@ class CatPawTheme(dp: Float) : KbTheme(dp) {
         val padRect = RectF(cx - w * 0.42f, top + h * 0.3f, cx + w * 0.42f, top + h * 0.97f)
         c.drawRoundRect(padRect, padRect.height() * 0.42f, padRect.height() * 0.42f, fill)
         val size = if (label.codePointCount(0, label.length) > 2) fitSize(label, padRect.width() * 0.9f, rowH * 0.3f) else rowH * 0.32f
-        val sub = if (key.act == Act.ZHUYIN) key.sub else null
+        val sub = if (key.subBelow) key.sub else null
         if (sub != null) {
             // 主字稍微往左，長按的小字縮在掌心右下角
             drawText(c, label, padRect.centerX() - padRect.width() * 0.1f, padRect.centerY(), size, text)
@@ -599,7 +599,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
             Style.CHAR -> {
                 // 字的大小跟經典版一樣
                 val sub = key.sub
-                if (sub != null && key.act == Act.ZHUYIN) {
+                if (sub != null && key.subBelow) {
                     drawText(c, label, content.centerX(), content.centerY() - rowH * 0.13f, rowH * 0.38f, text)
                     drawText(c, sub, content.centerX(), content.centerY() + rowH * 0.18f, rowH * 0.22f, if (solid) text else textDim, bold = true)
                 } else {

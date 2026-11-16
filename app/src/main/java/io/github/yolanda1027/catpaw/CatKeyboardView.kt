@@ -167,7 +167,8 @@ class CatKeyboardView(
             PopupOptions(listOf(sub.uppercase(), key.label, sub.lowercase()), default = 1, main = 1)
         } else {
             // 數字、符號：預設停在數字／符號（長按放開＝打數字，跟以前一樣）
-            PopupOptions(listOf(sub, key.label), default = 0, main = 1)
+            // 英文字母鍵開了大寫時，選單裡的字母也是大寫
+            PopupOptions(listOf(sub, labelFor(key)), default = 0, main = 1)
         }
     }
 

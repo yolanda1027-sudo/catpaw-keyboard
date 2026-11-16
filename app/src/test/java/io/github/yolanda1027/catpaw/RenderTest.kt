@@ -83,6 +83,9 @@ class RenderTest {
             render(t, Layouts.ZHUYIN, "$t-popup", pressAt = 918f to y, longPress = true, slideToX = 810f)
             render(t, Layouts.ZHUYIN, "$t-popup-digit", pressAt = 54f to y - 118f, longPress = true)
         }
+        // 英文：4 排，每排 45×5/4 dp ≈ 148px；長按 a（第二排第一顆）跳出 @
+        val rowEn = 45f * 5 / 4 * 2.625f
+        render("classic", Layouts.ENGLISH, "classic-english-popup", pressAt = 100f to 89f + 105f + 16f + rowEn * 1.5f, longPress = true)
     }
 
     private fun renderSymbols(theme: String, cat: Int, page: Int, name: String) {

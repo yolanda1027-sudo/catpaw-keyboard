@@ -30,7 +30,7 @@ class KeyStylesTest {
         assertEquals("enter", KeyStyles.idOf(enter))
         assertEquals(KeyStyles.Group.ZHUYIN, KeyStyles.groupOf(b))
         assertEquals(KeyStyles.Group.ENTER, KeyStyles.groupOf(enter))
-        assertEquals(KeyStyles.Group.CHAR, KeyStyles.groupOf(Layouts.ENGLISH[1][0]))
+        assertEquals(KeyStyles.Group.CHAR, KeyStyles.groupOf(Layouts.ENGLISH[0][0]))
         assertEquals("「ㄅ」鍵", KeyStyles.nameOf(b))
     }
 

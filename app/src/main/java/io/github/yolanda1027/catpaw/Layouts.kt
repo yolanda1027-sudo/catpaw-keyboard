@@ -18,10 +18,17 @@ data class Key(
     val weight: Float = 1f,
     val style: Style = Style.CHAR,
     val icon: Icon? = null,
-)
+) {
+    /** 長按的字畫在主字下面（注音鍵、英文字母鍵）；其他（標點）畫在上面 */
+    val subBelow: Boolean
+        get() = sub != null && (act == Act.ZHUYIN || (act == Act.TEXT && label.length == 1 && label[0].isLetter()))
+}
 
 object Layouts {
     private fun chars(s: String) = s.split(" ").map { Key(it) }
+
+    /** "q1" → 字母 q、長按 1（像 Google 注音的英文鍵盤） */
+    private fun letterRow(s: String) = s.split(" ").map { Key(it.substring(0, 1), sub = it.substring(1)) }
 
     /** "ㄅ1" → 主字 ㄅ、長按 1 */
     private fun zhuyinRow(s: String) = s.split(" ").map {
@@ -52,12 +59,12 @@ object Layouts {
         ),
     )
 
+    /** 照 Google 注音的英文鍵盤：沒有數字列，數字和符號都在字母的長按裡 */
     val ENGLISH: List<List<Key>> = listOf(
-        chars("1 2 3 4 5 6 7 8 9 0"),
-        chars("q w e r t y u i o p"),
-        listOf(gap(0.5f)) + chars("a s d f g h j k l") + listOf(gap(0.5f)),
+        letterRow("q1 w2 e3 r4 t5 y6 u7 i8 o9 p0"),
+        listOf(gap(0.5f)) + letterRow("a@ s* d+ f- g= h/ j# k( l)") + listOf(gap(0.5f)),
         listOf(Key("", Act.SHIFT, weight = 1.5f, style = Style.FUNC, icon = Icon.SHIFT)) +
-            chars("z x c v b n m") + listOf(backspace),
+            letterRow("z' x: c\" v? b! n~ m…") + listOf(backspace),
         listOf(
             toSymbol,
             Key(",", sub = "?"),
