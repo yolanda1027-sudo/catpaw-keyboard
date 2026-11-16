@@ -83,6 +83,17 @@ class KeyStylesTest {
         render(kv, "keystyles-butter")
     }
 
+    @Test fun radiusOnlyReshapesThemedKey() {
+        val p = Prefs(ctx)
+        p.theme = "magic_yellow"
+        KeyStyles.save(p, KeyStyles.EMPTY
+            .with("zy:ㄅ", KeyStyle(radius = 1f))
+            .with("zy:ㄉ", KeyStyle(radius = 0f))
+            .with("zy:ㄆ", KeyStyle(border = 0xFFFF4F8B.toInt()))
+            .with("enter", KeyStyle(radius = 0.2f)))
+        render(CatKeyboardView(ctx, p, Haptics(ctx)), "keystyles-magic-radius")
+    }
+
     @Test fun samplesCurrentColors() {
         val p = Prefs(ctx)
         p.theme = "classic"

@@ -198,6 +198,7 @@ class CatKeyboardView(
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context)
         keyStyles = KeyStyles.load(prefs)
+        nativeCache.clear()
         fontSet = loadFonts()
         stripCache = null
         panelCache = null
@@ -221,6 +222,7 @@ class CatKeyboardView(
 
     private fun layoutKeys() {
         keyRects.clear()
+        nativeCache.clear()
         val w = width.toFloat()
         if (w <= 0f) return
         rows.forEachIndexed { ri, row ->
@@ -286,36 +288,61 @@ class CatKeyboardView(
     }
 
     /** 畫一顆鍵：主題原本的樣子，再套上功能鍵貼圖、主題工作室的單鍵樣式 */
-    private fun drawOneKey(c: Canvas, kr: KeyRect, content: Boolean = true) {
+    /**
+     * 畫一顆鍵：主題原本的樣子，再套上功能鍵貼圖、主題工作室的單鍵樣式。
+     *
+     * 單鍵樣式只要改了底色、圓角或外框，這顆鍵就整個換成自訂的形狀；
+     * 沒改到的顏色用主題原本的顏色（量出來的），所以看起來還是同一套。
+     * @param content false = 只畫底框不畫字（量顏色用）
+     * @param styled false = 不套單鍵樣式（量主題原本的顏色用）
+     */
+    private fun drawOneKey(c: Canvas, kr: KeyRect, content: Boolean = true, styled: Boolean = true) {
         val isPressed = kr === pressed
         val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
-        val st = keyStyles.resolve(kr.key)
-        val split = !content || sticker != null || (st != null && (st.bg != null || st.text != null || st.hideLabel == true))
+        val st = if (styled) keyStyles.resolve(kr.key) else null
+        val shaped = st != null && (st.bg != null || st.radius != null || st.border != null)
+        val split = !content || sticker != null || shaped || (st != null && (st.text != null || st.hideLabel == true))
         if (!split) {
             theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), isPressed, shiftState, rowH)
+            return
+        }
+        val native = if (st != null) nativeColors(kr) else null
+        // 底框
+        var bodyColor: Int? = null
+        if (shaped && st != null && native != null) {
+            bodyColor = st.bg ?: native.bg.takeIf { native.hasBody }
+            if (bodyColor != null) theme.drawStyledBody(c, kr.rect, st.copy(bg = bodyColor), isPressed)
+            val border = st.border ?: native.border.takeIf { native.hasBorder }
+            if (border != null) theme.drawStyledBorder(c, kr.rect, st.copy(border = border))
         } else {
-            // 底框：自訂底色，或主題原本的底框（不畫字）
-            if (st?.bg != null) theme.drawStyledBody(c, kr.rect, st, isPressed)
-            else theme.drawKey(c, kr.rect, kr.key.copy(label = "", icon = null, sub = null), "", isPressed, shiftState, rowH)
-            // 內容：貼圖、或用自訂顏色畫字
-            when {
-                !content -> Unit
-                sticker != null -> Stickers.draw(c, sticker, kr.rect, isPressed, 5 * dp)
-                st?.hideLabel == true -> Unit
-                else -> {
-                    val main = st?.text ?: theme.text
-                    val dim = if (st?.text != null) (main and 0x00FFFFFF) or (0xA8 shl 24) else theme.textDim
-                    theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, st?.bg)
-                }
+            theme.drawKey(c, kr.rect, kr.key.copy(label = "", icon = null, sub = null), "", isPressed, shiftState, rowH)
+        }
+        // 內容：貼圖、或用自訂（或主題原本）的顏色畫字
+        when {
+            !content -> Unit
+            sticker != null -> Stickers.draw(c, sticker, kr.rect, isPressed, 5 * dp)
+            st?.hideLabel == true -> Unit
+            else -> {
+                val main = st?.text ?: native?.text ?: theme.text
+                val dim = if (st?.text != null || native != null) (main and 0x00FFFFFF) or (0xA8 shl 24) else theme.textDim
+                theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, bodyColor)
             }
         }
-        if (st?.border != null) theme.drawStyledBorder(c, kr.rect, st)
+    }
+
+    /** 每顆鍵在主題原本樣子下的顏色（量一次就記住，換主題或大小時清掉） */
+    private val nativeCache = HashMap<String, KeyColors>()
+
+    private fun nativeColors(kr: KeyRect): KeyColors? {
+        val k = KeyStyles.idOf(kr.key) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
+        nativeCache[k]?.let { return it }
+        return sample(kr, styled = false)?.also { nativeCache[k] = it }
     }
 
     // ---------- 主題工作室：點按鍵來編輯 ----------
 
     /** 這顆鍵「現在看起來」的顏色（主題工作室打開選色器時當起點） */
-    class KeyColors(val bg: Int, val text: Int, val border: Int)
+    class KeyColors(val bg: Int, val text: Int, val border: Int, val hasBody: Boolean, val hasBorder: Boolean)
 
     /**
      * 直接把這顆鍵畫在一張小圖上量顏色，所以不管哪個主題（羊皮紙、肉球…）量到的都是畫面上真正的顏色：
@@ -323,8 +350,9 @@ class CatKeyboardView(
      * - 文字：有字和沒字兩張圖差最多的那一點
      * - 外框：按鍵邊緣的顏色
      */
-    fun sampleColors(key: Key): KeyColors? {
-        val kr = keyRects.firstOrNull { it.key == key } ?: return null
+    fun sampleColors(key: Key): KeyColors? = keyRects.firstOrNull { it.key == key }?.let { sample(it, styled = true) }
+
+    private fun sample(kr: KeyRect, styled: Boolean): KeyColors? {
         val r = kr.rect
         val w = r.width().toInt()
         val h = r.height().toInt()
@@ -336,7 +364,7 @@ class CatKeyboardView(
             val c = Canvas(bmp)
             c.drawColor(base)
             c.translate(-r.left, -r.top)
-            drawOneKey(c, kr, content)
+            drawOneKey(c, kr, content, styled)
             return bmp
         }
         val body = render(false)
@@ -372,8 +400,10 @@ class CatKeyboardView(
             kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
             kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
         var border = text // 沒有底框的主題（像經典版）：外框就先用字的顏色
+        var edgeFound = false
         for (x in 0 until w / 2) {
             if (dist(body.getPixel(x, h / 2), base) > 60) {
+                edgeFound = true
                 // 往內 1 點，避開邊緣半透明的那一圈
                 border = body.getPixel(minOf(x + 1, w - 1), h / 2)
                 break
@@ -381,7 +411,9 @@ class CatKeyboardView(
         }
         body.recycle()
         full.recycle()
-        return KeyColors(opaque(bg), opaque(text), opaque(border))
+        val hasBody = dist(bg, base) > 24
+        val hasBorder = edgeFound && dist(border, bg) > 40
+        return KeyColors(opaque(bg), opaque(text), opaque(border), hasBody, hasBorder)
     }
 
     /** 有設定的話，鍵盤變成「編輯模式」：點按鍵不會打字，而是選到那顆鍵 */

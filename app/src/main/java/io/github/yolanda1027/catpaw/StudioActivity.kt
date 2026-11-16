@@ -171,7 +171,7 @@ class StudioActivity : Activity() {
                 override fun onStopTrackingTouch(s: SeekBar?) {}
             })
         })
-        text("有設定底色或外框時才看得出來；0% 是直角，100% 是膠囊形。", 12f, dim = true)
+        text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
 
         panel.addView(CheckBox(this).apply {
             text = "不顯示文字（只留底色和外框）"
