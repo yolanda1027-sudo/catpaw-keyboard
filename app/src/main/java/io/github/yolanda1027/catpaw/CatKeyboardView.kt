@@ -261,10 +261,11 @@ class CatKeyboardView(
         drawBgDecals(c, front = false)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
         drawTopBar(c, w)
-        drawQuickBar(c)
         if (expanded) {
+            // 展開的選字面板蓋住整個鍵盤，快捷符號列先收起來
             drawPanel(c, w)
         } else {
+            drawQuickBar(c)
             val now = android.os.SystemClock.uptimeMillis()
             // 翻頁中：符號那幾排跟著偏移（最下面那排返回、空白不動）
             val sliding = pageOffset != 0f && symbolTabs != null
