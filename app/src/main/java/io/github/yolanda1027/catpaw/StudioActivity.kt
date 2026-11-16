@@ -104,12 +104,17 @@ class StudioActivity : Activity() {
                 panel.post { refresh() }
             }
             handles.onChange = { d, done ->
-                this@StudioActivity.decals = this@StudioActivity.decals.map { if (it.id == d.id) d else it }
-                kv.setDecalsLive(this@StudioActivity.decals)
-                if (done) {
-                    Decals.save(prefs, this@StudioActivity.decals)
-                    panel.post { refresh() }
+                if (d.id.startsWith(LABEL)) {
+                    // 拖的是按鍵上的字：換成這個字的位置、大小、角度
+                    val k = selected
+                    val ls = k?.let { kv.labelStyleFrom(it, d) }
+                    if (k != null && ls != null) setLabelStyle(k, d.id.removePrefix(LABEL), ls, rebuild = false)
+                } else {
+                    this@StudioActivity.decals = this@StudioActivity.decals.map { if (it.id == d.id) d else it }
+                    kv.setDecalsLive(this@StudioActivity.decals)
+                    if (done) Decals.save(prefs, this@StudioActivity.decals)
                 }
+                if (done) panel.post { refresh() }
             }
         }
         zoomBox = android.widget.FrameLayout(this).apply {
@@ -184,9 +189,38 @@ class StudioActivity : Activity() {
         val id = currentId() ?: return
         styles = styles.with(id, change(styles.map[id] ?: KeyStyle()))
         KeyStyles.save(prefs, styles)
-        kv.reloadPrefs()
+        kv.setKeyStylesLive(styles)
         zoom.invalidate() // 放大的按鍵也要跟著重畫（拖滑桿時不會重建面板）
         if (rebuild) refresh()
+    }
+
+    /** 改「這一顆鍵」自己的樣式（按鍵上的字、順序：不管上面選的是不是整類） */
+    private fun updateOwn(key: Key, change: (KeyStyle) -> KeyStyle, rebuild: Boolean = true) {
+        val id = KeyStyles.idOf(key)
+        styles = styles.with(id, change(styles.map[id] ?: KeyStyle()))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        zoom.invalidate()
+        if (rebuild) refresh()
+    }
+
+    private fun setLabelStyle(key: Key, name: String, ls: LabelStyle?, rebuild: Boolean = true) = updateOwn(key, { st ->
+        val m = (st.labels ?: emptyMap()).toMutableMap()
+        if (ls == null || ls.isEmpty) m.remove(name) else m[name] = ls
+        st.copy(labels = m.takeIf { it.isNotEmpty() })
+    }, rebuild)
+
+    /** 按鍵上的東西（字或圖案）往上或往下一層 */
+    private fun moveElement(key: Key, id: String, dir: Int) {
+        val order = kv.elementOrder(key).toMutableList()
+        val i = order.indexOf(id)
+        val j = i + dir
+        if (i < 0 || j !in order.indices) {
+            android.widget.Toast.makeText(this, if (dir > 0) "已經在最上面了" else "已經在最下面了", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        order[i] = order[j].also { order[j] = order[i] }
+        updateOwn(key, { it.copy(order = order) })
     }
 
     // ---------- 上一步／下一步（最多 3 步） ----------
@@ -238,7 +272,7 @@ class StudioActivity : Activity() {
         prefs.pressEffect = s.effect
         prefs.customEffect = s.custom
         committed = s
-        if (decals.none { it.id == decalSel }) decalSel = null
+        if (decalSel?.startsWith(LABEL) != true && decals.none { it.id == decalSel }) decalSel = null
         kv.reloadPrefs()
         kv.setDecalsLive(decals)
         zoom.invalidate()
@@ -286,6 +320,8 @@ class StudioActivity : Activity() {
         kv.decalEditId = decalSel
         if (animMode == GLOBAL || (animMode == KEY && selected != null)) { animPanel(); return }
         animMode = null
+        val sk = selected
+        if (decalSel?.startsWith(LABEL) == true && sk != null && !bgSelected && !groupScope) { labelPanel(sk, decalSel!!.removePrefix(LABEL)); return }
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
         if (bgSelected) { bgPanel(); return }
@@ -366,6 +402,7 @@ class StudioActivity : Activity() {
         button("清除${what}的設定") { update({ null }) }
 
         section("這顆鍵上的圖案")
+        if (!groupScope) text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層。", 13f, dim = true)
         decalList(selId)
 
         section("按鍵動畫")
@@ -526,7 +563,7 @@ class StudioActivity : Activity() {
         val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
         text("正在編輯：${shapeName(d)}", 18f, bold = true).setPadding(0, px(10f), 0, 0)
         text("貼在：$where", 14f, dim = true)
-        val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、刪除"
+        val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖下面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
 
         fun change(f: (Decal) -> Decal, rebuild: Boolean = false) {
@@ -571,10 +608,11 @@ class StudioActivity : Activity() {
             isAllCaps = false
             setOnClickListener { onClick() }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        small("往上一層") { moveLayer(d, +1) }
-        small("往下一層") { moveLayer(d, -1) }
+        small("往上一層") { decalAction("up", d) }
+        small("往下一層") { decalAction("down", d) }
         small("左右翻轉") { decalAction("flip", d) }
         panel.addView(row)
+        if (d.stretch != 1f) button("↔ 恢復原本的寬高比例") { saveDecals(decals.map { if (it.id == d.id) it.copy(stretch = 1f) else it }) }
         button("🗑 刪除這個圖案") {
             decalSel = null
             saveDecals(decals.filter { it.id != d.id })
@@ -582,9 +620,24 @@ class StudioActivity : Activity() {
         button(if (d.onBackground) "← 回到鍵盤背景" else "← 回到$where") { decalSel = null; refresh() }
     }
 
-    /** 編輯框上面的小工具：複製、左右翻轉、刪除 */
+    /** 編輯框上面的小工具（圖案：複製、翻轉、上下層、刪除；字：顏色、上下層、重設） */
     private fun decalAction(action: String, d: Decal) {
+        val key = selected
+        if (d.id.startsWith(LABEL)) {
+            val name = d.id.removePrefix(LABEL)
+            if (key == null) return
+            when (action) {
+                "up" -> moveElement(key, d.id, +1)
+                "down" -> moveElement(key, d.id, -1)
+                "reset" -> setLabelStyle(key, name, null)
+                "color" -> pickLabelColor(key, name)
+            }
+            return
+        }
         when (action) {
+            // 按鍵上的圖案跟字一起排順序；背景的圖案照原本的方式
+            "up" -> if (!d.onBackground && key != null) moveElement(key, d.id, +1) else moveLayer(d, +1)
+            "down" -> if (!d.onBackground && key != null) moveElement(key, d.id, -1) else moveLayer(d, -1)
             "copy" -> addDecal(d.copy(id = Decals.newId(), x = d.x + 0.08f, y = d.y + 0.08f))
             "flip" -> saveDecals(decals.map { if (it.id == d.id) it.copy(flip = !it.flip) else it })
             "delete" -> {
@@ -592,6 +645,70 @@ class StudioActivity : Activity() {
                 saveDecals(decals.filter { it.id != d.id })
             }
         }
+    }
+
+    private fun pickLabelColor(key: Key, name: String) {
+        val now = kv.labelColorOf(key, name) ?: Color.BLACK
+        ColorDialog.show(this, "字的顏色", now) { c ->
+            val old = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
+            setLabelStyle(key, name, old.copy(color = c))
+        }
+    }
+
+    /** 選到按鍵上的一個字（主字、小字）時的面板 */
+    private fun labelPanel(key: Key, name: String) {
+        kv.editHighlight = null
+        val ls = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
+        val what = when {
+            name == "sub" -> "小字「${key.sub ?: ""}」"
+            key.icon != null -> "圖示"
+            else -> "主字「${key.label}」"
+        }
+        text("正在編輯：$what", 18f, bold = true).setPadding(0, px(10f), 0, 0)
+        text("貼在：" + KeyStyles.nameOf(key), 14f, dim = true)
+        text("👆 拖中間＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設", 14f).setPadding(0, px(8f), 0, px(4f))
+
+        // 顏色
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, px(10f), 0, px(6f))
+        }
+        val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        names.addView(TextView(this).apply { text = "顏色"; textSize = 15f })
+        names.addView(TextView(this).apply { text = if (ls.color == null) "照按鍵的文字顏色" else "已自訂"; textSize = 12f; alpha = 0.65f })
+        row.addView(names, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val now = kv.labelColorOf(key, name) ?: Color.BLACK
+        row.addView(View(this).apply {
+            background = GradientDrawable().apply { cornerRadius = 10 * dp; setColor(now); setStroke(px(1.5f), 0x33000000) }
+            setOnClickListener { pickLabelColor(key, name) }
+        }, LinearLayout.LayoutParams(px(72f), px(40f)))
+        if (ls.color != null) row.addView(Button(this).apply {
+            text = "改回原色"
+            isAllCaps = false
+            setOnClickListener { setLabelStyle(key, name, ls.copy(color = null)) }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = px(8f) })
+        panel.addView(row)
+
+        fun live(f: (LabelStyle) -> LabelStyle) {
+            val cur = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
+            setLabelStyle(key, name, f(cur), rebuild = false)
+        }
+        slider("大小", (ls.scale * 100).toInt().coerceIn(30, 300), 30, 300, { "$it%" }) { v -> live { it.copy(scale = v / 100f) } }
+        val rot = (((ls.rotation % 360) + 540) % 360 - 180).toInt()
+        slider("旋轉", rot, -180, 180, { "$it°" }) { v -> live { it.copy(rotation = v.toFloat()) } }
+
+        val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, px(8f), 0, 0) }
+        fun small(s: String, onClick: () -> Unit) = btns.addView(Button(this).apply {
+            text = s
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        small("往上一層") { moveElement(key, LABEL + name, +1) }
+        small("往下一層") { moveElement(key, LABEL + name, -1) }
+        small("重設") { setLabelStyle(key, name, null) }
+        panel.addView(btns)
+        button("← 回到" + KeyStyles.nameOf(key)) { decalSel = null; refresh() }
     }
 
     /** 跟同一個位置上的下一個（或上一個）圖案交換順序：後面的畫在上面 */
@@ -874,6 +991,8 @@ class StudioActivity : Activity() {
 
     companion object {
         private const val REQ_IMAGE = 500
+        /** 按鍵上的字當作可以選的東西時，id 的開頭 */
+        private const val LABEL = "label:"
         private const val MAX_UNDO = 3
         private const val MENU_UNDO = 1
         private const val MENU_REDO = 2

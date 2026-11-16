@@ -171,7 +171,7 @@ abstract class KbTheme(protected val dp: Float) {
         textPaint.textAlign = Paint.Align.CENTER
     }
 
-    private fun isLong(s: String) = s.codePointCount(0, s.length) > 2
+    protected fun isLong(s: String) = s.codePointCount(0, s.length) > 2
 
     /** 主字＋小字（長按的字），或只有主字 */
     /** 長的字（顏文字、按鍵上的詞）：盡量放大，但不超出按鍵寬度 */
@@ -264,6 +264,59 @@ abstract class KbTheme(protected val dp: Float) {
                 else drawText(c, label, r.centerX(), r.centerY(), if (label.length > 2) rowH * 0.34f else rowH * 0.3f, main)
             }
         }
+    }
+
+    // ---------- 按鍵上的字，一個一個分開（主題工作室可以各自移動、換色） ----------
+
+    /**
+     * 按鍵上的一個字：主字（"main"）或小字（"sub"）；功能鍵的圖示也算主字。
+     * cx, cy 是沒移動前的中心點，size 是字的大小。
+     */
+    class LabelElem(val id: String, val text: String, val icon: Icon?, val cx: Float, val cy: Float, val size: Float, val bold: Boolean)
+
+    /** 這顆鍵上有哪些字、本來在哪裡（照 drawLabels 的排法） */
+    fun labelElems(key: Key, label: String, r: RectF, rowH: Float): List<LabelElem> {
+        val cx = r.centerX()
+        val cy = r.centerY()
+        val sub = key.sub
+        return when (key.style) {
+            Style.CLIP -> emptyList()
+            Style.SPACE -> listOf(LabelElem("main", label, null, cx, cy, rowH * 0.22f, false))
+            Style.FUNC, Style.ENTER -> {
+                val icon = key.icon
+                if (icon != null) listOf(LabelElem("main", "", icon, cx, cy, rowH * 0.46f, false))
+                else listOf(LabelElem("main", label, null, cx, cy, if (label.length > 2) rowH * 0.34f else rowH * 0.3f, false))
+            }
+            Style.CHAR -> when {
+                sub != null && key.subBelow -> listOf(
+                    LabelElem("main", label, null, cx, cy - rowH * 0.17f, rowH * 0.38f, false),
+                    LabelElem("sub", sub, null, cx, cy + rowH * 0.24f, rowH * 0.25f, true),
+                )
+                sub != null -> listOf(
+                    LabelElem("sub", sub, null, cx - rowH * 0.1f, cy - rowH * 0.16f, rowH * 0.26f, false),
+                    LabelElem("main", label, null, cx, cy + rowH * 0.04f, rowH * 0.38f, false),
+                )
+                else -> {
+                    val size = when {
+                        !isLong(label) -> rowH * 0.38f
+                        else -> fitSize(label, r.width() * 0.9f, rowH * 0.36f)
+                    }
+                    listOf(LabelElem("main", label, null, cx, cy, size, false))
+                }
+            }
+        }
+    }
+
+    /** 一個字的寬高（圖示當作正方形） */
+    fun elemSize(e: LabelElem): Pair<Float, Float> =
+        if (e.icon != null) e.size to e.size
+        else measure(e.text, e.size, e.bold).coerceAtLeast(e.size * 0.3f) to e.size
+
+    /** 在 (0,0) 畫一個字（外面先移好位置、轉好角度） */
+    fun drawLabelElem(c: Canvas, e: LabelElem, color: Int, shift: Int, cutout: Int?) {
+        val icon = e.icon
+        if (icon != null) drawIcon(c, icon, 0f, 0f, e.size, color, shift, backspaceCutout?.let { cutout ?: it })
+        else drawText(c, e.text, 0f, 0f, e.size, color, e.bold)
     }
 
     /** 用線條畫圖示 */

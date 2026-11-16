@@ -15,8 +15,10 @@ import kotlin.math.sin
 
 /**
  * 像 Canva 那樣編輯圖案：
- * - 選到的圖案外面有框、四個角有圓點、下面有一個旋轉把手、上面有一排小工具（複製、翻轉、刪除）
- * - 拖中間＝移動；拖四個角＝等比例放大縮小；拖旋轉把手＝旋轉；兩隻手指也可以縮放旋轉
+ * - 選到的東西外面有框、四個角有圓點、四邊中間有拉把、下面有一個旋轉把手、上面有一排小工具
+ * - 拖中間＝移動；拖四個角＝等比例放大縮小；拖左右的拉把＝只改寬、上下的拉把＝只改高；
+ *   拖旋轉把手＝旋轉；兩隻手指也可以縮放旋轉
+ * - 按鍵上的字也用這一套（不能拉伸、小工具不一樣）
  * - 按在別的圖案上拖＝換成拖那一個
  *
  * 放大的按鍵（KeyZoomView）和整個鍵盤（CatKeyboardView 的背景圖案）共用這一份。
@@ -27,13 +29,23 @@ class DecalHandles(private val dp: Float) {
     var onChange: ((Decal, Boolean) -> Unit)? = null
     /** 選到某個圖案（null = 取消選取） */
     var onPick: ((Decal?) -> Unit)? = null
-    /** 按了小工具：copy / flip / delete */
+    /** 按了小工具（工具的代號見 Geo.tools） */
     var onAction: ((String, Decal) -> Unit)? = null
     /** 點在空白的地方（沒點到圖案、把手、工具） */
     var onEmptyTap: ((Float, Float) -> Unit)? = null
 
-    /** 圖案在畫面上的位置：貼的範圍、參考高度、圖片 */
-    class Geo(val target: RectF, val ref: Float, val bmp: Bitmap?)
+    /**
+     * 東西在畫面上的位置：貼的範圍、參考高度、圖片。
+     * @param aspect 原本的高/寬比例（按鍵上的字用；圖案不用給）
+     * @param tools 框上面的小工具（代號, 顯示的字）
+     * @param stretchable 有沒有四邊的拉把（可以只改寬或只改高）
+     */
+    class Geo(
+        val target: RectF, val ref: Float, val bmp: Bitmap?,
+        val aspect: Float? = null,
+        val tools: List<Pair<String, String>> = DECAL_TOOLS,
+        val stretchable: Boolean = true,
+    )
 
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -57,9 +69,12 @@ class DecalHandles(private val dp: Float) {
 
     private fun frame(d: Decal, g: Geo): Frame {
         val (cx, cy) = Decals.centerOf(d, g.target)
-        val (w, h) = Decals.sizeOf(d, g.ref, g.bmp)
+        val (w, h) = Decals.sizeOf(d, g.ref, g.bmp, g.aspect)
         return Frame(cx, cy, w / 2 + pad, h / 2 + pad, d.rotation)
     }
+
+    /** 四邊中間的拉把：左、右、上、下 */
+    private fun sides(f: Frame) = listOf(f.map(-f.hw, 0f), f.map(f.hw, 0f), f.map(0f, -f.hh), f.map(0f, f.hh))
 
     private fun corners(f: Frame) = listOf(
         f.map(-f.hw, -f.hh), f.map(f.hw, -f.hh), f.map(f.hw, f.hh), f.map(-f.hw, f.hh),
@@ -88,6 +103,21 @@ class DecalHandles(private val dp: Float) {
         line.pathEffect = null
         line.strokeWidth = 1.5f * dp
         c.drawLine(0f, f.hh, 0f, f.hh + rotGap - 11 * dp, line)
+        // 四邊中間的拉把（扁扁的小膠囊，順著邊的方向）
+        if (g.stretchable) {
+            val lw = 15 * dp
+            val lh = 6 * dp
+            for ((x, y, horiz) in listOf(Triple(-f.hw, 0f, false), Triple(f.hw, 0f, false), Triple(0f, -f.hh, true), Triple(0f, f.hh, true))) {
+                val r = if (horiz) RectF(x - lw / 2, y - lh / 2, x + lw / 2, y + lh / 2) else RectF(x - lh / 2, y - lw / 2, x + lh / 2, y + lw / 2)
+                fill.color = 0x33000000
+                c.drawRoundRect(RectF(r.left, r.top + 1 * dp, r.right, r.bottom + 1 * dp), lh / 2, lh / 2, fill)
+                fill.color = Color.WHITE
+                c.drawRoundRect(r, lh / 2, lh / 2, fill)
+                line.color = BLUE
+                line.strokeWidth = 1.8f * dp
+                c.drawRoundRect(r, lh / 2, lh / 2, line)
+            }
+        }
         c.restore()
 
         // 四個角
@@ -105,7 +135,7 @@ class DecalHandles(private val dp: Float) {
         c.drawLine(tx, ty, tx - 3.5f * dp, ty - 0.5f * dp, line)
         c.drawLine(tx, ty, tx + 0.5f * dp, ty + 3.5f * dp, line)
 
-        drawToolbar(c, f, viewW, viewH)
+        drawToolbar(c, f, g.tools, viewW, viewH)
     }
 
     private fun knob(c: Canvas, x: Float, y: Float, rad: Float) {
@@ -120,12 +150,11 @@ class DecalHandles(private val dp: Float) {
     }
 
     /** 框上面的一排小工具（上面放不下就放到下面） */
-    private fun drawToolbar(c: Canvas, f: Frame, viewW: Float, viewH: Float) {
+    private fun drawToolbar(c: Canvas, f: Frame, tools: List<Pair<String, String>>, viewW: Float, viewH: Float) {
         val pts = corners(f) + listOf(rotHandle(f))
         val top = pts.minOf { it.second }
         val bottom = pts.maxOf { it.second }
-        val tools = listOf("copy" to "複製", "flip" to "翻轉", "delete" to "刪除")
-        val bw = 54 * dp
+        val bw = 50 * dp
         val bh = 34 * dp
         val w = bw * tools.size
         var y = top - 14 * dp - bh
@@ -156,7 +185,7 @@ class DecalHandles(private val dp: Float) {
 
     // ---------- 手勢 ----------
 
-    private enum class Mode { NONE, TOOL, MOVE, SCALE, ROTATE, PINCH }
+    private enum class Mode { NONE, TOOL, MOVE, SCALE, SIDE_X, SIDE_Y, ROTATE, PINCH }
 
     private var mode = Mode.NONE
     private var tool: String? = null
@@ -205,11 +234,15 @@ class DecalHandles(private val dp: Float) {
                             mode = Mode.SCALE
                             dist0 = hypot(e.x - f.cx, e.y - f.cy).coerceAtLeast(1f)
                         }
+                        g.stretchable && sides(f).withIndex().any { (_, p) -> hypot(e.x - p.first, e.y - p.second) < grab } -> {
+                            val i = sides(f).indexOfFirst { (x, y) -> hypot(e.x - x, e.y - y) < grab }
+                            mode = if (i < 2) Mode.SIDE_X else Mode.SIDE_Y
+                        }
                         rotHandle(f).let { (x, y) -> hypot(e.x - x, e.y - y) < grab } -> {
                             mode = Mode.ROTATE
                             angle0 = angle(f.cx, f.cy, e.x, e.y)
                         }
-                        Decals.hit(sel, g.target, g.ref, g.bmp, e.x, e.y, 12 * dp) -> mode = Mode.MOVE
+                        Decals.hit(sel, g.target, g.ref, g.bmp, e.x, e.y, 12 * dp, g.aspect) -> mode = Mode.MOVE
                     }
                     if (mode != Mode.NONE && mode != Mode.TOOL) { start = sel; subjectId = sel.id }
                 }
@@ -246,6 +279,23 @@ class DecalHandles(private val dp: Float) {
                         y = (s.y + (e.y - downY) / g.target.height()).coerceIn(-1f, 2f),
                     )
                     Mode.SCALE -> s.copy(size = (s.size * hypot(e.x - f.cx, e.y - f.cy) / dist0).coerceIn(0.03f, 5f))
+                    Mode.SIDE_X, Mode.SIDE_Y -> {
+                        // 手指的位置換成圖案自己的座標（扣掉旋轉），以中心為準拉寬或拉高
+                        val a = Math.toRadians(-f.rot.toDouble())
+                        val dx = e.x - f.cx
+                        val dy = e.y - f.cy
+                        val lx = abs((dx * cos(a) - dy * sin(a)).toFloat())
+                        val ly = abs((dx * sin(a) + dy * cos(a)).toFloat())
+                        val (w, h) = Decals.sizeOf(s, g.ref, g.bmp, g.aspect)
+                        if (mode == Mode.SIDE_X) {
+                            val nw = (2 * (lx - pad)).coerceAtLeast(8 * dp)
+                            // 只改寬：高度不變，所以拉伸倍率反過來補
+                            s.copy(size = (nw / g.ref).coerceIn(0.03f, 5f), stretch = (s.stretch * w / nw).coerceIn(0.1f, 10f))
+                        } else {
+                            val nh = (2 * (ly - pad)).coerceAtLeast(8 * dp)
+                            s.copy(stretch = (s.stretch * nh / h).coerceIn(0.1f, 10f))
+                        }
+                    }
                     Mode.ROTATE -> s.copy(rotation = snap(s.rotation + angle(f.cx, f.cy, e.x, e.y) - angle0))
                     Mode.PINCH -> {
                         if (e.pointerCount < 2) return
@@ -309,5 +359,7 @@ class DecalHandles(private val dp: Float) {
 
     companion object {
         val BLUE = Color.parseColor("#4F8BFF")
+        val DECAL_TOOLS = listOf("copy" to "複製", "flip" to "翻轉", "up" to "上層", "down" to "下層", "delete" to "刪除")
+        val LABEL_TOOLS = listOf("color" to "顏色", "up" to "上層", "down" to "下層", "reset" to "重設")
     }
 }

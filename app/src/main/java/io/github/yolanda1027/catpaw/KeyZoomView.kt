@@ -11,9 +11,9 @@ import android.view.MotionEvent
 import android.view.View
 
 /**
- * 主題工作室：把一顆鍵放大到整個畫面，在上面擺圖案。
- * 選到的圖案用 Canva 那種方式編輯（見 DecalHandles）：拖中間移動、拖四角縮放、
- * 下面的把手旋轉、上面的小工具複製／翻轉／刪除。點空白取消選取。
+ * 主題工作室：把一顆鍵放大到整個畫面，編輯上面的字和圖案。
+ * 選到的東西用 Canva 那種方式編輯（見 DecalHandles）：拖中間移動、拖四角縮放、
+ * 拖四邊只改寬或高（圖案才有）、下面的把手旋轉、上面的小工具。點空白取消選取。
  *
  * 按鍵和圖案的畫法跟真正的鍵盤一模一樣（借 CatKeyboardView 來畫）。
  */
@@ -60,12 +60,18 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         return RectF(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
     }
 
-    private fun mine(): List<Decal> {
-        val id = key?.let { KeyStyles.idOf(it) } ?: return emptyList()
-        return decals().filter { it.target == id }
-    }
+    /** 這顆鍵上可以編輯的東西（字和圖案，由下到上） */
+    private fun elements(): List<CatKeyboardView.KeyElement> = key?.let { kv.keyElements(it) } ?: emptyList()
 
-    private fun geo(d: Decal): DecalHandles.Geo? = keyBox()?.let { DecalHandles.Geo(it, it.height(), kv.decalBitmap(d)) }
+    private fun geo(d: Decal): DecalHandles.Geo? {
+        val box = keyBox() ?: return null
+        val el = elements().firstOrNull { it.decal.id == d.id }
+        return if (el?.isLabel == true) {
+            DecalHandles.Geo(box, box.height(), null, aspect = el.aspect, tools = DecalHandles.LABEL_TOOLS, stretchable = false)
+        } else {
+            DecalHandles.Geo(box, box.height(), el?.bmp ?: kv.decalBitmap(d))
+        }
+    }
 
     override fun onDraw(c: Canvas) {
         val bg = kv.keyboardBg
@@ -82,15 +88,16 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         kv.drawKeyZoomed(c, k, box)
         if (kv.effectsActive()) postInvalidateOnAnimation()
 
-        val sel = mine().firstOrNull { it.id == selectedId }
+        val els = elements()
+        val sel = els.firstOrNull { it.decal.id == selectedId }?.decal
         if (sel != null) geo(sel)?.let { handles.draw(c, sel, it, width.toFloat(), height.toFloat()) }
 
         hint.color = if (light) 0x99000000.toInt() else 0xB3FFFFFF.toInt()
         hint.textSize = 13 * dp
         val tip = when {
-            mine().isEmpty() -> "按右下角「＋ 加圖案」貼第一個圖案"
-            sel == null -> "點一下圖案來選它，或直接拖著走"
-            else -> "拖中間移動・拖四角縮放・拖下面的圓圈旋轉"
+            sel == null -> "點一下字或圖案來選它，或直接拖著走"
+            sel.id.startsWith("label:") -> "拖中間移動・拖四角縮放・拖下面的圓圈旋轉"
+            else -> "拖中間移動・拖角縮放・拖邊只改寬或高・拖圓圈旋轉"
         }
         c.drawText(tip, width / 2f, height - 14 * dp, hint)
     }
@@ -103,10 +110,15 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         val box = keyBox() ?: return true
         handles.onTouch(
             e,
-            selected = mine().firstOrNull { it.id == selectedId },
+            selected = elements().firstOrNull { it.decal.id == selectedId }?.decal,
             geo = { geo(it) },
-            hitAt = { x, y -> mine().lastOrNull { Decals.hit(it, box, box.height(), kv.decalBitmap(it), x, y, 14 * dp) } },
-            current = { id -> decals().firstOrNull { it.id == id } },
+            // 最上面的先：字比較小，點的範圍放寬一點
+            hitAt = { x, y ->
+                elements().lastOrNull { el ->
+                    Decals.hit(el.decal, box, box.height(), el.bmp, x, y, if (el.isLabel) 18 * dp else 14 * dp, el.aspect)
+                }?.decal
+            },
+            current = { id -> elements().firstOrNull { it.decal.id == id }?.decal },
         )
         invalidate()
         return true

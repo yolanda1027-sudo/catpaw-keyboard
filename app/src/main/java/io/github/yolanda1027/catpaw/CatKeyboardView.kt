@@ -292,8 +292,7 @@ class CatKeyboardView(
                 }
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
-                drawOneKey(c, kr)
-                drawKeyDecals(c, kr)
+                drawKeyFull(c, kr)
                 if (s != 1f) c.restore()
                 if (inGrid) c.restore()
             }
@@ -349,6 +348,123 @@ class CatKeyboardView(
                 theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, bodyColor)
             }
         }
+    }
+
+    // ---------- 按鍵上的東西一層一層畫（主題工作室調過字的位置或順序時） ----------
+
+    /**
+     * 一顆鍵完整畫出來：底框、字、圖案。
+     * 沒調過字的位置／順序：照主題原本的畫法，圖案蓋在字上面。
+     * 調過的話：字一個一個分開畫（可以移動、縮放、旋轉、換色），跟圖案照順序一層一層疊。
+     */
+    private fun drawKeyFull(c: Canvas, kr: KeyRect) {
+        val st = keyStyles.resolve(kr.key)
+        val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
+        if (st == null || sticker != null || (st.labels.isNullOrEmpty() && st.order == null)) {
+            drawOneKey(c, kr)
+            drawKeyDecals(c, kr)
+            return
+        }
+        drawOneKey(c, kr, content = false)
+        val elems = labelElemsOf(kr).associateBy { "label:" + it.id }
+        val keyId = KeyStyles.idOf(kr.key)
+        for (id in elementOrder(kr.key)) {
+            val e = elems[id]
+            if (e != null) drawLabel(c, kr, e, st)
+            else decals.firstOrNull { it.id == id && it.target == keyId }?.let { Decals.draw(c, it, kr.rect, kr.rect.height(), decalBitmaps[it.fileName]) }
+        }
+    }
+
+    /** 這顆鍵上的字（藏起來的話就沒有） */
+    private fun labelElemsOf(kr: KeyRect): List<KbTheme.LabelElem> {
+        if (keyStyles.resolve(kr.key)?.hideLabel == true) return emptyList()
+        theme.fonts = fontSet
+        return theme.labelElems(kr.key, labelFor(kr.key), kr.rect, rowH)
+    }
+
+    /** 這個字現在的顏色：自己設的 > 按鍵的文字顏色 > 主題原本的顏色 */
+    private fun labelColor(kr: KeyRect, id: String, st: KeyStyle?): Int {
+        st?.labels?.get(id)?.color?.let { return it }
+        val native = nativeColors(kr)
+        val main = st?.text ?: native?.text ?: theme.text
+        return when {
+            id != "sub" -> main
+            st?.text != null -> (main and 0x00FFFFFF) or (0xA8 shl 24)
+            else -> native?.sub ?: theme.textDim
+        }
+    }
+
+    private fun drawLabel(c: Canvas, kr: KeyRect, e: KbTheme.LabelElem, st: KeyStyle?) {
+        val ls = st?.labels?.get(e.id) ?: LabelStyle()
+        val shaped = st != null && (st.bg != null || st.radius != null || st.border != null)
+        val body = st?.bg ?: nativeColors(kr)?.takeIf { shaped && it.hasBody }?.bg
+        c.save()
+        c.translate(e.cx + ls.dx * kr.rect.width(), e.cy + ls.dy * kr.rect.height())
+        c.rotate(ls.rotation)
+        c.scale(ls.scale, ls.scale)
+        theme.drawLabelElem(c, e, labelColor(kr, e.id, st), shiftState, body)
+        c.restore()
+    }
+
+    /** 這顆鍵上的東西由下到上的順序：預設是字在下面、圖案照加的順序疊上去 */
+    fun elementOrder(key: Key): List<String> {
+        val kr = keyRects.firstOrNull { it.key == key }
+        val labels = kr?.let { labelElemsOf(it).map { e -> "label:" + e.id } } ?: emptyList()
+        val keyId = KeyStyles.idOf(key)
+        val defaults = labels + decals.filter { it.target == keyId }.map { it.id }
+        val saved = keyStyles.resolve(key)?.order ?: return defaults
+        // 存過的順序裡已經沒有的（刪掉的圖案）跳過；新加的放最上面
+        return saved.filter { it in defaults } + defaults.filter { it !in saved }
+    }
+
+    /** 主題工作室：按鍵上可以編輯的東西（由下到上）。字也包成一個 Decal（id 是 label:main），方便共用編輯框 */
+    class KeyElement(val decal: Decal, val aspect: Float?, val isLabel: Boolean, val bmp: android.graphics.Bitmap?)
+
+    fun keyElements(key: Key): List<KeyElement> {
+        val kr = keyRects.firstOrNull { it.key == key } ?: return emptyList()
+        val st = keyStyles.resolve(key)
+        val r = kr.rect
+        val keyId = KeyStyles.idOf(key)
+        val labels = labelElemsOf(kr).associateBy { "label:" + it.id }
+        return elementOrder(key).mapNotNull { id ->
+            val e = labels[id]
+            if (e != null) {
+                val ls = st?.labels?.get(e.id) ?: LabelStyle()
+                val (w, h) = theme.elemSize(e)
+                KeyElement(Decal(
+                    id = id, target = keyId, img = id,
+                    x = (e.cx + ls.dx * r.width() - r.left) / r.width(),
+                    y = (e.cy + ls.dy * r.height() - r.top) / r.height(),
+                    size = w * ls.scale / r.height(),
+                    rotation = ls.rotation,
+                ), h / w, true, null)
+            } else {
+                decals.firstOrNull { it.id == id && it.target == keyId }?.let { KeyElement(it, null, false, decalBitmaps[it.fileName]) }
+            }
+        }
+    }
+
+    /** 編輯框拖完的「字」換回這個字的位置、大小、角度（顏色照舊） */
+    fun labelStyleFrom(key: Key, d: Decal): LabelStyle? {
+        val kr = keyRects.firstOrNull { it.key == key } ?: return null
+        val name = d.id.removePrefix("label:")
+        val e = labelElemsOf(kr).firstOrNull { it.id == name } ?: return null
+        val r = kr.rect
+        val (w, _) = theme.elemSize(e)
+        val old = keyStyles.resolve(key)?.labels?.get(name)
+        return LabelStyle(
+            dx = d.x - (e.cx - r.left) / r.width(),
+            dy = d.y - (e.cy - r.top) / r.height(),
+            scale = (d.size * r.height() / w).coerceIn(0.1f, 6f),
+            rotation = d.rotation,
+            color = old?.color,
+        )
+    }
+
+    /** 主題工作室：這個字現在畫面上的顏色 */
+    fun labelColorOf(key: Key, id: String): Int? {
+        val kr = keyRects.firstOrNull { it.key == key } ?: return null
+        return labelColor(kr, id, keyStyles.resolve(key))
     }
 
     /** 每顆鍵在主題原本樣子下的顏色（量一次就記住，換主題或大小時清掉） */
@@ -440,11 +556,16 @@ class CatKeyboardView(
         c.translate(dst.left, dst.top)
         c.scale(s, s)
         c.translate(-kr.rect.left, -kr.rect.top)
-        drawOneKey(c, kr)
-        drawKeyDecals(c, kr)
+        drawKeyFull(c, kr)
         // 動畫也一起放大畫（在這顆鍵上試按的才會出現在這裡）
         effects.draw(c, android.os.SystemClock.uptimeMillis())
         c.restore()
+    }
+
+    /** 主題工作室改了按鍵樣式（拖字、拖滑桿）：直接換掉，不用整個重讀（快很多） */
+    fun setKeyStylesLive(s: KeyStyles) {
+        keyStyles = s
+        invalidate()
     }
 
     /** 主題工作室改了圖案（拖曳、滑桿）：直接換掉，不用重讀設定 */
@@ -522,7 +643,7 @@ class CatKeyboardView(
     // ---------- 主題工作室：點按鍵來編輯 ----------
 
     /** 這顆鍵「現在看起來」的顏色（主題工作室打開選色器時當起點） */
-    class KeyColors(val bg: Int, val text: Int, val border: Int, val hasBody: Boolean, val hasBorder: Boolean)
+    class KeyColors(val bg: Int, val text: Int, val border: Int, val hasBody: Boolean, val hasBorder: Boolean, val sub: Int = text)
 
     /**
      * 直接把這顆鍵畫在一張小圖上量顏色，所以不管哪個主題（羊皮紙、肉球…）量到的都是畫面上真正的顏色：
@@ -575,6 +696,26 @@ class CatKeyboardView(
         }
         if (best < 30) text = theme.text // 這顆沒有字（或字被藏起來）
 
+        // 小字（v、1…）的顏色：在小字附近找差最多的那一點
+        var sub = text
+        theme.labelElems(kr.key, labelFor(kr.key), r, rowH).firstOrNull { it.id == "sub" }?.let { e ->
+            val half = e.size * 0.6f
+            var subBest = -1
+            val x0 = (e.cx - half - r.left).toInt().coerceIn(0, w - 1)
+            val x1 = (e.cx + half - r.left).toInt().coerceIn(0, w - 1)
+            val y0 = (e.cy - half - r.top).toInt().coerceIn(0, h - 1)
+            val y1 = (e.cy + half - r.top).toInt().coerceIn(0, h - 1)
+            for (y in y0..y1) for (x in x0..x1) {
+                val a = full.getPixel(x, y)
+                val b = body.getPixel(x, y)
+                val d = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
+                    kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
+                    kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+                if (d > subBest) { subBest = d; sub = a }
+            }
+            if (subBest < 30) sub = text
+        }
+
         // 外框：從按鍵左邊中間往內找，第一個跟鍵盤背景不一樣的顏色（按鍵最外圈）
         fun dist(a: Int, b: Int) = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
             kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
@@ -593,7 +734,7 @@ class CatKeyboardView(
         full.recycle()
         val hasBody = dist(bg, base) > 24
         val hasBorder = edgeFound && dist(border, bg) > 40
-        return KeyColors(opaque(bg), opaque(text), opaque(border), hasBody, hasBorder)
+        return KeyColors(opaque(bg), opaque(text), opaque(border), hasBody, hasBorder, opaque(sub))
     }
 
     /** 有設定的話，鍵盤變成「編輯模式」：點按鍵不會打字，而是選到那顆鍵 */

@@ -38,6 +38,8 @@ data class Decal(
     val front: Boolean = false,
     /** 左右翻轉（鏡像） */
     val flip: Boolean = false,
+    /** 高度的拉伸倍率（拖上下的拉把只改高、左右的拉把只改寬時會變；1 = 原本比例） */
+    val stretch: Float = 1f,
 ) {
     val isShape get() = img.startsWith(SHAPE)
     val shapeName get() = img.removePrefix(SHAPE)
@@ -48,7 +50,7 @@ data class Decal(
         .put("id", id).put("target", target).put("img", img)
         .put("x", x.toDouble()).put("y", y.toDouble()).put("size", size.toDouble())
         .put("rotation", rotation.toDouble()).put("alpha", alpha.toDouble())
-        .put("color", String.format("#%08X", color)).put("front", front).put("flip", flip)
+        .put("color", String.format("#%08X", color)).put("front", front).put("flip", flip).put("stretch", stretch.toDouble())
 
     companion object {
         const val BG = "@bg"
@@ -73,6 +75,7 @@ data class Decal(
                 color = try { Color.parseColor(o.optString("color", "#FFFF8FA9")) } catch (_: Exception) { 0xFFFF8FA9.toInt() },
                 front = o.optBoolean("front", false),
                 flip = o.optBoolean("flip", false),
+                stretch = f("stretch", 1f, 0.1f, 10f),
             )
         }
     }
@@ -177,10 +180,14 @@ object Decals {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     /** 圖案在畫面上的大小（還沒旋轉前） */
-    fun sizeOf(d: Decal, refH: Float, bmp: Bitmap?): Pair<Float, Float> {
+    /**
+     * 圖案在畫面上的寬高（還沒旋轉前）。
+     * @param aspect 原本的高/寬比例（不給的話：圖片照圖片的比例，內建圖案是正方形）
+     */
+    fun sizeOf(d: Decal, refH: Float, bmp: Bitmap?, aspect: Float? = null): Pair<Float, Float> {
         val w = d.size * refH
-        val h = if (bmp != null && bmp.width > 0) w * bmp.height / bmp.width else w
-        return w to h
+        val base = aspect ?: if (bmp != null && bmp.width > 0) bmp.height.toFloat() / bmp.width else 1f
+        return w to w * base * d.stretch
     }
 
     fun centerOf(d: Decal, target: RectF) = (target.left + d.x * target.width()) to (target.top + d.y * target.height())
@@ -199,15 +206,17 @@ object Decals {
             paint.colorFilter = null
             c.drawBitmap(bmp, null, r, paint)
         } else {
-            DecalShapes.draw(c, d.shapeName, r, d.color, d.alpha)
+            // 內建圖案先畫成正方形，再上下拉伸
+            if (w > 0f) c.scale(1f, h / w)
+            DecalShapes.draw(c, d.shapeName, RectF(-w / 2, -w / 2, w / 2, w / 2), d.color, d.alpha)
         }
         c.restore()
     }
 
     /** 手指點的位置有沒有在這個圖案上（會考慮旋轉） */
-    fun hit(d: Decal, target: RectF, refH: Float, bmp: Bitmap?, x: Float, y: Float, slop: Float): Boolean {
+    fun hit(d: Decal, target: RectF, refH: Float, bmp: Bitmap?, x: Float, y: Float, slop: Float, aspect: Float? = null): Boolean {
         val (cx, cy) = centerOf(d, target)
-        val (w, h) = sizeOf(d, refH, bmp)
+        val (w, h) = sizeOf(d, refH, bmp, aspect)
         val a = Math.toRadians(-d.rotation.toDouble())
         val dx = x - cx
         val dy = y - cy
