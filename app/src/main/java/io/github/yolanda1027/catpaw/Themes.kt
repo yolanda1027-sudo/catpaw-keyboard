@@ -231,7 +231,7 @@ abstract class KbTheme(protected val dp: Float) {
     /** 自訂底色、外框畫在這個框裡（比按鍵範圍內縮一點，鍵和鍵之間才有空隙） */
     fun styledBox(r: RectF): RectF = RectF(r.left + 3 * dp, r.top + 4 * dp, r.right - 3 * dp, r.bottom - 4 * dp)
 
-    private fun styledRadius(box: RectF, st: KeyStyle) = (st.radius ?: 0.3f) * min(box.width(), box.height()) / 2f
+    fun styledRadius(box: RectF, st: KeyStyle) = (st.radius ?: 0.3f) * min(box.width(), box.height()) / 2f
 
     /** 按下去的顏色：亮的變暗一點、暗的變亮一點 */
     fun pressedOf(color: Int): Int {

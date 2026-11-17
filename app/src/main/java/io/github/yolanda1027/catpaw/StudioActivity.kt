@@ -341,10 +341,10 @@ class StudioActivity : Activity() {
             kv.editHighlight = null
             text("👆 點一下上面鍵盤的任何一顆按鍵，就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
             text("改好會直接套用到鍵盤上。想換整體主題、字體，到「貓爪鍵盤」設定的外觀頁。", 13f, dim = true)
-            button("🖼️ 在鍵盤背景貼圖案") { bgSelected = true; refresh() }
+            button("🖼️ 鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
-            if (styles.map.isNotEmpty()) {
-                text("目前有 ${styles.map.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
+            if (styles.keyEntries.isNotEmpty()) {
+                text("目前有 ${styles.keyEntries.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
                 clearAllButton()
             }
             if (decals.isNotEmpty()) clearDecalsButton()
@@ -376,6 +376,7 @@ class StudioActivity : Activity() {
         // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
         val now = kv.sampleColors(key)
         colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) }
+        imageRow(currentId()!!, "底圖", cur.bgImage)
         colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
         colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY, allowTransparent = true) { v -> update({ it.copy(border = v) }) }
 
@@ -462,8 +463,11 @@ class StudioActivity : Activity() {
     private fun bgPanel() {
         kv.editHighlight = null
         text("正在編輯：鍵盤背景", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
-        text("背景的圖案預設在按鍵後面（可以放在鍵和鍵之間的空隙），也可以設定成蓋在按鍵上面。", 13f, dim = true)
+        section("背景圖片")
+        imageRow(KeyStyles.KEYBOARD, "", styles.keyboardImage)
+        text("鋪滿選字列下面的整塊（按鍵後面）。", 13f, dim = true)
         section("背景上的圖案")
+        text("背景的圖案預設在按鍵後面（可以放在鍵和鍵之間的空隙），也可以設定成蓋在按鍵上面。", 13f, dim = true)
         decalList(Decal.BG)
         button("← 回到選按鍵") { bgSelected = false; refresh() }
     }
@@ -544,6 +548,16 @@ class StudioActivity : Activity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (Eyedropper.onResult(this, requestCode, resultCode, data)) return
+        if (requestCode == REQ_FILL) {
+            val target = pendingFill
+            pendingFill = null
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null || target == null) return
+            val name = readImage(uri, Decals.FILL_MAX_PX) ?: return
+            // 上傳完直接進裁切畫面；按取消就不套用
+            openCrop(target, ImageFill(name))
+            return
+        }
         if (requestCode == REQ_EFFECT_IMAGE) {
             val uri = data?.data
             if (resultCode != RESULT_OK || uri == null) return
@@ -873,14 +887,16 @@ class StudioActivity : Activity() {
     private fun resetButton() {
         button("↺ 恢復主題預設") {
             val nDecals = decals.size
-            val nStyles = styles.map.size
-            if (nDecals == 0 && nStyles == 0) {
+            val nStyles = styles.keyEntries.size
+            val hasBgImage = styles.keyboardImage != null
+            if (nDecals == 0 && nStyles == 0 && !hasBgImage) {
                 android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
                 return@button
             }
             val lines = buildList {
                 if (nDecals > 0) add("・貼上去的圖案（$nDecals 個）")
-                if (nStyles > 0) add("・按鍵的單獨設定（$nStyles 組，包含單顆鍵的動畫）")
+                if (nStyles > 0) add("・按鍵的單獨設定（$nStyles 組，包含底圖、單顆鍵的動畫）")
+                if (hasBgImage) add("・鍵盤背景圖片")
             }
             val dialog = AlertDialog.Builder(this)
                 .setTitle("恢復主題預設？")
@@ -921,14 +937,91 @@ class StudioActivity : Activity() {
         }
     }
 
+    // ---------- 底圖（按鍵底圖、鍵盤背景圖） ----------
+
+    /** 上傳的圖要給誰用（按鍵樣式的代號，或 KeyStyles.KEYBOARD） */
+    private var pendingFill: String? = null
+
+    /**
+     * 一列：名稱＋狀態，下面一排按鈕：上傳（換一張）、調整裁切、拿掉
+     * @param target 按鍵樣式的代號（單顆或整類），或 KeyStyles.KEYBOARD
+     */
+    private fun imageRow(target: String, label: String, fill: ImageFill?) {
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, px(6f), 0, 0)
+        }
+        if (label.isNotEmpty()) head.addView(TextView(this).apply { text = label; textSize = 15f })
+        head.addView(TextView(this).apply {
+            text = when {
+                fill == null -> "沒有（可以上傳照片或 GIF）"
+                fill.isGif -> "已設定（GIF，會動）"
+                else -> "已設定"
+            }
+            textSize = 12f
+            alpha = 0.65f
+        })
+        panel.addView(head)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun b(s: String, onClick: () -> Unit) = row.addView(Button(this).apply {
+            text = s
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(3f), px(2f), px(3f)) })
+        b(if (fill == null) "📷 上傳圖片" else "📷 換一張") {
+            pendingFill = target
+            val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_FILL)
+        }
+        if (fill != null) {
+            b("✂️ 裁切") { openCrop(target, fill) }
+            b("拿掉") { setFill(target, null) }
+        }
+        panel.addView(row)
+    }
+
+    private fun setFill(target: String, fill: ImageFill?) {
+        styles = styles.with(target, (styles.map[target] ?: KeyStyle()).copy(bgImage = fill))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        zoom.invalidate()
+        refresh()
+    }
+
+    /** 打開裁切畫面：框的比例跟那顆鍵（或整個鍵盤背景）一樣 */
+    private fun openCrop(target: String, fill: ImageFill) {
+        val bmp = java.io.File(Decals.dir(this), fill.img).takeIf { Decals.safeName(fill.img) && it.exists() }
+            ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+        if (bmp == null) {
+            android.widget.Toast.makeText(this, "這張圖讀不出來，換一張試試", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val (frame, corner, title) = if (target == KeyStyles.KEYBOARD) {
+            Triple(kv.keyboardImageFrame(), 0f, "裁切鍵盤背景圖片")
+        } else {
+            val key = selected ?: return
+            val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
+            val (box, rad) = kv.keyImageFrame(key, st) ?: return
+            Triple(box, rad / minOf(box.width(), box.height()), "裁切" + (if (target.startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == target }?.title ?: "" else KeyStyles.nameOf(key)) + "的底圖")
+        }
+        if (frame.isEmpty) return
+        ImageCrop.show(this, bmp, title, frame.width() / frame.height(), corner, fill) { f ->
+            if (f != null) setFill(target, f)
+        }
+    }
+
     /** 按鍵動畫用的圖：GIF 會照原檔留著（飛出來時會動） */
-    private fun readImage(uri: android.net.Uri): String? {
+    private fun readImage(uri: android.net.Uri, maxPx: Int = Decals.MAX_PX): String? {
         var tooBigGif = false
         val name = try {
             contentResolver.openInputStream(uri)?.use { input ->
                 val bytes = input.readBytes()
                 tooBigGif = Decals.isGif(bytes) && bytes.size > Decals.MAX_GIF_BYTES
-                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes, keepGif = true)
+                if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes, keepGif = true, maxPx = maxPx)
             }
         } catch (_: Exception) { null }
         when {
@@ -1126,6 +1219,7 @@ class StudioActivity : Activity() {
         private const val MENU_UNDO = 1
         private const val MENU_REDO = 2
         private const val REQ_EFFECT_IMAGE = 501
+        private const val REQ_FILL = 502
         private const val GLOBAL = "global"
         private const val KEY = "key"
     }
@@ -1133,9 +1227,9 @@ class StudioActivity : Activity() {
     private fun clearAllButton() {
         button("清除所有按鍵設定") {
             AlertDialog.Builder(this)
-                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？")
+                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？（鍵盤背景圖片會留著）")
                 .setPositiveButton("全部清除") { _, _ ->
-                    styles = KeyStyles.EMPTY
+                    styles = KeyStyles(styles.map.filterKeys { it == KeyStyles.KEYBOARD })
                     KeyStyles.save(prefs, styles)
                     kv.reloadPrefs()
                     refresh()

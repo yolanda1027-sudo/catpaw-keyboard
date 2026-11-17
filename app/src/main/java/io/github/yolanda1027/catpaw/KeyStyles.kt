@@ -50,9 +50,14 @@ data class KeyStyle(
     val labels: Map<String, LabelStyle>? = null,
     /** 按鍵上所有東西（字和圖案）由下到上的順序：「label:main」「label:sub」或圖案的 id */
     val order: List<String>? = null,
+    /** 底圖：鋪在底色上面、字下面，照按鍵的圓角裁掉（「@keyboard」用的話就是整個鍵盤的背景圖） */
+    val bgImage: ImageFill? = null,
 ) {
     val isEmpty get() = bg == null && text == null && border == null && radius == null && hideLabel == null && effect == null &&
-        labels.isNullOrEmpty() && order == null
+        labels.isNullOrEmpty() && order == null && bgImage == null
+
+    /** 改了底色、圓角、外框或底圖：這顆鍵換成自訂的形狀 */
+    val isShaped get() = bg != null || radius != null || border != null || bgImage != null
 
     /** 自己有設定的用自己的，沒設定的用 base（例如「所有注音鍵」的設定） */
     fun over(base: KeyStyle?): KeyStyle = if (base == null) this else KeyStyle(
@@ -60,6 +65,7 @@ data class KeyStyle(
         effect ?: base.effect,
         labels ?: base.labels,
         order ?: base.order,
+        bgImage ?: base.bgImage,
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -71,6 +77,7 @@ data class KeyStyle(
         effect?.let { put("effect", it.toJson()) }
         labels?.takeIf { it.isNotEmpty() }?.let { m -> put("labels", JSONObject().apply { for ((k, v) in m) put(k, v.toJson()) }) }
         order?.let { put("order", org.json.JSONArray(it)) }
+        bgImage?.let { put("bgImage", it.toJson()) }
     }
 
     companion object {
@@ -92,6 +99,7 @@ data class KeyStyle(
                         .filter { !it.second.isEmpty }.toMap().takeIf { it.isNotEmpty() }
                 },
                 order = o.optJSONArray("order")?.let { arr -> (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotEmpty() } },
+                bgImage = ImageFill.fromJson(o.optJSONObject("bgImage")),
             )
         }
     }
@@ -132,8 +140,19 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap()) {
 
     fun toJson(): JSONObject = JSONObject().apply { for ((k, v) in map) put(k, v.toJson()) }
 
+    /** 整個鍵盤的背景圖（不是按鍵；跟按鍵樣式存在一起，上一步、匯出、恢復預設都會一起處理） */
+    val keyboardImage: ImageFill? get() = map[KEYBOARD]?.bgImage
+
+    /** 真的是按鍵的設定（不算鍵盤背景圖） */
+    val keyEntries: Map<String, KeyStyle> get() = map.filterKeys { it != KEYBOARD }
+
+    /** 所有用到的底圖檔名 */
+    val imageFiles: Set<String> get() = map.values.mapNotNull { it.bgImage?.img }.toSet()
+
     companion object {
         val EMPTY = KeyStyles()
+        /** 鍵盤背景圖的代號 */
+        const val KEYBOARD = "@keyboard"
 
         fun idOf(key: Key): String = when (key.act) {
             Act.ZHUYIN -> "zy:" + key.label

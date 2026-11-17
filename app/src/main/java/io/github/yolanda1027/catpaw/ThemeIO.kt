@@ -38,7 +38,7 @@ object ThemeIO {
         EFFECT("按鍵動畫"),
         STICKERS("功能鍵貼圖"),
         QUICK("快捷符號列"),
-        KEYS("單顆按鍵樣式（主題工作室）"),
+        KEYS("單顆按鍵樣式、底圖、鍵盤背景圖（主題工作室）"),
         DECALS("貼上的圖案（主題工作室）"),
     }
 
@@ -70,7 +70,9 @@ object ThemeIO {
             }
         }
         if (Part.KEYS in parts) {
-            for (st in KeyStyles.load(prefs).map.values) st.effect?.custom?.takeIf { it.isImage }?.let { effectImages.add(it.fileName) }
+            val ks = KeyStyles.load(prefs)
+            for (st in ks.map.values) st.effect?.custom?.takeIf { it.isImage }?.let { effectImages.add(it.fileName) }
+            effectImages += ks.imageFiles // 按鍵底圖、鍵盤背景圖（GIF 照原檔）
         }
         if (effectImages.isNotEmpty()) {
             val imgs = JSONObject()
@@ -208,7 +210,7 @@ object ThemeIO {
         val rename = HashMap<String, String>()
         o.optJSONObject("effectImages")?.let { imgs ->
             for (n in imgs.keys()) {
-                val newName = try { Decals.storeBytes(ctx, Base64.decode(imgs.optString(n), Base64.DEFAULT), keepGif = true) } catch (_: Exception) { null }
+                val newName = try { Decals.storeBytes(ctx, Base64.decode(imgs.optString(n), Base64.DEFAULT), keepGif = true, maxPx = Decals.FILL_MAX_PX) } catch (_: Exception) { null }
                 if (newName != null) rename[n] = newName else warnings.add("有一張按鍵動畫的圖片壞掉了，改用愛心")
             }
         }
@@ -222,9 +224,16 @@ object ThemeIO {
         }
         o.optJSONObject("keyStyles")?.let { ks ->
             val loaded = KeyStyles.fromJson(ks)
-            KeyStyles.save(prefs, KeyStyles(loaded.map.mapValues { (_, st) ->
-                st.effect?.custom?.let { st.copy(effect = st.effect.copy(custom = fix(it))) } ?: st
-            }))
+            var lostImage = false
+            KeyStyles.save(prefs, KeyStyles(loaded.map.mapValues { (_, st0) ->
+                val st = st0.effect?.custom?.let { st0.copy(effect = st0.effect.copy(custom = fix(it))) } ?: st0
+                // 底圖：換成新存的檔名；圖壞掉的話就拿掉底圖（顏色那些設定還是留著）
+                st.bgImage?.let { f ->
+                    val n = rename[f.img]
+                    if (n != null) st.copy(bgImage = f.copy(img = n)) else { lostImage = true; st.copy(bgImage = null) }
+                } ?: st
+            }.filterValues { !it.isEmpty }))
+            if (lostImage) warnings.add("有底圖的圖片壞掉了，那幾顆鍵先用底色")
         }
         o.optJSONObject("decals")?.let {
             val (list, broken) = Decals.importJson(ctx, it)

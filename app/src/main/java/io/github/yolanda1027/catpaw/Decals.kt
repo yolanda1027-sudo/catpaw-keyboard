@@ -162,9 +162,12 @@ object Decals {
         prefs.sp.edit().putString("decals", toJson(list).toString()).apply()
     }
 
-    /** 把圖縮到 MAX_PX 以內存成 PNG，回傳檔名 */
-    fun storeBitmap(ctx: Context, src: Bitmap): String {
-        val s = minOf(1f, MAX_PX.toFloat() / maxOf(src.width, src.height))
+    /** 底圖（按鍵底圖、鍵盤背景）可以存大一點，放大裁切才不會糊 */
+    const val FILL_MAX_PX = 1600
+
+    /** 把圖縮到 maxPx 以內存成 PNG，回傳檔名 */
+    fun storeBitmap(ctx: Context, src: Bitmap, maxPx: Int = MAX_PX): String {
+        val s = minOf(1f, maxPx.toFloat() / maxOf(src.width, src.height))
         val bmp = if (s < 1f) Bitmap.createScaledBitmap(src, maxOf(1, (src.width * s).toInt()), maxOf(1, (src.height * s).toInt()), true) else src
         var name = "decal_${System.currentTimeMillis()}.png"
         var n = 1
@@ -178,8 +181,8 @@ object Decals {
      * @param keepGif true = GIF 照原檔存（按鍵動畫用，會動）；false = 一律轉成 PNG（只留第一格）
      *   GIF 太大（超過 MAX_GIF_BYTES）也會轉成 PNG。
      */
-    fun storeBytes(ctx: Context, bytes: ByteArray, keepGif: Boolean = false): String? {
-        val bmp = decodeCapped(bytes) ?: return null // 順便確認真的是圖片
+    fun storeBytes(ctx: Context, bytes: ByteArray, keepGif: Boolean = false, maxPx: Int = MAX_PX): String? {
+        val bmp = decodeCapped(bytes, maxPx) ?: return null // 順便確認真的是圖片
         if (keepGif && isGif(bytes) && bytes.size <= MAX_GIF_BYTES) {
             var name = "decal_${System.currentTimeMillis()}.gif"
             var n = 1
@@ -187,16 +190,16 @@ object Decals {
             File(dir(ctx), name).writeBytes(bytes)
             return name
         }
-        return storeBitmap(ctx, bmp)
+        return storeBitmap(ctx, bmp, maxPx)
     }
 
     /** 解碼時先縮小，太大的照片才不會把記憶體吃光 */
-    fun decodeCapped(bytes: ByteArray): Bitmap? {
+    fun decodeCapped(bytes: ByteArray, maxPx: Int = MAX_PX): Bitmap? {
         val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
         if (o.outWidth <= 0 || o.outHeight <= 0) return null
         var sample = 1
-        while (maxOf(o.outWidth, o.outHeight) / (sample * 2) >= MAX_PX) sample *= 2
+        while (maxOf(o.outWidth, o.outHeight) / (sample * 2) >= maxPx) sample *= 2
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 
@@ -226,7 +229,9 @@ object Decals {
     fun effectFiles(prefs: Prefs): Set<String> {
         val out = HashSet<String>()
         prefs.customEffect.takeIf { it.isImage }?.let { out.add(it.fileName) }
-        for (st in KeyStyles.load(prefs).map.values) st.effect?.custom?.takeIf { it.isImage }?.let { out.add(it.fileName) }
+        val ks = KeyStyles.load(prefs)
+        for (st in ks.map.values) st.effect?.custom?.takeIf { it.isImage }?.let { out.add(it.fileName) }
+        out += ks.imageFiles // 按鍵底圖、鍵盤背景圖
         return out
     }
 

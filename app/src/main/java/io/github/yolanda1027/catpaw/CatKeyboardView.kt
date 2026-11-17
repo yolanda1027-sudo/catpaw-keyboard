@@ -284,6 +284,7 @@ class CatKeyboardView(
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.drawBackground(c, w, kbH, topH)
+        keyStyles.keyboardImage?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
         drawBgDecals(c, front = false)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
         drawTopBar(c, w)
@@ -339,7 +340,7 @@ class CatKeyboardView(
         val isPressed = kr === pressed
         val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
         val st = if (styled) keyStyles.resolve(kr.key) else null
-        val shaped = st != null && (st.bg != null || st.radius != null || st.border != null)
+        val shaped = st?.isShaped == true
         val split = !content || sticker != null || shaped || (st != null && (st.text != null || st.hideLabel == true))
         if (!split) {
             theme.drawKey(c, kr.rect, kr.key, labelFor(kr.key), isPressed, shiftState, rowH)
@@ -351,6 +352,7 @@ class CatKeyboardView(
         if (shaped && st != null && native != null) {
             bodyColor = st.bg ?: native.bg.takeIf { native.hasBody }
             if (bodyColor != null) theme.drawStyledBody(c, kr.rect, st.copy(bg = bodyColor), isPressed)
+            st.bgImage?.let { drawKeyImage(c, kr.rect, st, it, isPressed) }
             val border = st.border ?: native.border.takeIf { native.hasBorder }
             if (border != null) theme.drawStyledBorder(c, kr.rect, st.copy(border = border))
         } else {
@@ -416,7 +418,7 @@ class CatKeyboardView(
 
     private fun drawLabel(c: Canvas, kr: KeyRect, e: KbTheme.LabelElem, st: KeyStyle?) {
         val ls = st?.labels?.get(e.id) ?: LabelStyle()
-        val shaped = st != null && (st.bg != null || st.radius != null || st.border != null)
+        val shaped = st?.isShaped == true
         val body = (st?.bg ?: nativeColors(kr)?.takeIf { shaped && it.hasBody }?.bg)?.takeIf { android.graphics.Color.alpha(it) > 0 }
         c.save()
         c.translate(e.cx + ls.dx * kr.rect.width(), e.cy + ls.dy * kr.rect.height())
@@ -494,6 +496,33 @@ class CatKeyboardView(
         val k = KeyStyles.idOf(kr.key) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
         nativeCache[k]?.let { return it }
         return sample(kr, styled = false)?.also { nativeCache[k] = it }
+    }
+
+    // ---------- 底圖（按鍵底圖、鍵盤背景圖） ----------
+
+    private val pressShade = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0x2E000000 }
+
+    /** 底圖用的圖（GIF 的話是第一格；會動的另外用 fillAnim） */
+    private fun fillBitmap(name: String) = effectBitmap(name)
+    private fun fillAnim(f: ImageFill) = if (f.isGif) effectAnim(f.img) else null
+
+    /** 按鍵底圖：照這顆鍵的圓角裁掉；按下去暗一點 */
+    private fun drawKeyImage(c: Canvas, r: RectF, st: KeyStyle, fill: ImageFill, pressed: Boolean) {
+        val box = theme.styledBox(r)
+        val rad = theme.styledRadius(box, st)
+        val clip = android.graphics.Path().apply { addRoundRect(box, rad, rad, android.graphics.Path.Direction.CW) }
+        ImageFill.draw(c, fill, box, clip, fillBitmap(fill.img), fillAnim(fill))
+        if (pressed) c.drawRoundRect(box, rad, rad, pressShade)
+    }
+
+    /** 鍵盤背景圖鋪的範圍：上方列（選字列）下面的整塊 */
+    fun keyboardImageFrame(): RectF = RectF(0f, topH, width.toFloat(), kbH)
+
+    /** 這顆鍵的底圖鋪的範圍、圓角半徑（裁切畫面用） */
+    fun keyImageFrame(key: Key, st: KeyStyle?): Pair<RectF, Float>? {
+        val r = keyRects.firstOrNull { it.key == key }?.rect ?: return null
+        val box = theme.styledBox(r)
+        return box to theme.styledRadius(box, st ?: KeyStyle())
     }
 
     // ---------- 我的貼圖（表情鍵盤的 🖼️） ----------
