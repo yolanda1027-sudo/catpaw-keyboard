@@ -82,6 +82,15 @@ class Prefs(context: Context) {
         get() = sp.getString("recent_symbols", "") ?: ""
         set(v) = sp.edit().putString("recent_symbols", v).apply()
 
+    /** 釘選的符號、表情（用 \u0001 分隔，照使用者排的順序）：放在「最近使用」最前面，不會被擠掉 */
+    var pinnedSymbols: String
+        get() = sp.getString("pinned_symbols", "") ?: ""
+        set(v) = sp.edit().putString("pinned_symbols", v).apply()
+
+    var pinnedEmoji: String
+        get() = sp.getString("pinned_emoji", "") ?: ""
+        set(v) = sp.edit().putString("pinned_emoji", v).apply()
+
     /** 最近用過的表情符號（用 \u0001 分隔） */
     var recentEmoji: String
         get() = sp.getString("recent_emoji", "") ?: ""

@@ -35,6 +35,8 @@ class CatKeyboardView(
         fun onQuick(item: String)
         /** 按了上方的「簡」：切換簡體／繁體 */
         fun onToggleSimplified() {}
+        /** 長按「最近使用」裡的符號／表情，選了選單上的動作（pin、left、right、remove） */
+        fun onItemAction(key: Key, action: String) {}
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -140,6 +142,7 @@ class CatKeyboardView(
         longFired = true
         haptics.perform(this, prefs)
         val opts = popupOptionsFor(kr.key)
+            ?: itemActions?.invoke(kr.key)?.let { acts -> PopupOptions(acts.map { it.second }, 0, 0, actions = acts.map { it.first }) }
         if (opts != null) {
             // 跳出長按選單，手指左右滑來選，放開就打出來
             popup = opts
@@ -154,8 +157,17 @@ class CatKeyboardView(
 
     // ---------- 長按選單（像 Google 注音：O ㄟ o） ----------
 
-    /** @param main 選項裡哪一個是原本的注音 */
-    private class PopupOptions(val items: List<String>, val default: Int, val main: Int)
+    /**
+     * @param main 選項裡哪一個是原本的注音
+     * @param actions 有的話＝這是「動作選單」（釘選、往前…），放開時不打字，改叫 onItemAction
+     */
+    private class PopupOptions(val items: List<String>, val default: Int, val main: Int, val actions: List<String>? = null)
+
+    /** 這顆鍵長按要不要跳「動作選單」（最近使用的符號、表情）：(動作代號, 顯示的字)；null = 不用 */
+    var itemActions: ((Key) -> List<Pair<String, String>>?)? = null
+
+    /** 這顆鍵是不是釘選的（右上角畫一個小圖釘） */
+    var isPinned: ((Key) -> Boolean)? = null
 
     private var popup: PopupOptions? = null
     private var popupSel = 0
@@ -182,7 +194,8 @@ class CatKeyboardView(
     }
 
     private fun popupRectFor(kr: KeyRect, o: PopupOptions): RectF {
-        val optW = kr.rect.width()
+        // 動作選單的字比較多（「釘選」「往前」），每格寬一點
+        val optW = if (o.actions != null) max(kr.rect.width(), keyH * 1.3f) else kr.rect.width()
         val w = optW * o.items.size
         // 預設的選項剛好在按鍵正上方
         var left = kr.rect.centerX() - optW * (o.default + 0.5f)
@@ -194,7 +207,7 @@ class CatKeyboardView(
 
     private fun drawPopup(c: Canvas) {
         val o = popup ?: return
-        theme.drawPopup(c, popupRect, o.items, popupSel, keyH)
+        theme.drawPopup(c, popupRect, o.items, popupSel, if (o.actions != null) keyH * 0.62f else keyH)
     }
     private val repeatRunnable = object : Runnable {
         override fun run() {
@@ -294,6 +307,10 @@ class CatKeyboardView(
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
                 drawKeyFull(c, kr)
+                if (isPinned?.invoke(kr.key) == true) {
+                    // 釘選的：右上角一個小圖釘
+                    theme.drawText(c, "📌", kr.rect.right - rowH * 0.16f, kr.rect.top + rowH * 0.17f, rowH * 0.2f, theme.text)
+                }
                 if (s != 1f) c.restore()
                 if (inGrid) c.restore()
             }
@@ -1316,7 +1333,7 @@ class CatKeyboardView(
         playEffect(kr)
         when {
             kr.key.act == Act.BACKSPACE -> handler.postDelayed(repeatRunnable, 400)
-            kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP ->
+            kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP || itemActions?.invoke(kr.key) != null ->
                 handler.postDelayed(longPressRunnable, prefs.longPressMs.toLong())
         }
         invalidate()
@@ -1334,6 +1351,7 @@ class CatKeyboardView(
         invalidate()
         if (cancel || kr == null) return
         when {
+            o?.actions != null -> listener?.onItemAction(kr.key, o.actions[popupSel])
             o != null -> {
                 // 長按選單：選到什麼就直接打出什麼（選注音就打出注音符號本身，不進選字）
                 listener?.onKey(Key(o.items[popupSel], Act.TEXT, exact = true), false)

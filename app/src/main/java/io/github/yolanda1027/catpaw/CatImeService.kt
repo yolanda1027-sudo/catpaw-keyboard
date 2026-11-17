@@ -123,7 +123,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         when (key) {
-            "chinese", "recent_symbols", "recent_kaomoji", "recent_emoji" -> Unit
+            "chinese", "recent_symbols", "recent_kaomoji", "recent_emoji", "pinned_symbols", "pinned_emoji" -> Unit
             "simplified" -> refresh() // 簡繁切換：選字列馬上換
             "quick_bar", "quick_items", "quick_config" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
@@ -211,6 +211,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
         // 快捷符號列：只在注音／英文鍵盤顯示
         v.quickItems = if (prefs.quickBar && page == Page.MAIN) prefs.quickList() else emptyList()
+        // 最近使用的符號、表情：長按可以釘選、換位置；釘選的畫小圖釘
+        v.itemActions = { k -> itemActionsFor(k) }
+        v.isPinned = { k -> recentKind()?.let { kind -> k.act == Act.TEXT && k.text in pinned(kind) } == true }
         // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
         v.morePagesBefore = page == Page.EMOJI && emojiCat > 1
         v.morePagesAfter = page == Page.EMOJI && emojiCat < Emojis.groups.size
@@ -328,6 +331,48 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     /** 簡體模式就轉成簡體（只在顯示、送出的時候轉；選字、學習都還是用繁體） */
     private fun conv(s: String) = if (prefs.simplified) ChineseConvert.toSimplified(this, s) else s
 
+    // ---------- 最近使用：釘選、換位置 ----------
+
+    private fun pinned(kind: String): List<String> =
+        (if (kind == SYM) prefs.pinnedSymbols else prefs.pinnedEmoji).split('\u0001').filter { it.isNotEmpty() }
+
+    private fun setPinned(kind: String, list: List<String>) {
+        val v = list.joinToString("\u0001")
+        if (kind == SYM) prefs.pinnedSymbols = v else prefs.pinnedEmoji = v
+    }
+
+    private fun recentShown(pins: List<String>, recent: List<String>, perPage: Int) = Recents.shown(pins, recent, perPage)
+
+    /** 現在在哪一種「最近使用」頁（符號 or 表情）；不在的話是 null */
+    private fun recentKind(): String? = when {
+        page == Page.SYMBOL && symCat == Symbols.RECENT -> SYM
+        page == Page.EMOJI && emojiCat == 0 -> EMO
+        else -> null
+    }
+
+    /** 長按最近使用的東西：跳出的選單。直接放開＝第一個（釘選／取消釘選） */
+    private fun itemActionsFor(key: Key): List<Pair<String, String>>? {
+        val kind = recentKind() ?: return null
+        if (key.act != Act.TEXT || key.text.isEmpty()) return null
+        return if (key.text in pinned(kind)) listOf("unpin" to "取消", "left" to "往前", "right" to "往後", "remove" to "刪除")
+        else listOf("pin" to "釘選", "remove" to "刪除")
+    }
+
+    override fun onItemAction(key: Key, action: String) {
+        val kind = recentKind() ?: return
+        val max = if (kind == SYM) Symbols.PER_PAGE else Emojis.PER_PAGE
+        val recent = if (kind == SYM) recentSymbols() else recentEmoji()
+        val res = Recents.apply(action, key.text, pinned(kind), recent, max)
+        if (res == null) {
+            android.widget.Toast.makeText(this, "釘選的已經滿一頁了，先取消一些再釘", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        setPinned(kind, res.first)
+        val r = res.second.joinToString("\u0001")
+        if (kind == SYM) prefs.recentSymbols = r else prefs.recentEmoji = r
+        refresh()
+    }
+
     override fun onToggleSimplified() {
         prefs.simplified = !prefs.simplified
         refresh()
@@ -425,9 +470,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 refresh()
             }
             Act.TO_SYMBOL -> {
-                // 每次進符號鍵盤都從頭開始（跟表情符號一樣）：有用過的先開「最近使用」，沒有的話開常用符號第一頁。
-                // 從數字鍵盤按 @?# 一定回到常用符號。
-                symCat = if (page != Page.NUMPAD && recentSymbols().isNotEmpty()) Symbols.RECENT else 1
+                // 每次進符號鍵盤都從「1?#」第一頁開始（數字、常用標點最順手）；最近使用在最左邊的時鐘
+                symCat = 1
                 symPage = 0
                 kaoTab = 1
                 page = Page.SYMBOL
@@ -510,7 +554,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         if (kaoTab == 0) recentKaomoji() else Symbols.kaomojiGroups.getOrNull(kaoTab - 1)?.second ?: emptyList()
 
     private fun symbolItems(): List<String> = when (symCat) {
-        Symbols.RECENT -> recentSymbols()
+        Symbols.RECENT -> recentShown(pinned(SYM), recentSymbols(), Symbols.PER_PAGE)
         Symbols.KAOMOJI -> kaomojiAll().chunked(Symbols.PER_PAGE_WIDE).getOrElse(symPage) { emptyList() }
         else -> Symbols.categories[symCat].pages.getOrElse(symPage) { emptyList() }
     }
@@ -535,7 +579,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     private fun emojiItems(): List<String> =
-        if (emojiCat == 0) recentEmoji() else Emojis.groups.getOrNull(emojiCat - 1)?.second ?: emptyList()
+        if (emojiCat == 0) recentShown(pinned(EMO), recentEmoji(), Emojis.PER_PAGE) else Emojis.groups.getOrNull(emojiCat - 1)?.second ?: emptyList()
 
     // ---------- 剪貼簿 ----------
 
@@ -674,6 +718,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     companion object {
+        private const val SYM = "sym"
+        private const val EMO = "emo"
+
         /** 選字列最多放幾個（很常見的音可能有上千個字，太多會拖慢） */
         private const val MAX_CANDIDATES = 400
     }
