@@ -140,8 +140,14 @@ data class TopBarStyle(
     val text: Int? = null,
     val textDim: Int? = null,
     val icon: Int? = null,
+    /** 選中那塊的外框：顏色、粗細、樣式、縫線離邊距離（跟按鍵的外框同一套） */
+    val tabBorder: Int? = null,
+    val tabBorderWidth: Float? = null,
+    val tabBorderStyle: String? = null,
+    val tabBorderInset: Float? = null,
 ) {
-    val isEmpty get() = bg == null && tab == null && text == null && textDim == null && icon == null
+    val isEmpty get() = bg == null && tab == null && text == null && textDim == null && icon == null &&
+        tabBorder == null && tabBorderWidth == null && tabBorderStyle == null && tabBorderInset == null
 
     fun toJson(): JSONObject = JSONObject().apply {
         fun hex(c: Int) = String.format("#%08X", c)
@@ -150,6 +156,10 @@ data class TopBarStyle(
         text?.let { put("text", hex(it)) }
         textDim?.let { put("textDim", hex(it)) }
         icon?.let { put("icon", hex(it)) }
+        tabBorder?.let { put("tabBorder", hex(it)) }
+        tabBorderWidth?.let { put("tabBorderWidth", it.toDouble()) }
+        tabBorderStyle?.let { put("tabBorderStyle", it) }
+        tabBorderInset?.let { put("tabBorderInset", it.toDouble()) }
     }
 
     companion object {
@@ -158,7 +168,14 @@ data class TopBarStyle(
             fun col(k: String): Int? = o.optString(k).takeIf { it.isNotEmpty() }?.let {
                 try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null }
             }
-            return TopBarStyle(col("bg"), col("tab"), col("text"), col("textDim"), col("icon")).takeIf { !it.isEmpty }
+            fun num(k: String, lo: Float, hi: Float) = if (o.has(k)) o.optDouble(k).toFloat().takeIf { !it.isNaN() }?.coerceIn(lo, hi) else null
+            return TopBarStyle(
+                col("bg"), col("tab"), col("text"), col("textDim"), col("icon"),
+                tabBorder = col("tabBorder"),
+                tabBorderWidth = num("tabBorderWidth", 0.5f, 8f),
+                tabBorderStyle = o.optString("tabBorderStyle").takeIf { s -> KeyStyle.BORDER_STYLES.any { it.first == s } },
+                tabBorderInset = num("tabBorderInset", 0f, 12f),
+            ).takeIf { !it.isEmpty }
         }
     }
 }

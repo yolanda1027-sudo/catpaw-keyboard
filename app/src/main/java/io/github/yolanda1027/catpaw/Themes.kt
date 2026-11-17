@@ -260,12 +260,20 @@ abstract class KbTheme(protected val dp: Float) {
      */
     fun drawStyledBorder(c: Canvas, r: RectF, st: KeyStyle) {
         val color = st.border ?: return
-        if (Color.alpha(color) == 0) return
         val box = styledBox(r)
-        val outerRad = styledRadius(box, st)
-        val w = (st.borderWidth ?: KeyStyle.DEFAULT_BORDER_WIDTH) * dp
-        val style = st.borderStyle ?: "solid"
-        val inset = if (style == "stitch") (st.borderInset ?: KeyStyle.DEFAULT_BORDER_INSET) * dp else 0f
+        drawBorderBox(c, box, styledRadius(box, st), color, st.borderWidth, st.borderStyle, st.borderInset)
+    }
+
+    /**
+     * 在 box 裡面畫一圈外框（按鍵、快捷列按鈕、上方列選中那塊共用）。
+     * @param outerRad box 本身的圓角
+     * @param width、inset 單位 dp；null ＝ 預設
+     */
+    fun drawBorderBox(c: Canvas, box: RectF, outerRad: Float, color: Int, width: Float?, style0: String?, inset0: Float?) {
+        if (Color.alpha(color) == 0) return
+        val w = (width ?: KeyStyle.DEFAULT_BORDER_WIDTH) * dp
+        val style = style0 ?: "solid"
+        val inset = if (style == "stitch") (inset0 ?: KeyStyle.DEFAULT_BORDER_INSET) * dp else 0f
         // 線的中心離邊緣：至少半條線粗（不然會跑到按鍵外面）
         val d = max(w / 2, inset)
         val line = RectF(box).apply { inset(d, d) }

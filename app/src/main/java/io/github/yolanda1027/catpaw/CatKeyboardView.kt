@@ -549,6 +549,7 @@ class CatKeyboardView(
         return TopBarStyle(
             bg = topStyle?.bg ?: solid(theme.topBar),
             tab = topStyle?.tab ?: solid(theme.tabSelected),
+            tabBorder = topStyle?.tabBorder ?: theme.text,
             text = topText, textDim = topDim, icon = topIcon,
         )
     }
@@ -569,13 +570,25 @@ class CatKeyboardView(
     }
 
     /** 選中的那一塊（「中」、第一個候選字、目前的分類） */
-    private fun drawTab(c: Canvas, r: RectF) {
-        val col = topStyle?.tab
-        if (col == null) { theme.drawTabHighlight(c, r); return }
-        if (android.graphics.Color.alpha(col) == 0) return
-        val box = RectF(r.left + 8 * dp, r.top + 7 * dp, r.right - 8 * dp, r.bottom - 7 * dp)
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = col }
-        c.drawRoundRect(box, box.height() / 2, box.height() / 2, p)
+    /**
+     * @param padX、padY 往內縮多少。候選字的格子是照字寬算的、字也比較大，
+     *   縮少一點，外框（尤其縫線）才不會壓到字。
+     */
+    private fun drawTab(c: Canvas, r: RectF, padX: Float = 8 * dp, padY: Float = 7 * dp) {
+        val ts = topStyle
+        val border = ts?.tabBorder
+        val col = ts?.tab
+        // 沒有自訂：照主題原本的
+        if (col == null && border == null) { theme.drawTabHighlight(c, r); return }
+        val box = RectF(r.left + padX, r.top + padY, r.right - padX, r.bottom - padY)
+        val rad = box.height() / 2
+        // 只自訂了外框：底色用主題原本的那個顏色（透明的主題就不填）
+        val fillCol = col ?: theme.tabSelected
+        if (android.graphics.Color.alpha(fillCol) > 0) {
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = fillCol }
+            c.drawRoundRect(box, rad, rad, p)
+        }
+        if (border != null) theme.drawBorderBox(c, box, rad, border, ts.tabBorderWidth, ts.tabBorderStyle, ts.tabBorderInset)
     }
 
     /** 這顆鍵的底圖鋪的範圍、圓角半徑（裁切畫面用） */
@@ -1024,7 +1037,7 @@ class CatKeyboardView(
         items.forEachIndexed { i, r0 ->
             val r = RectF(r0.left - candScroll, r0.top, r0.right - candScroll, r0.bottom)
             if (r.right < 0 || r.left > w) return@forEachIndexed
-            if (i == 0) drawTab(c, r) // 第一個（最推薦的）有底色
+            if (i == 0) drawTab(c, r, padX = 2 * dp, padY = 3 * dp) // 第一個（最推薦的）有底色
             theme.drawText(c, candidates[i], r.centerX(), r.centerY(), stripTextSize, topText)
         }
         c.restore()

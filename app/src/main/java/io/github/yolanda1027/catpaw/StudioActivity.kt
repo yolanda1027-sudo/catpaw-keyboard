@@ -990,10 +990,15 @@ class StudioActivity : Activity() {
     // ---------- 上方列（中／En、選字列）的顏色 ----------
 
     private fun setTopBar(change: (TopBarStyle) -> TopBarStyle?) {
+        setTopBarLive(change)
+        refresh()
+    }
+
+    /** 拖滑桿時：只更新畫面，不重建面板（放開時滑桿會自己記一步） */
+    private fun setTopBarLive(change: (TopBarStyle) -> TopBarStyle?) {
         styles = styles.withTopBar(change(styles.topBar ?: TopBarStyle()))
         KeyStyles.save(prefs, styles)
         kv.setKeyStylesLive(styles)
-        refresh()
     }
 
     private fun topBarPanel() {
@@ -1005,6 +1010,16 @@ class StudioActivity : Activity() {
         colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setTopBar { it.copy(bg = v) } }
         text("透明：看得到下面的鍵盤背景；有背景圖片的話，圖片會往上鋪滿整個鍵盤。", 12f, dim = true)
         colorRow("選中的底色（「中」底下那塊）", cur.tab, now.tab!!, allowTransparent = true) { v -> setTopBar { it.copy(tab = v) } }
+        colorRow("選中那塊的外框", cur.tabBorder, now.tabBorder!!, allowTransparent = true) { v -> setTopBar { it.copy(tabBorder = v) } }
+        borderEditor(
+            style = cur.tabBorderStyle, width = cur.tabBorderWidth, inset = cur.tabBorderInset,
+            customized = cur.tabBorderStyle != null || cur.tabBorderWidth != null || cur.tabBorderInset != null,
+            hint = if (cur.tabBorder == null) "💡 先在上面選一個外框顏色，樣式和粗細才看得到。打字時第一個候選字、表情的分類也是這一塊。" else null,
+            onStyle = { s -> setTopBar { it.copy(tabBorderStyle = s) } },
+            onWidth = { w -> setTopBarLive { it.copy(tabBorderWidth = w) } },
+            onInset = { d -> setTopBarLive { it.copy(tabBorderInset = d) } },
+            onReset = { setTopBar { it.copy(tabBorderStyle = null, tabBorderWidth = null, tabBorderInset = null) } },
+        )
         colorRow("文字（選中的「中」、候選字）", cur.text, now.text!!) { v -> setTopBar { it.copy(text = v) } }
         colorRow("文字（沒選中的「En」）", cur.textDim, now.textDim!!) { v -> setTopBar { it.copy(textDim = v) } }
         colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
