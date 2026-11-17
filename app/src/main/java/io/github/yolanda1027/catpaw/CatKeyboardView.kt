@@ -331,7 +331,7 @@ class CatKeyboardView(
     override fun onDraw(c: Canvas) {
         val w = width.toFloat()
         theme.fonts = fontSet
-        if (reading.isNotEmpty()) theme.drawReading(c, reading, floatH)
+        if (reading.isNotEmpty()) drawReadingBox(c)
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.drawBackground(c, w, kbH, topH)
@@ -603,6 +603,27 @@ class CatKeyboardView(
             tabBorder = topStyle?.tabBorder ?: theme.text,
             text = topText, textDim = topDim, icon = topIcon,
         )
+    }
+
+    /**
+     * 注音小框框：主題工作室改了上方列的話跟著上方列。
+     * 它浮在聊天 App 上面，不能透明：上方列透明就用「選中那塊」的顏色，再沒有才用主題的。
+     * 字看不清楚（例如白字配白底）就自動換成黑或白。
+     */
+    private fun drawReadingBox(c: Canvas) {
+        val ts = topStyle
+        if (ts == null) { theme.drawReading(c, reading, floatH); return }
+        fun solid(x: Int?) = x?.takeIf { android.graphics.Color.alpha(it) > 0 }
+        val bg = (solid(ts.bg) ?: solid(ts.tab) ?: theme.readingBg) or (0xFF shl 24)
+        val text = ts.text?.takeIf { readable(it, bg) } ?: theme.readingText.takeIf { ts.text == null && readable(it, bg) } ?: CustomTheme.contrastOn(bg)
+        val border = ts.tabBorder ?: ts.textDim ?: theme.readingBorder
+        theme.drawReading(c, reading, floatH, bg, text, border)
+    }
+
+    /** 字和底色的亮度差夠不夠（簡單算法：差 70 以上就看得清楚；白字配粉紅還算看得到） */
+    private fun readable(fg: Int, bg: Int): Boolean {
+        fun lum(c: Int) = 0.299 * android.graphics.Color.red(c) + 0.587 * android.graphics.Color.green(c) + 0.114 * android.graphics.Color.blue(c)
+        return kotlin.math.abs(lum(fg) - lum(bg)) >= 70
     }
 
     /** 自訂了上方列的底色：蓋掉主題原本的上方列 */

@@ -132,4 +132,42 @@ class PopupFollowStyleTest {
         assertTrue("泡泡是那張圓形羊皮紙", near(b.getPixel((v.keyRectOf(bo)!!.centerX()).toInt(), y), Color.parseColor("#F3E3C3")))
         assertTrue(x > 0)
     }
+
+    /** 注音小框框裡（框的左邊、字的下面一點）的顏色，和框裡最亮、最暗的點 */
+    private fun readingBox(p: Prefs, name: String): Triple<Int, Int, Int> {
+        val v = kv(p)
+        v.reading = "ㄋㄧˇ"
+        val b = draw(v)
+        save(b, name)
+        val y0 = (v.floatH * 0.15f).toInt()
+        val y1 = (v.floatH * 0.85f).toInt()
+        var light = 0
+        var dark = 255 * 3
+        for (y in y0..y1) for (x in 6 until 140) {
+            val c = b.getPixel(x, y)
+            val l = Color.red(c) + Color.green(c) + Color.blue(c)
+            if (l > light) light = l
+            if (l < dark) dark = l
+        }
+        return Triple(b.getPixel(4, (v.floatH * 0.5f).toInt()), light, dark)
+    }
+
+    @Test fun readingBoxFollowsTopBar() {
+        val p = Prefs(ctx)
+        p.theme = "macaron_butter"
+        // 上方列咖啡底白字 → 小框框也是
+        KeyStyles.save(p, KeyStyles(topBar = TopBarStyle(bg = brown, text = Color.WHITE)))
+        val (bg, light, _) = readingBox(p, "popup-reading-brown")
+        assertTrue(near(bg, brown, 10))
+        assertTrue("有白字", light > 700)
+        // 上方列透明：用選中那塊的顏色（粉紅）
+        KeyStyles.save(p, KeyStyles(topBar = TopBarStyle(bg = Color.TRANSPARENT, tab = pink, text = Color.WHITE)))
+        val (bg2, _, _) = readingBox(p, "popup-reading-clear")
+        assertTrue(near(bg2, pink, 10))
+        // 上方列透明、只改白字：主題原本的小框框是白的 → 字自動變深，才看得到
+        KeyStyles.save(p, KeyStyles(topBar = TopBarStyle(bg = Color.TRANSPARENT, text = Color.WHITE)))
+        val (bg3, _, dark3) = readingBox(p, "popup-reading-contrast")
+        assertTrue(Color.red(bg3) > 200)
+        assertTrue("字是深色的", dark3 < 300)
+    }
 }

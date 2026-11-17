@@ -67,18 +67,19 @@ abstract class KbTheme(protected val dp: Float) {
     open val readingBorder = Color.parseColor("#DADCE0")
 
     /** 在鍵盤左上方畫出正在打的注音，h = 透明區域的高度 */
-    fun drawReading(c: Canvas, s: String, h: Float) {
+    /** 正在打的注音小框框；顏色沒給就照主題的（主題工作室改了上方列時會給） */
+    fun drawReading(c: Canvas, s: String, h: Float, bg: Int = readingBg, textColor: Int = readingText, border: Int = readingBorder) {
         val size = h * 0.62f
         val tw = measure(s, size)
         val r = RectF(0f, 0f, tw + 20 * dp, h)
-        fill.color = readingBg
+        fill.color = bg
         fill.shader = null
         c.drawRoundRect(RectF(r.left - 8 * dp, r.top, r.right, r.bottom + 8 * dp), 6 * dp, 6 * dp, fill)
-        stroke.color = readingBorder
+        stroke.color = border
         stroke.strokeWidth = 1 * dp
         stroke.pathEffect = null
         c.drawRoundRect(RectF(r.left - 8 * dp, r.top + 0.5f * dp, r.right - 0.5f * dp, r.bottom + 8 * dp), 6 * dp, 6 * dp, stroke)
-        drawTextLeft(c, s, 10 * dp, h / 2 + 1 * dp, size, readingText)
+        drawTextLeft(c, s, 10 * dp, h / 2 + 1 * dp, size, textColor)
     }
 
     /** 剪貼簿的一筆：圓角底框＋靠左的一行字，太長就用「…」截掉 */
