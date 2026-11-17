@@ -175,10 +175,18 @@ data class QuickBarStyle(
     val text: Int? = null,
     val border: Int? = null,
     val radius: Float? = null,
+    /** 外框粗細、樣式、縫線離邊距離（跟按鍵的外框同一套） */
+    val borderWidth: Float? = null,
+    val borderStyle: String? = null,
+    val borderInset: Float? = null,
 ) {
-    val isEmpty get() = strip == null && bg == null && text == null && border == null && radius == null
+    val isEmpty get() = strip == null && bg == null && text == null && border == null && radius == null &&
+        borderWidth == null && borderStyle == null && borderInset == null
     /** 按鈕換成自訂的形狀（改了底色、外框或圓角） */
-    val isShaped get() = bg != null || border != null || radius != null
+    val isShaped get() = bg != null || border != null || radius != null || borderWidth != null || borderStyle != null || borderInset != null
+
+    /** 畫按鈕用的樣式（按鍵的畫法共用） */
+    fun asKeyStyle() = KeyStyle(radius = radius, borderWidth = borderWidth, borderStyle = borderStyle, borderInset = borderInset)
 
     fun toJson(): JSONObject = JSONObject().apply {
         fun hex(c: Int) = String.format("#%08X", c)
@@ -187,6 +195,9 @@ data class QuickBarStyle(
         text?.let { put("text", hex(it)) }
         border?.let { put("border", hex(it)) }
         radius?.let { put("radius", it.toDouble()) }
+        borderWidth?.let { put("borderWidth", it.toDouble()) }
+        borderStyle?.let { put("borderStyle", it) }
+        borderInset?.let { put("borderInset", it.toDouble()) }
     }
 
     companion object {
@@ -196,7 +207,13 @@ data class QuickBarStyle(
                 try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null }
             }
             val r = if (o.has("radius")) o.optDouble("radius").toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f) else null
-            return QuickBarStyle(col("strip"), col("bg"), col("text"), col("border"), r).takeIf { !it.isEmpty }
+            fun num(k: String, lo: Float, hi: Float) = if (o.has(k)) o.optDouble(k).toFloat().takeIf { !it.isNaN() }?.coerceIn(lo, hi) else null
+            return QuickBarStyle(
+                col("strip"), col("bg"), col("text"), col("border"), r,
+                borderWidth = num("borderWidth", 0.5f, 8f),
+                borderStyle = o.optString("borderStyle").takeIf { s -> KeyStyle.BORDER_STYLES.any { it.first == s } },
+                borderInset = num("borderInset", 0f, 12f),
+            ).takeIf { !it.isEmpty }
         }
     }
 }

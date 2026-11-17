@@ -1127,7 +1127,7 @@ class CatKeyboardView(
             // 按鈕底：改了形狀就自己畫，不然照主題原本的功能鍵
             var body: Int? = null
             if (qs.isShaped) {
-                val st = KeyStyle(radius = qs.radius)
+                val st = qs.asKeyStyle()
                 body = qs.bg ?: native.bg.takeIf { native.hasBody }
                 body?.takeIf { android.graphics.Color.alpha(it) > 0 }?.let { theme.drawStyledBody(c, r, st.copy(bg = it), pressed) }
                 (qs.border ?: native.border.takeIf { native.hasBorder })?.takeIf { android.graphics.Color.alpha(it) > 0 }
@@ -1142,6 +1142,9 @@ class CatKeyboardView(
 
     /** 快捷列按鈕在主題原本的樣子（量出來的顏色） */
     private fun quickNative(): KeyColors? = if (quickItems.isEmpty()) null else nativeColors(KeyRect(Key("@quick", Act.TEXT, style = Style.FUNC), quickRect(0)))
+
+    /** 主題原本的快捷列按鈕有沒有外框 */
+    fun quickBarHasBorder(): Boolean? = quickNative()?.hasBorder
 
     /** 快捷列現在實際的顏色（主題工作室顯示用） */
     fun quickBarColors(): QuickBarStyle {

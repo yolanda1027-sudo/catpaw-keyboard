@@ -5,9 +5,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.TextView
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -112,5 +114,54 @@ class QuickBarStyleTest {
         StudioActivity::class.java.getDeclaredMethod("undo").apply { isAccessible = true }.invoke(a)
         ShadowLooper.idleMainLooper()
         assertNull(KeyStyles.load(Prefs(ctx)).quick)
+    }
+
+    @Test fun stitchBorderOnQuickBar() {
+        val st = style.copy(bg = Color.parseColor("#FF8FB1"), border = Color.parseColor("#FFF6E8"), radius = 0.4f,
+            borderStyle = "stitch", borderWidth = 2f, borderInset = 4f)
+        assertEquals(st, QuickBarStyle.fromJson(JSONObject(st.toJson().toString())))
+        assertNull(QuickBarStyle.fromJson(JSONObject().put("borderStyle", "zigzag")))
+
+        val p = Prefs(ctx)
+        p.theme = "macaron_butter"
+        p.quickBar = true
+        KeyStyles.save(p, KeyStyles(quick = st))
+        val kv = CatKeyboardView(ctx, p, Haptics(ctx))
+        kv.quickItems = p.quickList()
+        kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val b = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)
+        kv.draw(Canvas(b))
+        save(b, "quickbar-stitch")
+        // 第一顆按鈕：上緣是底色，往內 4dp 才有縫線（在按鈕上緣中間那一段找）
+        val dp = 2.625f
+        val n = p.quickList().size
+        val w = 1080f / n
+        val top = kv.floatH + 40 * dp + 3 * dp // 上方列下面、按鈕框開始
+        val boxTop = top + 4 * dp
+        fun hasLine(y: Float): Boolean {
+            for (x in (w * 0.35f).toInt()..(w * 0.65f).toInt()) {
+                val c = b.getPixel(x, y.toInt())
+                if (Color.red(c) > 235 && Color.green(c) > 220 && Color.blue(c) > 205) return true // 米白縫線
+            }
+            return false
+        }
+        assertFalse(hasLine(boxTop + 1))
+        assertTrue(hasLine(boxTop + 4 * dp))
+
+        // 工作室：快捷列頁有外框樣式，選縫線多一個離邊距離
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val skv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        KeyStyles.save(Prefs(ctx), KeyStyles.EMPTY)
+        StudioActivity::class.java.getDeclaredField("styles").apply { isAccessible = true }.set(a, KeyStyles.EMPTY)
+        skv.onQuickBarPicked!!.invoke()
+        ShadowLooper.idleMainLooper()
+        val root = a.window.decorView
+        assertNotNull(find(root) { it is TextView && it.text == "外框樣式" })
+        assertNull(find(root) { it is TextView && it.text.startsWith("縫線離邊距離") })
+        (find(root) { it is Button && it.text.toString().endsWith("縫線") } as Button).performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals("stitch", KeyStyles.load(Prefs(ctx)).quick!!.borderStyle)
+        assertNotNull(find(root) { it is TextView && it.text.startsWith("縫線離邊距離") })
     }
 }

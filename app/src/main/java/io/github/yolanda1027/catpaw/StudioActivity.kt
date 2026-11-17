@@ -1015,27 +1015,34 @@ class StudioActivity : Activity() {
     // ---------- 按鍵外框：樣式、粗細、縫線離邊距離 ----------
 
     private fun borderControls(cur: KeyStyle, eff: KeyStyle, now: CatKeyboardView.KeyColors?) {
-        val style = eff.borderStyle ?: "solid"
+        val noBorder = eff.border == null && now?.hasBorder != true
+        borderEditor(
+            style = eff.borderStyle, width = eff.borderWidth, inset = eff.borderInset,
+            customized = cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null,
+            hint = if (noBorder) "💡 這顆鍵現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。" else null,
+            onStyle = { s -> update({ it.copy(borderStyle = s) }) },
+            onWidth = { w -> update({ it.copy(borderWidth = w) }, rebuild = false) },
+            onInset = { d -> update({ it.copy(borderInset = d) }, rebuild = false) },
+            onReset = { update({ it.copy(borderStyle = null, borderWidth = null, borderInset = null) }) },
+        )
+    }
+
+    /** 外框樣式、粗細、縫線離邊距離（按鍵和快捷列共用） */
+    private fun borderEditor(
+        style: String?, width: Float?, inset: Float?, customized: Boolean, hint: String?,
+        onStyle: (String) -> Unit, onWidth: (Float) -> Unit, onInset: (Float) -> Unit, onReset: () -> Unit,
+    ) {
+        val st = style ?: "solid"
         text("外框樣式", 15f).setPadding(0, px(8f), 0, 0)
         val opts = KeyStyle.BORDER_STYLES
-        chipRow(opts.map { it.second }, opts.indexOfFirst { it.first == style }.coerceAtLeast(0)) { i ->
-            update({ it.copy(borderStyle = opts[i].first) })
+        chipRow(opts.map { it.second }, opts.indexOfFirst { it.first == st }.coerceAtLeast(0)) { i -> onStyle(opts[i].first) }
+        if (hint != null) text(hint, 12f, dim = true)
+        val half = { v: Int -> "%.1f".format(v / 2f).removeSuffix(".0") }
+        slider("外框粗細", ((width ?: KeyStyle.DEFAULT_BORDER_WIDTH) * 2).toInt(), 1, 16, half) { v -> onWidth(v / 2f) }
+        if (st == "stitch") {
+            slider("縫線離邊距離", ((inset ?: KeyStyle.DEFAULT_BORDER_INSET) * 2).toInt(), 0, 24, half) { v -> onInset(v / 2f) }
         }
-        val noBorder = eff.border == null && now?.hasBorder != true
-        if (noBorder) text("💡 這顆鍵現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。", 12f, dim = true)
-        val w = eff.borderWidth ?: KeyStyle.DEFAULT_BORDER_WIDTH
-        slider("外框粗細", (w * 2).toInt(), 1, 16, { "%.1f".format(it / 2f).removeSuffix(".0") }) { v ->
-            update({ it.copy(borderWidth = v / 2f) }, rebuild = false)
-        }
-        if (style == "stitch") {
-            val ins = eff.borderInset ?: KeyStyle.DEFAULT_BORDER_INSET
-            slider("縫線離邊距離", (ins * 2).toInt(), 0, 24, { "%.1f".format(it / 2f).removeSuffix(".0") }) { v ->
-                update({ it.copy(borderInset = v / 2f) }, rebuild = false)
-            }
-        }
-        if (cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null) {
-            button("外框樣式改回預設（實線、粗細 2）") { update({ it.copy(borderStyle = null, borderWidth = null, borderInset = null) }) }
-        }
+        if (customized) button("外框樣式改回預設（實線、粗細 2）") { onReset() }
     }
 
     /** 在 block 裡加到面板的東西：on 的話整塊變灰、按不動 */
@@ -1076,6 +1083,15 @@ class StudioActivity : Activity() {
         colorRow("按鈕底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setQuick({ it.copy(bg = v) }) }
         colorRow("文字顏色", cur.text, now.text!!) { v -> setQuick({ it.copy(text = v) }) }
         colorRow("外框顏色", cur.border, now.border!!, allowTransparent = true) { v -> setQuick({ it.copy(border = v) }) }
+        borderEditor(
+            style = cur.borderStyle, width = cur.borderWidth, inset = cur.borderInset,
+            customized = cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null,
+            hint = if (cur.border == null && kv.quickBarHasBorder() != true) "💡 快捷列按鈕現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。" else null,
+            onStyle = { s -> setQuick({ it.copy(borderStyle = s) }) },
+            onWidth = { w -> setQuick({ it.copy(borderWidth = w) }, rebuild = false) },
+            onInset = { d -> setQuick({ it.copy(borderInset = d) }, rebuild = false) },
+            onReset = { setQuick({ it.copy(borderStyle = null, borderWidth = null, borderInset = null) }) },
+        )
 
         val radius = ((cur.radius ?: 0.3f) * 100).toInt()
         val radiusLabel = text("按鈕圓角：$radius%", 15f)
