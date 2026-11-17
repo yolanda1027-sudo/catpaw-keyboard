@@ -143,12 +143,50 @@ data class TopBarStyle(
 }
 
 /**
+ * 快捷符號列的樣子。沒設定的（null）照主題原本的（按鈕跟功能鍵長得一樣、整列沒有底色）。
+ * @param strip 整列的底色（透明＝沒有）
+ * @param bg 按鈕底色（透明＝沒有按鈕底，只剩字）
+ * @param radius 按鈕圓角 0–1
+ */
+data class QuickBarStyle(
+    val strip: Int? = null,
+    val bg: Int? = null,
+    val text: Int? = null,
+    val border: Int? = null,
+    val radius: Float? = null,
+) {
+    val isEmpty get() = strip == null && bg == null && text == null && border == null && radius == null
+    /** 按鈕換成自訂的形狀（改了底色、外框或圓角） */
+    val isShaped get() = bg != null || border != null || radius != null
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        fun hex(c: Int) = String.format("#%08X", c)
+        strip?.let { put("strip", hex(it)) }
+        bg?.let { put("bg", hex(it)) }
+        text?.let { put("text", hex(it)) }
+        border?.let { put("border", hex(it)) }
+        radius?.let { put("radius", it.toDouble()) }
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject?): QuickBarStyle? {
+            if (o == null) return null
+            fun col(k: String): Int? = o.optString(k).takeIf { it.isNotEmpty() }?.let {
+                try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null }
+            }
+            val r = if (o.has("radius")) o.optDouble("radius").toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f) else null
+            return QuickBarStyle(col("strip"), col("bg"), col("text"), col("border"), r).takeIf { !it.isEmpty }
+        }
+    }
+}
+
+/**
  * 所有按鍵樣式。用「代號」對應：
  * - 單顆鍵：注音鍵 zy:ㄅ、其他字鍵 t:q、功能鍵 enter / backspace / space …
  * - 一整類：@zhuyin（所有注音鍵）、@char、@func、@space、@enter
  * 單顆的設定會蓋過整類的設定。
  */
-class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarStyle? = null) {
+class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarStyle? = null, val quick: QuickBarStyle? = null) {
 
     enum class Group(val id: String, val title: String) {
         ZHUYIN("@zhuyin", "所有注音鍵"),
@@ -172,18 +210,22 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
     fun with(id: String, style: KeyStyle?): KeyStyles {
         val m = LinkedHashMap(map)
         if (style == null || style.isEmpty) m.remove(id) else m[id] = style
-        return KeyStyles(m, topBar)
+        return KeyStyles(m, topBar, quick)
     }
 
-    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty })
+    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty }, quick)
+    fun withQuick(q: QuickBarStyle?): KeyStyles = KeyStyles(map, topBar, q?.takeIf { !it.isEmpty })
+    /** 只換按鍵的部分（上方列、快捷列的顏色留著） */
+    fun withMap(m: Map<String, KeyStyle>): KeyStyles = KeyStyles(m, topBar, quick)
 
     /** 一樣的設定（上一步用來比對有沒有改） */
-    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar
-    override fun hashCode() = map.hashCode() * 31 + (topBar?.hashCode() ?: 0)
+    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar && other.quick == quick
+    override fun hashCode() = (map.hashCode() * 31 + (topBar?.hashCode() ?: 0)) * 31 + (quick?.hashCode() ?: 0)
 
     fun toJson(): JSONObject = JSONObject().apply {
         for ((k, v) in map) put(k, v.toJson())
         topBar?.let { put(TOP_BAR, it.toJson()) }
+        quick?.let { put(QUICK, it.toJson()) }
     }
 
     /** 整個鍵盤的背景圖（不是按鍵；跟按鍵樣式存在一起，上一步、匯出、恢復預設都會一起處理） */
@@ -201,6 +243,8 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
         const val KEYBOARD = "@keyboard"
         /** 上方列顏色（存檔裡的代號） */
         const val TOP_BAR = "@topbar"
+        /** 快捷符號列的顏色（存檔裡的代號） */
+        const val QUICK = "@quick"
 
         fun idOf(key: Key): String = when (key.act) {
             Act.ZHUYIN -> "zy:" + key.label
@@ -233,11 +277,11 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
             if (o == null) return EMPTY
             val m = LinkedHashMap<String, KeyStyle>()
             for (k in o.keys()) {
-                if (k == TOP_BAR) continue
+                if (k == TOP_BAR || k == QUICK) continue
                 val s = o.optJSONObject(k)?.let { KeyStyle.fromJson(it) } ?: continue
                 if (!s.isEmpty) m[k] = s
             }
-            return KeyStyles(m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)))
+            return KeyStyles(m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)), QuickBarStyle.fromJson(o.optJSONObject(QUICK)))
         }
 
         fun load(prefs: Prefs): KeyStyles = try {

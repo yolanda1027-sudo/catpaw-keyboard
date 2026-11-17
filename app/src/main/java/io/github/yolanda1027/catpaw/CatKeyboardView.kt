@@ -758,6 +758,11 @@ class CatKeyboardView(
     var onDecalPicked: ((Decal) -> Unit)? = null
     /** 主題工作室：點了上方列 */
     var onTopBarPicked: (() -> Unit)? = null
+    /** 主題工作室：點了快捷符號列 */
+    var onQuickBarPicked: (() -> Unit)? = null
+    /** 主題工作室：快捷符號列畫上「正在編輯」的虛線框 */
+    var editQuickBar = false
+        set(v) { field = v; invalidate() }
     /** 主題工作室：上方列畫上「正在編輯」的虛線框 */
     var editTopBar = false
         set(v) { field = v; invalidate() }
@@ -789,6 +794,7 @@ class CatKeyboardView(
     private fun handleEditTouch(e: MotionEvent, pick: (Key) -> Unit) {
         decalHandles.onEmptyTap = { x, y ->
             if (y in 0f..topH && onTopBarPicked != null) onTopBarPicked?.invoke()
+            else if (quickH > 0f && y in topH..topH + quickH && onQuickBarPicked != null) onQuickBarPicked?.invoke()
             else keyAt(x, y)?.let { pick(it.key) }
         }
         decalHandles.onPick = { d -> if (d != null) onDecalPicked?.invoke(d) }
@@ -917,8 +923,8 @@ class CatKeyboardView(
     }
 
     private fun drawEditHighlight(c: Canvas) {
-        if (editTopBar) {
-            val r = RectF(0f, 0f, width.toFloat(), topH).apply { inset(2f * dp, 2f * dp) }
+        if (editTopBar || (editQuickBar && quickH > 0f)) {
+            val r = (if (editTopBar) RectF(0f, 0f, width.toFloat(), topH) else RectF(0f, topH, width.toFloat(), topH + quickH)).apply { inset(2f * dp, 2f * dp) }
             editPaint.color = android.graphics.Color.WHITE
             editPaint.pathEffect = null
             editPaint.strokeWidth = 4.5f * dp
@@ -1089,11 +1095,50 @@ class CatKeyboardView(
 
     private fun drawQuickBar(c: Canvas) {
         if (quickItems.isEmpty()) return
+        val qs = keyStyles.quick
+        // 整列的底色
+        qs?.strip?.takeIf { android.graphics.Color.alpha(it) > 0 }?.let {
+            c.drawRect(0f, topH, width.toFloat(), topH + quickH, android.graphics.Paint().apply { color = it })
+        }
+        val native = if (qs != null) quickNative() else null
         quickItems.forEachIndexed { i, item ->
             val r = quickRect(i)
             val k = Key(quickLabel(item), Act.TEXT, style = Style.FUNC)
-            theme.drawKey(c, r, k, k.label, i == quickPressed, 0, quickH * 1.6f)
+            val pressed = i == quickPressed
+            if (qs == null || native == null) {
+                theme.drawKey(c, r, k, k.label, pressed, 0, quickH * 1.6f)
+                return@forEachIndexed
+            }
+            // 按鈕底：改了形狀就自己畫，不然照主題原本的功能鍵
+            var body: Int? = null
+            if (qs.isShaped) {
+                val st = KeyStyle(radius = qs.radius)
+                body = qs.bg ?: native.bg.takeIf { native.hasBody }
+                body?.takeIf { android.graphics.Color.alpha(it) > 0 }?.let { theme.drawStyledBody(c, r, st.copy(bg = it), pressed) }
+                (qs.border ?: native.border.takeIf { native.hasBorder })?.takeIf { android.graphics.Color.alpha(it) > 0 }
+                    ?.let { theme.drawStyledBorder(c, r, st.copy(border = it)) }
+            } else {
+                theme.drawKey(c, r, k.copy(label = ""), "", pressed, 0, quickH * 1.6f)
+            }
+            val main = qs.text ?: native.text
+            theme.drawKeyContent(c, r, k, k.label, 0, quickH * 1.6f, main, main, body?.takeIf { android.graphics.Color.alpha(it) > 0 })
         }
+    }
+
+    /** 快捷列按鈕在主題原本的樣子（量出來的顏色） */
+    private fun quickNative(): KeyColors? = if (quickItems.isEmpty()) null else nativeColors(KeyRect(Key("@quick", Act.TEXT, style = Style.FUNC), quickRect(0)))
+
+    /** 快捷列現在實際的顏色（主題工作室顯示用） */
+    fun quickBarColors(): QuickBarStyle {
+        val qs = keyStyles.quick
+        val n = quickNative() ?: nativeColors(KeyRect(Key("@quick", Act.TEXT, style = Style.FUNC), RectF(0f, 0f, width / 8f, 40 * dp)))
+        return QuickBarStyle(
+            strip = qs?.strip ?: theme.bg,
+            bg = qs?.bg ?: n?.bg ?: theme.bg,
+            text = qs?.text ?: n?.text ?: theme.text,
+            border = qs?.border ?: n?.border ?: theme.textDim,
+            radius = qs?.radius,
+        )
     }
 
     // ---------- 符號頁左右滑：整頁跟著手指走 ----------

@@ -44,6 +44,8 @@ class StudioActivity : Activity() {
     private var bgSelected = false
     /** 正在改上方列（中／En 那一列）的顏色 */
     private var topSelected = false
+    /** 正在改快捷符號列的顏色 */
+    private var quickSelected = false
     /** 選到的圖案 */
     private var decalSel: String? = null
     /** 從相簿選圖片時，要貼到哪 */
@@ -84,6 +86,7 @@ class StudioActivity : Activity() {
                 selected = key
                 bgSelected = false
                 topSelected = false
+                quickSelected = false
                 decalSel = null
                 if (animMode == GLOBAL) animMode = null
                 refresh()
@@ -94,7 +97,17 @@ class StudioActivity : Activity() {
                 bgSelected = false
                 decalSel = null
                 animMode = null
+                quickSelected = false
                 topSelected = true
+                refresh()
+            }
+            onQuickBarPicked = {
+                selected = null
+                bgSelected = false
+                decalSel = null
+                animMode = null
+                topSelected = false
+                quickSelected = true
                 refresh()
             }
             onDecalAction = { a, d -> decalAction(a, d) }
@@ -198,6 +211,7 @@ class StudioActivity : Activity() {
         animMode = null
         bgSelected = false
         topSelected = false
+        quickSelected = false
         decalSel = null
         refresh()
     }
@@ -336,6 +350,9 @@ class StudioActivity : Activity() {
         commitHistory()
         panel.removeAllViews()
         kv.editTopBar = topSelected
+        kv.editQuickBar = quickSelected
+        // 快捷列在設定裡關著的話，改它的顏色時先顯示出來看
+        kv.quickItems = if (prefs.quickBar || quickSelected) prefs.quickList() else emptyList()
         // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
         val zoomKey = selected?.takeIf { !bgSelected && !groupScope && animMode != GLOBAL }
         zoomBox.visibility = if (zoomKey != null) View.VISIBLE else View.GONE
@@ -349,6 +366,7 @@ class StudioActivity : Activity() {
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
         if (topSelected) { topBarPanel(); return }
+        if (quickSelected) { quickBarPanel(); return }
         if (bgSelected) { bgPanel(); return }
         val key = selected
         if (key == null) {
@@ -357,6 +375,7 @@ class StudioActivity : Activity() {
             text("改好會直接套用到鍵盤上。想換整體主題、字體，到「貓爪鍵盤」設定的外觀頁。", 13f, dim = true)
             button("🖼️ 鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
             button("🔝 上方列（中／En、選字列）的顏色") { topSelected = true; refresh() }
+            button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             if (styles.keyEntries.isNotEmpty()) {
                 text("目前有 ${styles.keyEntries.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
@@ -447,6 +466,7 @@ class StudioActivity : Activity() {
     private fun selectDecal(d: Decal) {
         decalSel = d.id
         topSelected = false
+        quickSelected = false
         if (d.onBackground) {
             bgSelected = true
             selected = null
@@ -906,7 +926,8 @@ class StudioActivity : Activity() {
             val nStyles = styles.keyEntries.size
             val hasBgImage = styles.keyboardImage != null
             val hasTop = styles.topBar != null
-            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop) {
+            val hasQuick = styles.quick != null
+            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop && !hasQuick) {
                 android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
                 return@button
             }
@@ -915,6 +936,7 @@ class StudioActivity : Activity() {
                 if (nStyles > 0) add("・按鍵的單獨設定（$nStyles 組，包含底圖、單顆鍵的動畫）")
                 if (hasBgImage) add("・鍵盤背景圖片")
                 if (hasTop) add("・上方列（中／En）的顏色")
+                if (hasQuick) add("・快捷符號列的顏色")
             }
             val dialog = AlertDialog.Builder(this)
                 .setTitle("恢復主題預設？")
@@ -933,6 +955,7 @@ class StudioActivity : Activity() {
         decalSel = null
         bgSelected = false
         topSelected = false
+        quickSelected = false
         animMode = null
         groupScope = false
         styles = KeyStyles.EMPTY
@@ -979,6 +1002,47 @@ class StudioActivity : Activity() {
         colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
         if (styles.topBar != null) button("全部改回主題原本的顏色") { setTopBar { null } }
         button("← 回到選按鍵") { topSelected = false; refresh() }
+    }
+
+    // ---------- 快捷符號列的顏色 ----------
+
+    private fun setQuick(change: (QuickBarStyle) -> QuickBarStyle?, rebuild: Boolean = true) {
+        styles = styles.withQuick(change(styles.quick ?: QuickBarStyle()))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        if (rebuild) refresh()
+    }
+
+    private fun quickBarPanel() {
+        kv.editHighlight = null
+        text("正在編輯：快捷符號列", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        if (!prefs.quickBar) text("💡 快捷符號列在設定裡是關著的，這裡先顯示出來給你看。要用的話到「設定 → ⌨ 快捷符號列」打開。", 13f, dim = true)
+        val cur = styles.quick ?: QuickBarStyle()
+        val now = kv.quickBarColors()
+        colorRow("整列的底色", cur.strip, now.strip!!, allowTransparent = true) { v -> setQuick({ it.copy(strip = v) }) }
+        colorRow("按鈕底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setQuick({ it.copy(bg = v) }) }
+        colorRow("文字顏色", cur.text, now.text!!) { v -> setQuick({ it.copy(text = v) }) }
+        colorRow("外框顏色", cur.border, now.border!!, allowTransparent = true) { v -> setQuick({ it.copy(border = v) }) }
+
+        val radius = ((cur.radius ?: 0.3f) * 100).toInt()
+        val radiusLabel = text("按鈕圓角：$radius%", 15f)
+        radiusLabel.setPadding(0, px(14f), 0, 0)
+        panel.addView(SeekBar(this).apply {
+            max = 100
+            progress = radius
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    radiusLabel.text = "按鈕圓角：$p%"
+                    setQuick({ it.copy(radius = p / 100f) }, rebuild = false)
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) { commitHistory() }
+            })
+        })
+        text("改了按鈕底色、外框或圓角，按鈕會換成自訂的形狀。「整列的底色」透明＝跟原本一樣看得到鍵盤背景。", 12f, dim = true)
+        if (styles.quick != null) button("全部改回主題原本的樣子") { setQuick({ null }) }
+        button("← 回到選按鍵") { quickSelected = false; refresh() }
     }
 
     // ---------- 底圖（按鍵底圖、鍵盤背景圖） ----------
@@ -1271,9 +1335,9 @@ class StudioActivity : Activity() {
     private fun clearAllButton() {
         button("清除所有按鍵設定") {
             AlertDialog.Builder(this)
-                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？（鍵盤背景圖片、上方列的顏色會留著）")
+                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？（鍵盤背景圖片、上方列和快捷列的顏色會留著）")
                 .setPositiveButton("全部清除") { _, _ ->
-                    styles = KeyStyles(styles.map.filterKeys { it == KeyStyles.KEYBOARD }, styles.topBar)
+                    styles = styles.withMap(styles.map.filterKeys { it == KeyStyles.KEYBOARD })
                     KeyStyles.save(prefs, styles)
                     kv.reloadPrefs()
                     refresh()
