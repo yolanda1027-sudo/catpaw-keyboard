@@ -125,6 +125,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         when (key) {
             "chinese", "recent_symbols", "recent_kaomoji", "recent_emoji", "pinned_symbols", "pinned_emoji" -> Unit
             "simplified" -> refresh() // 簡繁切換：選字列馬上換
+            "my_stickers_ver" -> refresh() // 設定裡加了／刪了貼圖
             "quick_bar", "quick_items", "quick_config" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
@@ -205,7 +206,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.rows = when (page) {
             Page.MAIN -> if (chinese) Layouts.ZHUYIN else Layouts.ENGLISH
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
-            Page.EMOJI -> Emojis.rows(Emojis.page(emojiItems(), emojiPage))
+            Page.EMOJI -> if (emojiCat == MINE) MyStickers.rows(this, emojiPage) else Emojis.rows(Emojis.page(emojiItems(), emojiPage))
             Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
             Page.NUMPAD -> Layouts.NUMPAD
         }
@@ -215,8 +216,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.itemActions = { k -> itemActionsFor(k) }
         v.isPinned = { k -> recentKind()?.let { kind -> k.act == Act.TEXT && k.text in pinned(kind) } == true }
         // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
-        v.morePagesBefore = page == Page.EMOJI && emojiCat > 1
-        v.morePagesAfter = page == Page.EMOJI && emojiCat < Emojis.groups.size
+        v.morePagesBefore = page == Page.EMOJI && emojiCat > MINE
+        v.morePagesAfter = page == Page.EMOJI && emojiCat >= MINE && emojiCat < Emojis.groups.size + 1
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
             v.symbolTabs = kaoTabs()
             v.symbolTab = kaoTab + 1
@@ -228,9 +229,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolPageCount = symbolPageCount()
             v.symbolPage = symPage
         } else if (page == Page.EMOJI) {
-            v.symbolTabs = Emojis.tabs()
+            // 分類列：🕒 最近使用、🖼️ 我的貼圖、然後是各分類
+            v.symbolTabs = listOf<String?>(null, "🖼️") + Emojis.groups.map { it.first }
             v.symbolTab = emojiCat
-            v.symbolPageCount = Emojis.pageCount(emojiItems())
+            v.symbolPageCount = emojiPageCount()
             v.symbolPage = emojiPage
         } else if (page == Page.NUMPAD) {
             v.symbolTabs = listOf("數字")
@@ -481,11 +483,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Act.TO_EMOJI -> {
                 page = Page.EMOJI
                 // 有用過的就先開「最近使用」，沒有的話開第一個分類
-                emojiCat = if (recentEmoji().isEmpty()) 1 else 0
+                emojiCat = if (recentEmoji().isEmpty() && pinned(EMO).isEmpty()) MINE + 1 else 0
                 emojiPage = 0
                 refresh()
             }
             Act.TO_MAIN -> { page = Page.MAIN; refresh() }
+            Act.STICKER -> sendSticker(key.text)
+            Act.OPEN_STICKERS -> openStickerSettings()
             Act.GAP -> Unit
             Act.CLIP -> if (key.text.isNotEmpty()) {
                 commitText(key.text)
@@ -567,7 +571,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     // ---------- 表情符號 ----------
 
-    /** 表情符號的分類：0 = 最近使用，1 之後是 Emojis.groups 的順序 */
+    /** 表情符號的分類：0 = 最近使用，1 = 我的貼圖（MINE），2 之後是 Emojis.groups 的順序 */
     private var emojiCat = 1
     private var emojiPage = 0
 
@@ -579,7 +583,48 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     private fun emojiItems(): List<String> =
-        if (emojiCat == 0) recentShown(pinned(EMO), recentEmoji(), Emojis.PER_PAGE) else Emojis.groups.getOrNull(emojiCat - 1)?.second ?: emptyList()
+        when {
+            emojiCat == 0 -> recentShown(pinned(EMO), recentEmoji(), Emojis.PER_PAGE)
+            emojiCat == MINE -> emptyList()
+            else -> Emojis.groups.getOrNull(emojiCat - MINE - 1)?.second ?: emptyList()
+        }
+
+    private fun emojiPageCount() = if (emojiCat == MINE) MyStickers.pageCount(this) else Emojis.pageCount(emojiItems())
+
+    // ---------- 我的貼圖 ----------
+
+    /**
+     * 送出一張自己的貼圖：輸入框的 App 說它收圖片的話，直接把圖片放進去；
+     * 不收的話複製到剪貼簿，讓使用者長按輸入框「貼上」（很多聊天 App 貼得上圖片）。
+     */
+    private fun sendSticker(name: String) {
+        val f = MyStickers.file(this, name) ?: return
+        val mime = MyStickers.mime(f.name)
+        val uri = StickerProvider.uri(this, f.name)
+        val accepts = currentInputEditorInfo?.contentMimeTypes?.any { ClipDescription.compareMimeTypes(mime, it) } == true
+        if (accepts) {
+            try {
+                val info = android.view.inputmethod.InputContentInfo(uri, ClipDescription("貓爪貼圖", arrayOf(mime)), null)
+                val ok = currentInputConnection?.commitContent(info, android.view.inputmethod.InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null) == true
+                if (ok) return
+            } catch (_: Exception) {
+            }
+        }
+        try {
+            getSystemService(ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newUri(contentResolver, "貓爪貼圖", uri))
+            android.widget.Toast.makeText(this, "這裡不能直接放圖片，已經複製好了：長按輸入框選「貼上」", android.widget.Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(this, "這個地方沒辦法放圖片", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 開設定的「我的貼圖」頁（上傳、刪除） */
+    private fun openStickerSettings() {
+        val i = android.content.Intent(this, SettingsActivity::class.java)
+            .putExtra("page", "mystickers")
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        startActivity(i)
+    }
 
     // ---------- 剪貼簿 ----------
 
@@ -597,6 +642,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 desc.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true
             ) return
             if (clip.itemCount == 0) return
+            // 圖片（例如自己的貼圖複製到剪貼簿）不記：記下來只會是一串看不懂的網址
+            if (clip.getItemAt(0).uri != null && clip.getItemAt(0).text == null) return
             val text = clip.getItemAt(0).coerceToText(this)?.toString() ?: return
             clips.add(text)
             if (page == Page.CLIP) refresh()
@@ -694,11 +741,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
         if (page == Page.EMOJI) {
             // 一個分類滑到底就接到下一個分類（像 Google 的表情鍵盤）
-            val count = Emojis.pageCount(emojiItems())
+            val count = emojiPageCount()
             when {
                 emojiPage + direction in 0 until count -> emojiPage += direction
-                direction > 0 && emojiCat < Emojis.groups.size -> { emojiCat++; emojiPage = 0 }
-                direction < 0 && emojiCat > 1 -> { emojiCat--; emojiPage = Emojis.pageCount(emojiItems()) - 1 }
+                direction > 0 && emojiCat >= MINE && emojiCat < Emojis.groups.size + 1 -> { emojiCat++; emojiPage = 0 }
+                direction < 0 && emojiCat > MINE -> { emojiCat--; emojiPage = emojiPageCount() - 1 }
                 else -> return
             }
             haptics.perform(kv, prefs)
@@ -719,6 +766,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     companion object {
         private const val SYM = "sym"
+        /** 表情鍵盤裡「我的貼圖」那一格 */
+        private const val MINE = 1
         private const val EMO = "emo"
 
         /** 選字列最多放幾個（很常見的音可能有上千個字，太多會拖慢） */

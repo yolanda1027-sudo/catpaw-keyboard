@@ -1,7 +1,7 @@
 package io.github.yolanda1027.catpaw
 
 /** 按下去要做的事 */
-enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMOJI, TO_MAIN, GAP, CLIP, CLIP_CLEAR, TO_NUMPAD }
+enum class Act { TEXT, ZHUYIN, BACKSPACE, ENTER, SPACE, SHIFT, TO_SYMBOL, TO_EMOJI, TO_MAIN, GAP, CLIP, CLIP_CLEAR, TO_NUMPAD, STICKER, OPEN_STICKERS }
 
 /** 按鍵外觀類型：主題會依這個決定怎麼畫 */
 enum class Style { CHAR, FUNC, SPACE, ENTER, CLIP }

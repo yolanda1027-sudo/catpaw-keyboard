@@ -99,6 +99,27 @@ class SettingsActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_MY_STICKER) {
+            if (resultCode != RESULT_OK || data == null) return
+            val uris = ArrayList<android.net.Uri>()
+            data.clipData?.let { cd -> for (i in 0 until cd.itemCount) uris.add(cd.getItemAt(i).uri) }
+            if (uris.isEmpty()) data.data?.let { uris.add(it) }
+            var ok = 0
+            var bad = 0
+            for (u in uris) {
+                val name = try {
+                    contentResolver.openInputStream(u)?.use { input ->
+                        val bytes = input.readBytes()
+                        if (bytes.size > 40 * 1024 * 1024) null else MyStickers.add(this, bytes)
+                    }
+                } catch (_: Exception) { null }
+                if (name != null) ok++ else bad++
+            }
+            prefs.sp.edit().putLong("my_stickers_ver", System.currentTimeMillis()).apply() // 讓鍵盤重新整理
+            android.widget.Toast.makeText(this, "加了 $ok 張貼圖" + if (bad > 0) "（$bad 張讀不出來）" else "", android.widget.Toast.LENGTH_LONG).show()
+            showPage("mystickers")
+            return
+        }
         if (requestCode == REQ_EXPORT) {
             val uri = data?.data
             val content = pendingExport
@@ -197,6 +218,7 @@ class SettingsActivity : Activity() {
         private const val REQ_FONT = 200
         private const val REQ_EXPORT = 300
         private const val REQ_IMPORT = 301
+        private const val REQ_MY_STICKER = 400
     }
     private val dp get() = resources.displayMetrics.density
 
@@ -218,6 +240,7 @@ class SettingsActivity : Activity() {
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true),
         PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、清除學習紀錄", false),
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
+        PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
         // 從「外觀」的主題清單跳進來，不列在首頁
         PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true, parent = "look", listed = false),
@@ -235,7 +258,7 @@ class SettingsActivity : Activity() {
         prefs.migrate()
         haptics = Haptics(this)
         prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
-        showPage(savedInstanceState?.getString("page") ?: "home")
+        showPage(savedInstanceState?.getString("page") ?: intent?.getStringExtra("page") ?: "home")
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -290,6 +313,7 @@ class SettingsActivity : Activity() {
             "quick" -> pageQuick()
             "candidate" -> pageCandidate()
             "clip" -> pageClip()
+            "mystickers" -> pageMyStickers()
             "tips" -> pageTips()
             else -> pageHome()
         }
@@ -713,6 +737,59 @@ class SettingsActivity : Activity() {
             prefs.sp.edit().putLong("clear_learning", System.currentTimeMillis()).apply()
             android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 從鍵盤上按「上傳貼圖」：直接跳到那一頁
+        intent.getStringExtra("page")?.let { showPage(it) }
+    }
+
+    /** 我的貼圖：上傳、刪除。用的時候在表情鍵盤的 🖼️ 分類 */
+    private fun pageMyStickers() {
+        note("上傳的圖片會放在表情鍵盤的「🖼️」分類，點一下就送出去（GIF 動圖也可以）。")
+        note("聊天 App 支援的話，圖片會直接放進去；不支援的話會先幫你複製好，長按輸入框選「貼上」就行。")
+        button("＋ 上傳圖片（可以一次選好幾張）") {
+            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_MY_STICKER)
+        }
+        val names = MyStickers.list(this)
+        subTitle(if (names.isEmpty()) "還沒有貼圖" else "目前有 ${names.size} 張")
+        // 一排 4 張：縮圖＋刪除
+        var row: LinearLayout? = null
+        names.forEachIndexed { i, name ->
+            if (i % 4 == 0) row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }.also { root.addView(it) }
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding((4 * dp).toInt(), (6 * dp).toInt(), (4 * dp).toInt(), (6 * dp).toInt())
+            }
+            cell.addView(android.widget.ImageView(this).apply {
+                setImageBitmap(MyStickers.bitmap(this@SettingsActivity, name))
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 12 * dp; setColor(0x14888888) }
+                setPadding((6 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt())
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (76 * dp).toInt()))
+            cell.addView(Button(this).apply {
+                text = "刪除"
+                isAllCaps = false
+                textSize = 13f
+                setOnClickListener {
+                    MyStickers.delete(this@SettingsActivity, name)
+                    prefs.sp.edit().putLong("my_stickers_ver", System.currentTimeMillis()).apply()
+                    showPage("mystickers")
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            row!!.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        // 最後一排不滿 4 張：補空位，縮圖才不會被拉大
+        val rest = names.size % 4
+        if (rest != 0) repeat(4 - rest) { row!!.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
     }
 
     private fun pageClip() {

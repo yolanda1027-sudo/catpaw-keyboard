@@ -307,6 +307,7 @@ class CatKeyboardView(
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
                 drawKeyFull(c, kr)
+                if (kr.key.act == Act.STICKER) drawMySticker(c, kr)
                 if (isPinned?.invoke(kr.key) == true) {
                     // 釘選的：右上角一個小圖釘
                     theme.drawText(c, "📌", kr.rect.right - rowH * 0.16f, kr.rect.top + rowH * 0.17f, rowH * 0.2f, theme.text)
@@ -493,6 +494,20 @@ class CatKeyboardView(
         val k = KeyStyles.idOf(kr.key) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
         nativeCache[k]?.let { return it }
         return sample(kr, styled = false)?.also { nativeCache[k] = it }
+    }
+
+    // ---------- 我的貼圖（表情鍵盤的 🖼️） ----------
+
+    private val stickerPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+
+    private fun drawMySticker(c: Canvas, kr: KeyRect) {
+        val b = MyStickers.bitmap(context, kr.key.text) ?: return
+        val r = kr.rect
+        val pad = 6 * dp
+        val s = minOf((r.width() - pad * 2) / b.width, (r.height() - pad * 2) / b.height)
+        val w = b.width * s * (if (kr === pressed) 0.9f else 1f)
+        val h = b.height * s * (if (kr === pressed) 0.9f else 1f)
+        c.drawBitmap(b, null, RectF(r.centerX() - w / 2, r.centerY() - h / 2, r.centerX() + w / 2, r.centerY() + h / 2), stickerPaint)
     }
 
     // ---------- 貼上的圖案 ----------
@@ -1328,7 +1343,7 @@ class CatKeyboardView(
         pressed = kr
         pressedPointer = pointerId
         longFired = false
-        previewLabel = if (kr.key.style == Style.CHAR) labelFor(kr.key) else null
+        previewLabel = if (kr.key.style == Style.CHAR && kr.key.act != Act.STICKER) labelFor(kr.key) else null
         haptics.perform(this, prefs)
         playEffect(kr)
         when {

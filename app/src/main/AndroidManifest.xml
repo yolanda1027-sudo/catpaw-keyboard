@@ -21,6 +21,13 @@
             </intent-filter>
         </activity>
 
+        <!-- 我的貼圖：鍵盤送圖片給別的 App 時，用這個讓對方讀那一張（不公開，只給暫時權限） -->
+        <provider
+            android:name=".StickerProvider"
+            android:authorities="${applicationId}.stickers"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <!-- 主題工作室：桌面上獨立一個圖示，用起來像另一個 App -->
         <activity
             android:name=".StudioActivity"
