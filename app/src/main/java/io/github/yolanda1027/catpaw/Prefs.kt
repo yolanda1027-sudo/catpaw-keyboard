@@ -148,6 +148,11 @@ class Prefs(context: Context) {
         get() = sp.getString("cand_font", "system") ?: "system"
         set(v) = sp.edit().putString("cand_font", v).apply()
 
+    /** 表情鍵盤要不要顯示「🖼️ 我的貼圖」分類 */
+    var myStickers: Boolean
+        get() = sp.getBoolean("my_stickers", true)
+        set(v) = sp.edit().putBoolean("my_stickers", v).apply()
+
     /** 快捷符號列：開關、內容（用空白分開） */
     var quickBar: Boolean
         get() = sp.getBoolean("quick_bar", false)

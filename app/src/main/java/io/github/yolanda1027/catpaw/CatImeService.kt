@@ -125,7 +125,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         when (key) {
             "chinese", "recent_symbols", "recent_kaomoji", "recent_emoji", "pinned_symbols", "pinned_emoji" -> Unit
             "simplified" -> refresh() // 簡繁切換：選字列馬上換
-            "my_stickers_ver" -> refresh() // 設定裡加了／刪了貼圖
+            "my_stickers_ver", "my_stickers" -> refresh() // 設定裡加了／刪了貼圖、開關分類
             "quick_bar", "quick_items", "quick_config" -> refresh()
             "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
@@ -203,6 +203,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     private fun refresh() {
         val v = kv ?: return
+        // 正在看「我的貼圖」時把它關掉：跳到第一個表情分類
+        if (emojiCat == MINE && !prefs.myStickers) { emojiCat = MINE + 1; emojiPage = 0 }
         v.rows = when (page) {
             Page.MAIN -> if (chinese) Layouts.ZHUYIN else Layouts.ENGLISH
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
@@ -216,8 +218,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.itemActions = { k -> itemActionsFor(k) }
         v.isPinned = { k -> recentKind()?.let { kind -> k.act == Act.TEXT && k.text in pinned(kind) } == true }
         // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
-        v.morePagesBefore = page == Page.EMOJI && emojiCat > MINE
-        v.morePagesAfter = page == Page.EMOJI && emojiCat >= MINE && emojiCat < Emojis.groups.size + 1
+        v.morePagesBefore = page == Page.EMOJI && emojiCat > firstEmojiCat()
+        v.morePagesAfter = page == Page.EMOJI && emojiCat >= firstEmojiCat() && emojiCat < Emojis.groups.size + 1
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
             v.symbolTabs = kaoTabs()
             v.symbolTab = kaoTab + 1
@@ -229,9 +231,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolPageCount = symbolPageCount()
             v.symbolPage = symPage
         } else if (page == Page.EMOJI) {
-            // 分類列：🕒 最近使用、🖼️ 我的貼圖、然後是各分類
-            v.symbolTabs = listOf<String?>(null, "🖼️") + Emojis.groups.map { it.first }
-            v.symbolTab = emojiCat
+            // 分類列：🕒 最近使用、🖼️ 我的貼圖（可以關掉）、然後是各分類
+            val mine = if (prefs.myStickers) listOf<String?>("🖼️") else emptyList()
+            v.symbolTabs = listOf<String?>(null) + mine + Emojis.groups.map { it.first }
+            v.symbolTab = emojiTabOf(emojiCat)
             v.symbolPageCount = emojiPageCount()
             v.symbolPage = emojiPage
         } else if (page == Page.NUMPAD) {
@@ -573,6 +576,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     /** 表情符號的分類：0 = 最近使用，1 = 我的貼圖（MINE），2 之後是 Emojis.groups 的順序 */
     private var emojiCat = 1
+
+    /** 可以左右滑接過去的第一個分類（我的貼圖關掉的話就從第一個表情分類開始） */
+    private fun firstEmojiCat() = if (prefs.myStickers) MINE else MINE + 1
+    /** 分類列上的第幾格 ↔ emojiCat（我的貼圖關掉時，那一格不在分類列上） */
+    private fun emojiTabOf(cat: Int) = if (prefs.myStickers || cat < MINE) cat else cat - 1
+    private fun emojiCatOf(tab: Int) = if (prefs.myStickers || tab < MINE) tab else tab + 1
     private var emojiPage = 0
 
     private fun recentEmoji(): List<String> = prefs.recentEmoji.split('\u0001').filter { it.isNotEmpty() }
@@ -717,7 +726,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onSymbolTab(index: Int) {
         if (page == Page.CLIP || page == Page.NUMPAD) return
         if (page == Page.EMOJI) {
-            emojiCat = index
+            emojiCat = emojiCatOf(index)
             emojiPage = 0
             refresh()
             return
@@ -744,8 +753,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             val count = emojiPageCount()
             when {
                 emojiPage + direction in 0 until count -> emojiPage += direction
-                direction > 0 && emojiCat >= MINE && emojiCat < Emojis.groups.size + 1 -> { emojiCat++; emojiPage = 0 }
-                direction < 0 && emojiCat > MINE -> { emojiCat--; emojiPage = emojiPageCount() - 1 }
+                direction > 0 && emojiCat >= firstEmojiCat() && emojiCat < Emojis.groups.size + 1 -> { emojiCat++; emojiPage = 0 }
+                direction < 0 && emojiCat > firstEmojiCat() -> { emojiCat--; emojiPage = emojiPageCount() - 1 }
                 else -> return
             }
             haptics.perform(kv, prefs)

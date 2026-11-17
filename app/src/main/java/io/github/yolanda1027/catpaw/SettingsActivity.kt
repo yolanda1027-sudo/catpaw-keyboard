@@ -748,7 +748,13 @@ class SettingsActivity : Activity() {
 
     /** 我的貼圖：上傳、刪除。用的時候在表情鍵盤的 🖼️ 分類 */
     private fun pageMyStickers() {
-        note("上傳的圖片會放在表情鍵盤的「🖼️」分類，點一下就送出去（GIF 動圖也可以）。")
+        root.addView(Switch(this).apply {
+            text = "在表情鍵盤顯示「🖼️ 我的貼圖」分類"
+            isChecked = prefs.myStickers
+            setOnCheckedChangeListener { _, b -> prefs.myStickers = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("上傳的圖片會放在表情鍵盤的「🖼️」分類，點一下就送出去（GIF 動圖也可以）。關掉的話分類列就不會有它，上傳過的圖片會留著，之後再打開就回來了。")
         note("聊天 App 支援的話，圖片會直接放進去；不支援的話會先幫你複製好，長按輸入框選「貼上」就行。")
         button("＋ 上傳圖片（可以一次選好幾張）") {
             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
