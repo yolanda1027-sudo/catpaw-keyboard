@@ -543,6 +543,7 @@ class StudioActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (Eyedropper.onResult(this, requestCode, resultCode, data)) return
         if (requestCode == REQ_EFFECT_IMAGE) {
             val uri = data?.data
             if (resultCode != RESULT_OK || uri == null) return

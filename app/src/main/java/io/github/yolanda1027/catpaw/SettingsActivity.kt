@@ -99,6 +99,7 @@ class SettingsActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (Eyedropper.onResult(this, requestCode, resultCode, data)) return
         if (requestCode == REQ_MY_STICKER) {
             if (resultCode != RESULT_OK || data == null) return
             val uris = ArrayList<android.net.Uri>()

@@ -47,6 +47,19 @@ object ColorDialog {
         row.addView(hex, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         box.addView(row)
 
+        // 💧 汲色：從畫面 ｜ 從圖片
+        val dropRow = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, (6 * dp).toInt(), 0, 0)
+        }
+        val fromScreen = android.widget.Button(a).apply { text = "💧 從畫面汲色"; isAllCaps = false }
+        val fromImage = android.widget.Button(a).apply { text = "🖼️ 從圖片汲色"; isAllCaps = false }
+        // 兩顆都自己設好邊距（同一個高度、中間留空）
+        val m = (3 * dp).toInt()
+        dropRow.addView(fromScreen, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, m, m, m) })
+        dropRow.addView(fromImage, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(m, m, 0, m) })
+        box.addView(dropRow)
+
         var syncing = false
         fun showNew(c: Int) = (newChip.background as android.graphics.drawable.GradientDrawable).setColor(c)
         picker.onColorChanged = { c ->
@@ -54,6 +67,10 @@ object ColorDialog {
             syncing = true
             hex.setText(String.format("#%06X", 0xFFFFFF and c))
             syncing = false
+        }
+        fun setFromDropper(c: Int) {
+            picker.setColor(c)
+            picker.onColorChanged?.invoke(c)
         }
         // 直接輸入色碼也可以
         hex.addTextChangedListener(object : android.text.TextWatcher {
@@ -68,11 +85,35 @@ object ColorDialog {
             }
         })
 
-        android.app.AlertDialog.Builder(a)
+        // 字放大的手機上視窗可能比螢幕高，包一層可以捲
+        val scroll = android.widget.ScrollView(a).apply { addView(box) }
+        val dlg = android.app.AlertDialog.Builder(a)
             .setTitle(label)
-            .setView(box)
+            .setView(scroll)
             .setPositiveButton("確定") { _, _ -> onPick(picker.color) }
             .setNegativeButton("取消", null)
             .show()
+
+        /** 汲色畫面關掉後回到選色視窗 */
+        fun dropper(bmp: android.graphics.Bitmap?, hint: String) {
+            if (bmp == null) {
+                android.widget.Toast.makeText(a, "讀不到圖片 QAQ", android.widget.Toast.LENGTH_SHORT).show()
+                dlg.show()
+                return
+            }
+            Eyedropper.show(a, bmp, hint) { c ->
+                if (c != null) setFromDropper(c)
+                dlg.show()
+                bmp.recycle() // 用完就丟，不存起來
+            }
+        }
+        fromScreen.setOnClickListener {
+            dlg.hide()
+            Eyedropper.captureScreen(a) { dropper(it, "手指拖到想要的顏色，再按「用這個顏色」") }
+        }
+        fromImage.setOnClickListener {
+            dlg.hide()
+            Eyedropper.pickImage(a) { dropper(it, "手指拖到想要的顏色（這張圖不會被存起來）") }
+        }
     }
 }
