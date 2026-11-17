@@ -62,6 +62,9 @@ data class KeyStyle(
     val isEmpty get() = bg == null && text == null && border == null && radius == null && hideLabel == null && effect == null &&
         labels.isNullOrEmpty() && order == null && bgImage == null && borderWidth == null && borderStyle == null && borderInset == null
 
+    /** 有改到「長相」（形狀或文字顏色）：預覽泡泡、長按選單也跟著這顆鍵的樣子 */
+    val customizedLook get() = isShaped || text != null
+
     /** 改了底色、圓角、外框或底圖：這顆鍵換成自訂的形狀 */
     val isShaped get() = bg != null || radius != null || border != null || bgImage != null ||
         borderWidth != null || borderStyle != null || borderInset != null

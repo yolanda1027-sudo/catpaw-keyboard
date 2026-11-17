@@ -146,6 +146,7 @@ class CatKeyboardView(
         if (opts != null) {
             // 跳出長按選單，手指左右滑來選，放開就打出來
             popup = opts
+            popupKr = kr
             popupSel = opts.default
             popupRect = popupRectFor(kr, opts)
             previewLabel = null
@@ -170,6 +171,8 @@ class CatKeyboardView(
     var isPinned: ((Key) -> Boolean)? = null
 
     private var popup: PopupOptions? = null
+    /** 哪一顆鍵跳出來的長按選單（選單照這顆鍵的樣式畫） */
+    private var popupKr: KeyRect? = null
     private var popupSel = 0
     private var popupRect = RectF()
 
@@ -207,7 +210,53 @@ class CatKeyboardView(
 
     private fun drawPopup(c: Canvas) {
         val o = popup ?: return
-        theme.drawPopup(c, popupRect, o.items, popupSel, if (o.actions != null) keyH * 0.62f else keyH)
+        val rowH = if (o.actions != null) keyH * 0.62f else keyH
+        val kr = popupKr
+        val st = kr?.let { keyStyles.resolve(it.key) }
+        if (kr == null || st == null || !st.customizedLook) {
+            theme.drawPopup(c, popupRect, o.items, popupSel, rowH)
+            return
+        }
+        // 主題工作室改過這顆鍵：選單照這顆鍵的顏色
+        val r = popupRect
+        val col = lookOf(kr, st)
+        val rad = min(theme.styledRadius(r, st), r.height() / 2)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = col.bg
+        c.drawRoundRect(r, rad, rad, p)
+        val optW = r.width() / o.items.size
+        val sel = RectF(r.left + optW * popupSel, r.top, r.left + optW * (popupSel + 1), r.bottom)
+        val selBg = col.border?.takeIf { android.graphics.Color.alpha(it) > 0 }
+            ?: topStyle?.tab?.takeIf { android.graphics.Color.alpha(it) > 0 }
+            ?: theme.popupSelBg
+        p.color = selBg
+        c.drawRoundRect(sel, rad, rad, p)
+        val selText = CustomTheme.contrastOn(selBg)
+        o.items.forEachIndexed { i, t ->
+            theme.drawText(c, t, r.left + optW * (i + 0.5f), r.centerY(), rowH * 0.5f, if (i == popupSel) selText else col.text)
+        }
+        col.border?.let { theme.drawBorderBox(c, r, rad, it, st.borderWidth, st.borderStyle, st.borderInset) }
+    }
+
+    /** 泡泡、長按選單要用的顏色：自己設的 > 量到的（底圖的話量畫面上的顏色）> 主題原本的 */
+    private class Look(val bg: Int, val text: Int, val border: Int?)
+
+    private fun lookOf(kr: KeyRect, st: KeyStyle): Look {
+        val native = nativeColors(kr)
+        val bg = st.bg?.takeIf { android.graphics.Color.alpha(it) > 0 }
+            ?: (if (st.bgImage != null) styledColors(kr)?.bg else null)
+            ?: native?.takeIf { it.hasBody }?.bg
+            ?: theme.previewBg
+        val text = st.text ?: native?.text ?: theme.previewText
+        val border = st.border ?: native?.takeIf { it.hasBorder && st.isShaped }?.border
+        return Look(bg or (0xFF shl 24), text, border)
+    }
+
+    /** 畫面上（套了樣式之後）量到的顏色：有底圖的鍵用來決定泡泡、選單的底色 */
+    private val styledCache = HashMap<String, KeyColors?>()
+    private fun styledColors(kr: KeyRect): KeyColors? {
+        val k = KeyStyles.idOf(kr.key) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
+        return styledCache.getOrPut(k) { sample(kr, styled = true) }
     }
     private val repeatRunnable = object : Runnable {
         override fun run() {
@@ -229,6 +278,7 @@ class CatKeyboardView(
         decals = Decals.load(prefs)
         decalBitmaps = Decals.bitmaps(context, decals, decalBitmaps)
         nativeCache.clear()
+        styledCache.clear()
         fontSet = loadFonts()
         stripCache = null
         panelCache = null
@@ -253,6 +303,7 @@ class CatKeyboardView(
     private fun layoutKeys() {
         keyRects.clear()
         nativeCache.clear()
+        styledCache.clear()
         val w = width.toFloat()
         if (w <= 0f) return
         rows.forEachIndexed { ri, row ->
@@ -749,6 +800,7 @@ class CatKeyboardView(
     /** 主題工作室改了按鍵樣式（拖字、拖滑桿）：直接換掉，不用整個重讀（快很多） */
     fun setKeyStylesLive(s: KeyStyles) {
         keyStyles = s
+        styledCache.clear()
         invalidate()
     }
 
@@ -1062,7 +1114,11 @@ class CatKeyboardView(
 
     private fun drawPanel(c: Canvas, w: Float) {
         val items = panelLayout()
-        val line = android.graphics.Paint().apply { color = theme.textDim; alpha = 50; strokeWidth = 1 * dp }
+        // 展開的選字面板＝上方列往下延伸：底色、文字、分隔線都照上方列（底色透明就露出鍵盤背景）
+        topStyle?.bg?.takeIf { android.graphics.Color.alpha(it) > 0 }?.let {
+            c.drawRect(0f, topH, w, kbH, android.graphics.Paint().apply { color = it })
+        }
+        val line = android.graphics.Paint().apply { color = topDim; alpha = 50; strokeWidth = 1 * dp }
         drawScToggle(c, line)
         c.save()
         c.clipRect(panelLeft, topH, w, kbH)
@@ -1070,7 +1126,7 @@ class CatKeyboardView(
         items.forEachIndexed { i, r0 ->
             val r = RectF(r0.left, r0.top - panelScroll, r0.right, r0.bottom - panelScroll)
             if (r.bottom < topH || r.top > kbH) return@forEachIndexed
-            theme.drawText(c, candidates[i], r.centerX(), r.centerY(), size, theme.text)
+            theme.drawText(c, candidates[i], r.centerX(), r.centerY(), size, topText)
             c.drawLine(r.left, r.bottom, r.right, r.bottom, line)
             if (r.right < w - 1f) c.drawLine(r.right, r.top + 8 * dp, r.right, r.bottom - 8 * dp, line)
         }
@@ -1083,10 +1139,10 @@ class CatKeyboardView(
         c.drawLine(panelLeft, topH + 8 * dp, panelLeft, kbH - 8 * dp, line)
         val r = scToggleRect()
         val on = prefs.simplified
-        theme.drawText(c, "簡", r.centerX(), r.centerY(), keyH * 0.4f, if (on) theme.text else theme.textDim)
+        theme.drawText(c, "簡", r.centerX(), r.centerY(), keyH * 0.4f, if (on) topText else topDim)
         if (on) {
             val u = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = theme.popupSelBg
+                color = topStyle?.tabBorder ?: topStyle?.tab?.takeIf { android.graphics.Color.alpha(it) > 0 } ?: theme.popupSelBg
                 strokeWidth = 2.5f * dp
                 strokeCap = android.graphics.Paint.Cap.ROUND
             }
@@ -1295,7 +1351,30 @@ class CatKeyboardView(
         left = min(max(0f, left), w - bw)
         val bottom = r.top + keyH * 0.15f
         val top = max(-floatH, bottom - bh)
-        theme.drawPreview(c, RectF(left, top, left + bw, top + bh), label)
+        val box = RectF(left, top, left + bw, top + bh)
+        val st = keyStyles.resolve(kr.key)
+        if (st == null || !st.customizedLook) { theme.drawPreview(c, box, label); return }
+        drawStyledPreview(c, box, kr, st, label)
+    }
+
+    /** 主題工作室改過的鍵：預覽泡泡也長得跟這顆鍵一樣（底色、底圖、外框、文字顏色、圓角） */
+    private fun drawStyledPreview(c: Canvas, box: RectF, kr: KeyRect, st: KeyStyle, label: String) {
+        val fill = st.bgImage
+        val col = lookOf(kr, st)
+        if (fill?.shape == true) {
+            // 照圖片的形狀：泡泡就是那張圖
+            ImageFill.draw(c, fill, box, null, fillBitmap(fill.img), fillAnim(fill))
+        } else {
+            val rad = theme.styledRadius(box, st)
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = col.bg }
+            c.drawRoundRect(box, rad, rad, p)
+            if (fill != null) {
+                val clip = android.graphics.Path().apply { addRoundRect(box, rad, rad, android.graphics.Path.Direction.CW) }
+                ImageFill.draw(c, fill, box, clip, fillBitmap(fill.img), fillAnim(fill))
+            }
+            col.border?.let { theme.drawBorderBox(c, box, rad, it, st.borderWidth, st.borderStyle, st.borderInset) }
+        }
+        theme.drawText(c, label, box.centerX(), box.centerY(), box.height() * 0.5f, col.text)
     }
 
     // ---------- 觸控 ----------
