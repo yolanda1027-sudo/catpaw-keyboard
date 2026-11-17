@@ -34,6 +34,8 @@ object ImageCrop {
      * @param done 按「完成」回傳新的設定；取消回傳 null
      */
     fun show(a: Activity, bmp: Bitmap, title: String, aspect: Float, corner: Float, initial: ImageFill, done: (ImageFill?) -> Unit): Dialog {
+        // 照圖片形狀的按鍵：框裡畫灰白格子，看得出哪裡是透明的
+        val showAlpha = initial.shape
         val dp = a.resources.displayMetrics.density
         val d = Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = LinearLayout(a).apply {
@@ -51,7 +53,7 @@ object ImageCrop {
         }
         root.addView(label(title, 17f).apply { setPadding(paddingLeft, (14 * dp).toInt(), paddingRight, 0) })
         root.addView(label("一根手指拖＝移動　兩根手指捏＝放大縮小\n框外面暗掉的地方會被裁掉", 13f, 0.75f))
-        val view = CropView(a, bmp, aspect, corner, initial)
+        val view = CropView(a, bmp, aspect, corner, initial, showAlpha)
         root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         // 縮放滑桿（對數刻度：小的時候調得細）
@@ -113,7 +115,10 @@ object ImageCrop {
 
 /** 裁切的框＋圖片；[fill] 就是現在的設定（已經整理過，不會拖出圖片外面） */
 @SuppressLint("ViewConstructor")
-class CropView(ctx: Context, val bmp: Bitmap, private val aspect: Float, private val corner: Float, initial: ImageFill) : View(ctx) {
+class CropView(
+    ctx: Context, val bmp: Bitmap, private val aspect: Float, private val corner: Float, initial: ImageFill,
+    private val showAlpha: Boolean = false,
+) : View(ctx) {
     var fill: ImageFill = initial
         private set
     var onChange: ((ImageFill) -> Unit)? = null
@@ -148,7 +153,10 @@ class CropView(ctx: Context, val bmp: Bitmap, private val aspect: Float, private
 
     fun setZoom(z: Float) = set(fill.copy(zoom = z))
 
-    fun reset() = set(fill.copy(zoom = 1f, cx = 0.5f, cy = 0.5f))
+    /** 重設：一般是「剛好鋪滿」；照圖片形狀的是「整張放進框裡」（毛邊才不會被裁掉） */
+    fun reset() = set(fill.copy(zoom = if (fill.shape) ImageFill.FIT else 1f, cx = 0.5f, cy = 0.5f))
+
+    private val checker = Paint()
 
     /** 拖：圖片跟著手指走（dx, dy 是畫面上的像素） */
     fun pan(dx: Float, dy: Float) {
@@ -207,6 +215,27 @@ class CropView(ctx: Context, val bmp: Bitmap, private val aspect: Float, private
 
     override fun onDraw(c: Canvas) {
         if (frame.isEmpty) return
+        if (showAlpha) {
+            // 灰白格子（透明的地方）
+            val s = 10 * dp
+            c.save()
+            c.clipRect(frame)
+            var y = frame.top
+            var row = 0
+            while (y < frame.bottom) {
+                var x = frame.left
+                var col = row % 2
+                while (x < frame.right) {
+                    checker.color = if (col % 2 == 0) 0xFFE9E6EE.toInt() else 0xFFFFFFFF.toInt()
+                    c.drawRect(x, y, x + s, y + s, checker)
+                    x += s
+                    col++
+                }
+                y += s
+                row++
+            }
+            c.restore()
+        }
         c.drawBitmap(bmp, null, fill.destRect(frame, bmp.width, bmp.height), imgPaint)
         val rad = corner * minOf(frame.width(), frame.height())
         // 框外面暗掉

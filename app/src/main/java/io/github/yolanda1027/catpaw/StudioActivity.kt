@@ -590,8 +590,9 @@ class StudioActivity : Activity() {
             val uri = data?.data
             if (resultCode != RESULT_OK || uri == null || target == null) return
             val name = readImage(uri, Decals.FILL_MAX_PX) ?: return
-            // 上傳完直接進裁切畫面；按取消就不套用
-            openCrop(target, ImageFill(name))
+            // 上傳完直接進裁切畫面；按取消就不套用。原本是「照圖片的形狀」就沿用
+            val prev = styles.map[target]?.bgImage
+            openCrop(target, if (prev?.shape == true) ImageFill(name, zoom = ImageFill.FIT, shape = true) else ImageFill(name))
             return
         }
         if (requestCode == REQ_EFFECT_IMAGE) {
@@ -1090,6 +1091,19 @@ class StudioActivity : Activity() {
             b("拿掉") { setFill(target, null) }
         }
         panel.addView(row)
+        // 按鍵才有：照圖片的形狀（毛邊、雲朵形）
+        if (fill != null && target != KeyStyles.KEYBOARD) {
+            panel.addView(CheckBox(this).apply {
+                text = "照圖片的形狀（去背 PNG 透明的地方就是按鍵外面）"
+                isChecked = fill.shape
+                setPadding(0, px(4f), 0, px(4f))
+                setOnCheckedChangeListener { _, on ->
+                    // 打開時改成整張放進按鍵裡，毛邊才不會被裁掉
+                    setFill(target, if (on) fill.copy(shape = true, zoom = ImageFill.FIT, cx = 0.5f, cy = 0.5f) else fill.copy(shape = false, zoom = 1f, cx = 0.5f, cy = 0.5f))
+                }
+            })
+            if (fill.shape) text("這個模式不畫底色和外框（形狀、邊框都交給圖片），按下去只有圖片本身會變暗。", 12f, dim = true)
+        }
     }
 
     private fun setFill(target: String, fill: ImageFill?) {
@@ -1114,7 +1128,7 @@ class StudioActivity : Activity() {
             val key = selected ?: return
             val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
             val (box, rad) = kv.keyImageFrame(key, st) ?: return
-            Triple(box, rad / minOf(box.width(), box.height()), "裁切" + (if (target.startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == target }?.title ?: "" else KeyStyles.nameOf(key)) + "的底圖")
+            Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (target.startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == target }?.title ?: "" else KeyStyles.nameOf(key)) + "的底圖")
         }
         if (frame.isEmpty) return
         ImageCrop.show(this, bmp, title, frame.width() / frame.height(), corner, fill) { f ->

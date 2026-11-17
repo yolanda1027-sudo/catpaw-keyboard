@@ -25,6 +25,11 @@ data class ImageFill(
     val zoom: Float = 1f,
     val cx: Float = 0.5f,
     val cy: Float = 0.5f,
+    /**
+     * 照圖片的形狀（只有按鍵用）：不裁成圓角方形、不畫底色和外框，
+     * PNG 透明的地方就是按鍵外面（毛邊、雲朵形的鍵）。
+     */
+    val shape: Boolean = false,
 ) {
     val isGif get() = img.endsWith(".gif")
 
@@ -51,9 +56,12 @@ data class ImageFill(
 
     fun toJson(): JSONObject = JSONObject().put("img", img)
         .put("zoom", zoom.toDouble()).put("cx", cx.toDouble()).put("cy", cy.toDouble())
+        .apply { if (shape) put("shape", true) }
 
     companion object {
         const val MAX_ZOOM = 8f
+        /** 小於任何按鍵的最小倍率：畫的時候會變成「整張圖剛好放進框裡」 */
+        const val FIT = 0.05f
 
         /** 剛好鋪滿框的倍率 */
         fun cover(frame: RectF, iw: Int, ih: Int) = max(frame.width() / iw, frame.height() / ih)
@@ -73,7 +81,7 @@ data class ImageFill(
             val img = o.optString("img")
             if (!Decals.safeName(img)) return null
             fun f(k: String, d: Float, lo: Float, hi: Float) = o.optDouble(k, d.toDouble()).toFloat().let { if (it.isNaN()) d else it }.coerceIn(lo, hi)
-            return ImageFill(img, f("zoom", 1f, 0.05f, MAX_ZOOM), f("cx", 0.5f, 0f, 1f), f("cy", 0.5f, 0f, 1f))
+            return ImageFill(img, f("zoom", 1f, 0.05f, MAX_ZOOM), f("cx", 0.5f, 0f, 1f), f("cy", 0.5f, 0f, 1f), o.optBoolean("shape", false))
         }
 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
