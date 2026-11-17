@@ -409,29 +409,36 @@ class StudioActivity : Activity() {
         val cur = styles.map[currentId()] ?: KeyStyle()
         // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
         val now = kv.sampleColors(key)
-        colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) }
+        // 「照圖片的形狀」：底色、外框、圓角都交給圖片，這幾項變灰
+        val eff = if (groupScope) cur else styles.resolve(key) ?: cur
+        val shapeMode = eff.bgImage?.shape == true
+        greyIf(shapeMode) { colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) } }
         imageRow(currentId()!!, "底圖", cur.bgImage)
         colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
-        colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY, allowTransparent = true) { v -> update({ it.copy(border = v) }) }
+        greyIf(shapeMode) {
+            colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY, allowTransparent = true) { v -> update({ it.copy(border = v) }) }
+            borderControls(cur, eff, now)
 
-        // 圓角
-        val radius = ((cur.radius ?: 0.3f) * 100).toInt()
-        val radiusLabel = text("圓角：$radius%", 15f)
-        radiusLabel.setPadding(0, px(14f), 0, 0)
-        panel.addView(SeekBar(this).apply {
-            max = 100
-            progress = radius
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    if (!fromUser) return
-                    radiusLabel.text = "圓角：$p%"
-                    update({ it.copy(radius = p / 100f) }, rebuild = false)
-                }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) { commitHistory() }
+            // 圓角
+            val radius = ((cur.radius ?: 0.3f) * 100).toInt()
+            val radiusLabel = text("圓角：$radius%", 15f)
+            radiusLabel.setPadding(0, px(14f), 0, 0)
+            panel.addView(SeekBar(this).apply {
+                max = 100
+                progress = radius
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                        if (!fromUser) return
+                        radiusLabel.text = "圓角：$p%"
+                        update({ it.copy(radius = p / 100f) }, rebuild = false)
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) { commitHistory() }
+                })
             })
-        })
-        text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
+            text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
+        }
+        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「照圖片的形狀」，這些都交給圖片。", 12f, dim = true)
 
         panel.addView(CheckBox(this).apply {
             text = "不顯示文字（只留底色和外框）"
@@ -1003,6 +1010,51 @@ class StudioActivity : Activity() {
         colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
         if (styles.topBar != null) button("全部改回主題原本的顏色") { setTopBar { null } }
         button("← 回到選按鍵") { topSelected = false; refresh() }
+    }
+
+    // ---------- 按鍵外框：樣式、粗細、縫線離邊距離 ----------
+
+    private fun borderControls(cur: KeyStyle, eff: KeyStyle, now: CatKeyboardView.KeyColors?) {
+        val style = eff.borderStyle ?: "solid"
+        text("外框樣式", 15f).setPadding(0, px(8f), 0, 0)
+        val opts = KeyStyle.BORDER_STYLES
+        chipRow(opts.map { it.second }, opts.indexOfFirst { it.first == style }.coerceAtLeast(0)) { i ->
+            update({ it.copy(borderStyle = opts[i].first) })
+        }
+        val noBorder = eff.border == null && now?.hasBorder != true
+        if (noBorder) text("💡 這顆鍵現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。", 12f, dim = true)
+        val w = eff.borderWidth ?: KeyStyle.DEFAULT_BORDER_WIDTH
+        slider("外框粗細", (w * 2).toInt(), 1, 16, { "%.1f".format(it / 2f).removeSuffix(".0") }) { v ->
+            update({ it.copy(borderWidth = v / 2f) }, rebuild = false)
+        }
+        if (style == "stitch") {
+            val ins = eff.borderInset ?: KeyStyle.DEFAULT_BORDER_INSET
+            slider("縫線離邊距離", (ins * 2).toInt(), 0, 24, { "%.1f".format(it / 2f).removeSuffix(".0") }) { v ->
+                update({ it.copy(borderInset = v / 2f) }, rebuild = false)
+            }
+        }
+        if (cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null) {
+            button("外框樣式改回預設（實線、粗細 2）") { update({ it.copy(borderStyle = null, borderWidth = null, borderInset = null) }) }
+        }
+    }
+
+    /** 在 block 裡加到面板的東西：on 的話整塊變灰、按不動 */
+    private fun greyIf(on: Boolean, block: () -> Unit) {
+        val start = panel.childCount
+        block()
+        if (!on) return
+        for (i in start until panel.childCount) disableAll(panel.getChildAt(i))
+    }
+
+    /** 整塊按不動；每個最小的元件各自變淡（色塊、文字、按鈕都一樣淡，不會疊兩次） */
+    private fun disableAll(v: View) {
+        v.isEnabled = false
+        v.isClickable = false
+        if (v is android.view.ViewGroup) {
+            for (i in 0 until v.childCount) disableAll(v.getChildAt(i))
+        } else {
+            v.alpha = 0.32f
+        }
     }
 
     // ---------- 快捷符號列的顏色 ----------

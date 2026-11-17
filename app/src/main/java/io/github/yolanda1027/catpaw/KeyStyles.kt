@@ -52,12 +52,19 @@ data class KeyStyle(
     val order: List<String>? = null,
     /** 底圖：鋪在底色上面、字下面，照按鍵的圓角裁掉（「@keyboard」用的話就是整個鍵盤的背景圖） */
     val bgImage: ImageFill? = null,
+    /** 外框粗細（dp，沒設定＝2） */
+    val borderWidth: Float? = null,
+    /** 外框樣式：solid 實線｜dash 虛線｜dot 點點｜stitch 縫線（沒設定＝實線） */
+    val borderStyle: String? = null,
+    /** 縫線離按鍵邊緣多遠（dp，沒設定＝3） */
+    val borderInset: Float? = null,
 ) {
     val isEmpty get() = bg == null && text == null && border == null && radius == null && hideLabel == null && effect == null &&
-        labels.isNullOrEmpty() && order == null && bgImage == null
+        labels.isNullOrEmpty() && order == null && bgImage == null && borderWidth == null && borderStyle == null && borderInset == null
 
     /** 改了底色、圓角、外框或底圖：這顆鍵換成自訂的形狀 */
-    val isShaped get() = bg != null || radius != null || border != null || bgImage != null
+    val isShaped get() = bg != null || radius != null || border != null || bgImage != null ||
+        borderWidth != null || borderStyle != null || borderInset != null
 
     /** 自己有設定的用自己的，沒設定的用 base（例如「所有注音鍵」的設定） */
     fun over(base: KeyStyle?): KeyStyle = if (base == null) this else KeyStyle(
@@ -66,6 +73,9 @@ data class KeyStyle(
         labels ?: base.labels,
         order ?: base.order,
         bgImage ?: base.bgImage,
+        borderWidth ?: base.borderWidth,
+        borderStyle ?: base.borderStyle,
+        borderInset ?: base.borderInset,
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -78,10 +88,18 @@ data class KeyStyle(
         labels?.takeIf { it.isNotEmpty() }?.let { m -> put("labels", JSONObject().apply { for ((k, v) in m) put(k, v.toJson()) }) }
         order?.let { put("order", org.json.JSONArray(it)) }
         bgImage?.let { put("bgImage", it.toJson()) }
+        borderWidth?.let { put("borderWidth", it.toDouble()) }
+        borderStyle?.let { put("borderStyle", it) }
+        borderInset?.let { put("borderInset", it.toDouble()) }
     }
 
     companion object {
         private fun hex(c: Int) = String.format("#%08X", c)
+
+        /** 按鍵外框的樣式（跟圖案的外框同一套） */
+        val BORDER_STYLES = listOf("solid" to "實線", "dash" to "虛線", "dot" to "點點", "stitch" to "縫線")
+        const val DEFAULT_BORDER_WIDTH = 2f
+        const val DEFAULT_BORDER_INSET = 3f
 
         fun fromJson(o: JSONObject): KeyStyle {
             fun col(k: String): Int? = o.optString(k).takeIf { it.isNotEmpty() }?.let {
@@ -100,6 +118,9 @@ data class KeyStyle(
                 },
                 order = o.optJSONArray("order")?.let { arr -> (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotEmpty() } },
                 bgImage = ImageFill.fromJson(o.optJSONObject("bgImage")),
+                borderWidth = if (o.has("borderWidth")) o.optDouble("borderWidth").toFloat().takeIf { !it.isNaN() }?.coerceIn(0.5f, 8f) else null,
+                borderStyle = o.optString("borderStyle").takeIf { s -> BORDER_STYLES.any { it.first == s } },
+                borderInset = if (o.has("borderInset")) o.optDouble("borderInset").toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 12f) else null,
             )
         }
     }

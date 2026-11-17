@@ -11,6 +11,7 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -251,16 +252,35 @@ abstract class KbTheme(protected val dp: Float) {
         c.drawRoundRect(box, rad, rad, fill)
     }
 
+    /**
+     * 自訂外框：粗細、實線／虛線／點點／縫線。
+     * 實線、虛線、點點貼著按鍵的邊（整條線都在按鍵裡面）；
+     * 縫線照「離邊距離」往內縮，圓角跟著變小，加粗也不會往內跑。
+     * 虛線的比例跟圖案的外框一樣，兩邊看起來才一致。
+     */
     fun drawStyledBorder(c: Canvas, r: RectF, st: KeyStyle) {
         val color = st.border ?: return
+        if (Color.alpha(color) == 0) return
         val box = styledBox(r)
-        val half = 1 * dp
-        box.inset(half, half)
-        val rad = styledRadius(box, st)
+        val outerRad = styledRadius(box, st)
+        val w = (st.borderWidth ?: KeyStyle.DEFAULT_BORDER_WIDTH) * dp
+        val style = st.borderStyle ?: "solid"
+        val inset = if (style == "stitch") (st.borderInset ?: KeyStyle.DEFAULT_BORDER_INSET) * dp else 0f
+        // 線的中心離邊緣：至少半條線粗（不然會跑到按鍵外面）
+        val d = max(w / 2, inset)
+        val line = RectF(box).apply { inset(d, d) }
+        if (line.width() <= 0f || line.height() <= 0f) return
+        val rad = max(0f, outerRad - d)
         stroke.color = color
-        stroke.strokeWidth = 2 * dp
+        stroke.strokeWidth = w
+        stroke.pathEffect = when (style) {
+            "dash" -> DashPathEffect(floatArrayOf(w * 2.4f, w * 2.2f), 0f)
+            "dot" -> DashPathEffect(floatArrayOf(0.01f, w * 2.1f), 0f)
+            "stitch" -> DashPathEffect(floatArrayOf(w * 1.8f, w * 1.9f), 0f)
+            else -> null
+        }
+        c.drawRoundRect(line, rad, rad, stroke)
         stroke.pathEffect = null
-        c.drawRoundRect(box, rad, rad, stroke)
     }
 
     /**
