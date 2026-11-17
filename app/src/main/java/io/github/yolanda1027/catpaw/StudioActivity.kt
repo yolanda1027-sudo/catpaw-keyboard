@@ -42,6 +42,8 @@ class StudioActivity : Activity() {
     private var decals: List<Decal> = emptyList()
     /** 正在編輯鍵盤背景（沒選按鍵） */
     private var bgSelected = false
+    /** 正在改上方列（中／En 那一列）的顏色 */
+    private var topSelected = false
     /** 選到的圖案 */
     private var decalSel: String? = null
     /** 從相簿選圖片時，要貼到哪 */
@@ -81,11 +83,20 @@ class StudioActivity : Activity() {
                 if (selected?.let { KeyStyles.idOf(it) } != KeyStyles.idOf(key)) groupScope = false
                 selected = key
                 bgSelected = false
+                topSelected = false
                 decalSel = null
                 if (animMode == GLOBAL) animMode = null
                 refresh()
             }
             onDecalPicked = { d -> selectDecal(d) }
+            onTopBarPicked = {
+                selected = null
+                bgSelected = false
+                decalSel = null
+                animMode = null
+                topSelected = true
+                refresh()
+            }
             onDecalAction = { a, d -> decalAction(a, d) }
             onDecalChanged = { d, done ->
                 decals = decals.map { if (it.id == d.id) d else it }
@@ -186,6 +197,7 @@ class StudioActivity : Activity() {
         groupScope = false
         animMode = null
         bgSelected = false
+        topSelected = false
         decalSel = null
         refresh()
     }
@@ -237,9 +249,9 @@ class StudioActivity : Activity() {
     // ---------- 上一步／下一步（最多 3 步） ----------
 
     /** 工作室改得到的東西：按鍵樣式、圖案、全部按鍵的動畫 */
-    private data class Snap(val styles: Map<String, KeyStyle>, val decals: List<Decal>, val effect: String, val custom: CustomEffect)
+    private data class Snap(val styles: KeyStyles, val decals: List<Decal>, val effect: String, val custom: CustomEffect)
 
-    private fun snapshot() = Snap(styles.map, decals, prefs.pressEffect, prefs.customEffect)
+    private fun snapshot() = Snap(styles, decals, prefs.pressEffect, prefs.customEffect)
 
     /** 上一次「做完一個動作」時的樣子 */
     private lateinit var committed: Snap
@@ -276,7 +288,7 @@ class StudioActivity : Activity() {
     }
 
     private fun restore(s: Snap) {
-        styles = KeyStyles(s.styles)
+        styles = s.styles
         KeyStyles.save(prefs, styles)
         decals = s.decals
         Decals.save(prefs, decals)
@@ -323,6 +335,7 @@ class StudioActivity : Activity() {
     private fun refresh() {
         commitHistory()
         panel.removeAllViews()
+        kv.editTopBar = topSelected
         // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
         val zoomKey = selected?.takeIf { !bgSelected && !groupScope && animMode != GLOBAL }
         zoomBox.visibility = if (zoomKey != null) View.VISIBLE else View.GONE
@@ -335,13 +348,15 @@ class StudioActivity : Activity() {
         if (decalSel?.startsWith(LABEL) == true && sk != null && !bgSelected && !groupScope) { labelPanel(sk, decalSel!!.removePrefix(LABEL)); return }
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
+        if (topSelected) { topBarPanel(); return }
         if (bgSelected) { bgPanel(); return }
         val key = selected
         if (key == null) {
             kv.editHighlight = null
-            text("👆 點一下上面鍵盤的任何一顆按鍵，就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
+            text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面「中／En」那一列），就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
             text("改好會直接套用到鍵盤上。想換整體主題、字體，到「貓爪鍵盤」設定的外觀頁。", 13f, dim = true)
             button("🖼️ 鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
+            button("🔝 上方列（中／En、選字列）的顏色") { topSelected = true; refresh() }
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             if (styles.keyEntries.isNotEmpty()) {
                 text("目前有 ${styles.keyEntries.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
@@ -431,6 +446,7 @@ class StudioActivity : Activity() {
 
     private fun selectDecal(d: Decal) {
         decalSel = d.id
+        topSelected = false
         if (d.onBackground) {
             bgSelected = true
             selected = null
@@ -889,7 +905,8 @@ class StudioActivity : Activity() {
             val nDecals = decals.size
             val nStyles = styles.keyEntries.size
             val hasBgImage = styles.keyboardImage != null
-            if (nDecals == 0 && nStyles == 0 && !hasBgImage) {
+            val hasTop = styles.topBar != null
+            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop) {
                 android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
                 return@button
             }
@@ -897,6 +914,7 @@ class StudioActivity : Activity() {
                 if (nDecals > 0) add("・貼上去的圖案（$nDecals 個）")
                 if (nStyles > 0) add("・按鍵的單獨設定（$nStyles 組，包含底圖、單顆鍵的動畫）")
                 if (hasBgImage) add("・鍵盤背景圖片")
+                if (hasTop) add("・上方列（中／En）的顏色")
             }
             val dialog = AlertDialog.Builder(this)
                 .setTitle("恢復主題預設？")
@@ -914,6 +932,7 @@ class StudioActivity : Activity() {
         selected = null
         decalSel = null
         bgSelected = false
+        topSelected = false
         animMode = null
         groupScope = false
         styles = KeyStyles.EMPTY
@@ -935,6 +954,31 @@ class StudioActivity : Activity() {
                 .setNegativeButton("取消", null)
                 .show()
         }
+    }
+
+    // ---------- 上方列（中／En、選字列）的顏色 ----------
+
+    private fun setTopBar(change: (TopBarStyle) -> TopBarStyle?) {
+        styles = styles.withTopBar(change(styles.topBar ?: TopBarStyle()))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        refresh()
+    }
+
+    private fun topBarPanel() {
+        kv.editHighlight = null
+        text("正在編輯：上方列", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        text("「中／En」那一列。打字時會變成選字列、切到符號時是分類列，顏色都照這裡的。", 13f, dim = true)
+        val cur = styles.topBar ?: TopBarStyle()
+        val now = kv.topBarColors()
+        colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setTopBar { it.copy(bg = v) } }
+        text("透明：看得到下面的鍵盤背景；有背景圖片的話，圖片會往上鋪滿整個鍵盤。", 12f, dim = true)
+        colorRow("選中的底色（「中」底下那塊）", cur.tab, now.tab!!, allowTransparent = true) { v -> setTopBar { it.copy(tab = v) } }
+        colorRow("文字（選中的「中」、候選字）", cur.text, now.text!!) { v -> setTopBar { it.copy(text = v) } }
+        colorRow("文字（沒選中的「En」）", cur.textDim, now.textDim!!) { v -> setTopBar { it.copy(textDim = v) } }
+        colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
+        if (styles.topBar != null) button("全部改回主題原本的顏色") { setTopBar { null } }
+        button("← 回到選按鍵") { topSelected = false; refresh() }
     }
 
     // ---------- 底圖（按鍵底圖、鍵盤背景圖） ----------
@@ -1227,9 +1271,9 @@ class StudioActivity : Activity() {
     private fun clearAllButton() {
         button("清除所有按鍵設定") {
             AlertDialog.Builder(this)
-                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？（鍵盤背景圖片會留著）")
+                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？（鍵盤背景圖片、上方列的顏色會留著）")
                 .setPositiveButton("全部清除") { _, _ ->
-                    styles = KeyStyles(styles.map.filterKeys { it == KeyStyles.KEYBOARD })
+                    styles = KeyStyles(styles.map.filterKeys { it == KeyStyles.KEYBOARD }, styles.topBar)
                     KeyStyles.save(prefs, styles)
                     kv.reloadPrefs()
                     refresh()

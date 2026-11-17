@@ -284,6 +284,7 @@ class CatKeyboardView(
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.drawBackground(c, w, kbH, topH)
+        drawTopBarBg(c, w)
         keyStyles.keyboardImage?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
         drawBgDecals(c, front = false)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
@@ -516,7 +517,51 @@ class CatKeyboardView(
     }
 
     /** 鍵盤背景圖鋪的範圍：上方列（選字列）下面的整塊 */
-    fun keyboardImageFrame(): RectF = RectF(0f, topH, width.toFloat(), kbH)
+    fun keyboardImageFrame(): RectF = RectF(0f, if (topBarClear) 0f else topH, width.toFloat(), kbH)
+
+    // ---------- 上方列（中／En、選字列、符號分類列）的顏色 ----------
+
+    private val topStyle get() = keyStyles.topBar
+    /** 上方列設成透明：背景圖片往上鋪滿整個鍵盤 */
+    private val topBarClear get() = topStyle?.bg?.let { android.graphics.Color.alpha(it) == 0 } == true
+    private val topText get() = topStyle?.text ?: theme.text
+    private val topDim get() = topStyle?.textDim ?: theme.textDim
+    private val topIcon get() = topStyle?.icon ?: theme.textDim
+
+    /** 上方列現在實際的顏色（主題工作室顯示用；主題原本是透明的就用背景色） */
+    fun topBarColors(): TopBarStyle {
+        fun solid(c: Int) = if (android.graphics.Color.alpha(c) == 0) theme.bg else c
+        return TopBarStyle(
+            bg = topStyle?.bg ?: solid(theme.topBar),
+            tab = topStyle?.tab ?: solid(theme.tabSelected),
+            text = topText, textDim = topDim, icon = topIcon,
+        )
+    }
+
+    /** 自訂了上方列的底色：蓋掉主題原本的上方列 */
+    private fun drawTopBarBg(c: Canvas, w: Float) {
+        val col = topStyle?.bg ?: return
+        c.save()
+        c.clipRect(0f, 0f, w, topH)
+        // 先畫成跟下面一樣的主題背景（往上挪一列，主題自己的上方列就被擠到看不到的地方）
+        c.translate(0f, -topH)
+        theme.drawBackground(c, w, kbH + topH, topH)
+        c.restore()
+        if (android.graphics.Color.alpha(col) > 0) {
+            val p = android.graphics.Paint().apply { color = col }
+            c.drawRect(0f, 0f, w, topH, p)
+        }
+    }
+
+    /** 選中的那一塊（「中」、第一個候選字、目前的分類） */
+    private fun drawTab(c: Canvas, r: RectF) {
+        val col = topStyle?.tab
+        if (col == null) { theme.drawTabHighlight(c, r); return }
+        if (android.graphics.Color.alpha(col) == 0) return
+        val box = RectF(r.left + 8 * dp, r.top + 7 * dp, r.right - 8 * dp, r.bottom - 7 * dp)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = col }
+        c.drawRoundRect(box, box.height() / 2, box.height() / 2, p)
+    }
 
     /** 這顆鍵的底圖鋪的範圍、圓角半徑（裁切畫面用） */
     fun keyImageFrame(key: Key, st: KeyStyle?): Pair<RectF, Float>? {
@@ -711,6 +756,11 @@ class CatKeyboardView(
 
     /** 在鍵盤上點到某個圖案 */
     var onDecalPicked: ((Decal) -> Unit)? = null
+    /** 主題工作室：點了上方列 */
+    var onTopBarPicked: (() -> Unit)? = null
+    /** 主題工作室：上方列畫上「正在編輯」的虛線框 */
+    var editTopBar = false
+        set(v) { field = v; invalidate() }
 
     /** 圖案按了小工具（copy / flip / delete） */
     var onDecalAction: ((String, Decal) -> Unit)? = null
@@ -737,7 +787,10 @@ class CatKeyboardView(
 
     /** 編輯模式：點按鍵／圖案來選；選到的圖案用 Canva 那種方式拖、縮放、旋轉 */
     private fun handleEditTouch(e: MotionEvent, pick: (Key) -> Unit) {
-        decalHandles.onEmptyTap = { x, y -> keyAt(x, y)?.let { pick(it.key) } }
+        decalHandles.onEmptyTap = { x, y ->
+            if (y in 0f..topH && onTopBarPicked != null) onTopBarPicked?.invoke()
+            else keyAt(x, y)?.let { pick(it.key) }
+        }
         decalHandles.onPick = { d -> if (d != null) onDecalPicked?.invoke(d) }
         decalHandles.onChange = { d, done -> replaceDecal(d, done) }
         decalHandles.onAction = { a, d -> onDecalAction?.invoke(a, d) }
@@ -864,6 +917,17 @@ class CatKeyboardView(
     }
 
     private fun drawEditHighlight(c: Canvas) {
+        if (editTopBar) {
+            val r = RectF(0f, 0f, width.toFloat(), topH).apply { inset(2f * dp, 2f * dp) }
+            editPaint.color = android.graphics.Color.WHITE
+            editPaint.pathEffect = null
+            editPaint.strokeWidth = 4.5f * dp
+            c.drawRoundRect(r, 8 * dp, 8 * dp, editPaint)
+            editPaint.color = android.graphics.Color.parseColor("#FF4F8B")
+            editPaint.strokeWidth = 2.5f * dp
+            editPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(6 * dp, 4 * dp), 0f)
+            c.drawRoundRect(r, 8 * dp, 8 * dp, editPaint)
+        }
         val f = editHighlight ?: return
         for (kr in keyRects) {
             if (kr.key.act == Act.GAP || !f(kr.key)) continue
@@ -939,8 +1003,8 @@ class CatKeyboardView(
         items.forEachIndexed { i, r0 ->
             val r = RectF(r0.left - candScroll, r0.top, r0.right - candScroll, r0.bottom)
             if (r.right < 0 || r.left > w) return@forEachIndexed
-            if (i == 0) theme.drawTabHighlight(c, r) // 第一個（最推薦的）有底色
-            theme.drawText(c, candidates[i], r.centerX(), r.centerY(), stripTextSize, theme.text)
+            if (i == 0) drawTab(c, r) // 第一個（最推薦的）有底色
+            theme.drawText(c, candidates[i], r.centerX(), r.centerY(), stripTextSize, topText)
         }
         c.restore()
         // 右邊的展開／收起箭頭
@@ -951,7 +1015,7 @@ class CatKeyboardView(
         val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.STROKE
             strokeWidth = 2f * dp
-            color = theme.textDim
+            color = topIcon
             strokeCap = android.graphics.Paint.Cap.ROUND
             strokeJoin = android.graphics.Paint.Join.ROUND
         }
@@ -1077,8 +1141,8 @@ class CatKeyboardView(
         val tw = w / tabs.size
         tabs.forEachIndexed { i, label ->
             val r = RectF(tw * i, 0f, tw * (i + 1), topH)
-            if (i == symbolTab) theme.drawTabHighlight(c, r)
-            val color = if (i == symbolTab) theme.text else theme.textDim
+            if (i == symbolTab) drawTab(c, r)
+            val color = if (i == symbolTab) topText else topDim
             if (label == null) theme.drawIcon(c, Icon.CLOCK, r.centerX(), r.centerY(), topH * 0.6f, color)
             else theme.drawText(c, label, r.centerX(), r.centerY(), if (label.length > 3) topH * 0.32f else topH * 0.4f, color)
         }
@@ -1107,12 +1171,12 @@ class CatKeyboardView(
         }
         if (composing.isNotEmpty()) {
             // 打注音時，上面這列先顯示打了什麼（之後會變成選字列）
-            theme.drawTextLeft(c, composing, 16 * dp, topH / 2, topH * 0.5f, theme.text)
+            theme.drawTextLeft(c, composing, 16 * dp, topH / 2, topH * 0.5f, topText)
             return
         }
         val selLeft = if (isChinese) 0f else tabW
-        theme.drawTabHighlight(c, RectF(selLeft, 0f, selLeft + tabW, topH))
-        val zhColor = if (isChinese) theme.text else theme.textDim
+        drawTab(c, RectF(selLeft, 0f, selLeft + tabW, topH))
+        val zhColor = if (isChinese) topText else topDim
         theme.drawText(c, "中", tabW / 2, topH / 2, topH * 0.52f, zhColor)
         // 「中」右下角的小三角形（跟原版一樣）
         val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = zhColor }
@@ -1120,10 +1184,10 @@ class CatKeyboardView(
         val ty = topH / 2 + topH * 0.24f
         val ts = topH * 0.1f
         c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
-        theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) theme.textDim else theme.text)
+        theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) topDim else topText)
 
         // 剪貼簿按鈕（在 ▽ 左邊）
-        theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, theme.textDim)
+        theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, topIcon)
         // 右邊的 ▽：收起鍵盤
         val cx = w - tabW * 0.4f
         val cy = topH / 2
@@ -1137,7 +1201,7 @@ class CatKeyboardView(
         val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.STROKE
             strokeWidth = 1.5f * dp
-            color = theme.textDim
+            color = topIcon
             strokeJoin = android.graphics.Paint.Join.ROUND
         }
         c.drawPath(p, stroke)

@@ -38,7 +38,7 @@ object ThemeIO {
         EFFECT("按鍵動畫"),
         STICKERS("功能鍵貼圖"),
         QUICK("快捷符號列"),
-        KEYS("單顆按鍵樣式、底圖、鍵盤背景圖（主題工作室）"),
+        KEYS("單顆按鍵樣式、底圖、鍵盤背景圖、上方列顏色（主題工作室）"),
         DECALS("貼上的圖案（主題工作室）"),
     }
 
@@ -94,7 +94,7 @@ object ThemeIO {
         }
         if (Part.KEYS in parts) {
             val ks = KeyStyles.load(prefs)
-            if (ks.map.isNotEmpty()) o.put("keyStyles", ks.toJson())
+            if (ks.map.isNotEmpty() || ks.topBar != null) o.put("keyStyles", ks.toJson())
         }
         if (Part.DECALS in parts) {
             val list = Decals.load(prefs)
@@ -232,7 +232,7 @@ object ThemeIO {
                     val n = rename[f.img]
                     if (n != null) st.copy(bgImage = f.copy(img = n)) else { lostImage = true; st.copy(bgImage = null) }
                 } ?: st
-            }.filterValues { !it.isEmpty }))
+            }.filterValues { !it.isEmpty }, loaded.topBar))
             if (lostImage) warnings.add("有底圖的圖片壞掉了，那幾顆鍵先用底色")
         }
         o.optJSONObject("decals")?.let {

@@ -106,12 +106,49 @@ data class KeyStyle(
 }
 
 /**
+ * 上方列（中／En、選字列、符號分類列）的顏色。沒設定的（null）照主題原本的。
+ * @param bg 整列的底色（透明＝看得到主題背景，鍵盤背景圖片也會鋪上來）
+ * @param tab 選中的那一塊（「中」、第一個候選字）的底色（透明＝不畫）
+ * @param text 選中的字、候選字
+ * @param textDim 沒選中的字（例如「En」）
+ * @param icon 剪貼簿、▽、展開箭頭
+ */
+data class TopBarStyle(
+    val bg: Int? = null,
+    val tab: Int? = null,
+    val text: Int? = null,
+    val textDim: Int? = null,
+    val icon: Int? = null,
+) {
+    val isEmpty get() = bg == null && tab == null && text == null && textDim == null && icon == null
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        fun hex(c: Int) = String.format("#%08X", c)
+        bg?.let { put("bg", hex(it)) }
+        tab?.let { put("tab", hex(it)) }
+        text?.let { put("text", hex(it)) }
+        textDim?.let { put("textDim", hex(it)) }
+        icon?.let { put("icon", hex(it)) }
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject?): TopBarStyle? {
+            if (o == null) return null
+            fun col(k: String): Int? = o.optString(k).takeIf { it.isNotEmpty() }?.let {
+                try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null }
+            }
+            return TopBarStyle(col("bg"), col("tab"), col("text"), col("textDim"), col("icon")).takeIf { !it.isEmpty }
+        }
+    }
+}
+
+/**
  * 所有按鍵樣式。用「代號」對應：
  * - 單顆鍵：注音鍵 zy:ㄅ、其他字鍵 t:q、功能鍵 enter / backspace / space …
  * - 一整類：@zhuyin（所有注音鍵）、@char、@func、@space、@enter
  * 單顆的設定會蓋過整類的設定。
  */
-class KeyStyles(val map: Map<String, KeyStyle> = emptyMap()) {
+class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarStyle? = null) {
 
     enum class Group(val id: String, val title: String) {
         ZHUYIN("@zhuyin", "所有注音鍵"),
@@ -135,10 +172,19 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap()) {
     fun with(id: String, style: KeyStyle?): KeyStyles {
         val m = LinkedHashMap(map)
         if (style == null || style.isEmpty) m.remove(id) else m[id] = style
-        return KeyStyles(m)
+        return KeyStyles(m, topBar)
     }
 
-    fun toJson(): JSONObject = JSONObject().apply { for ((k, v) in map) put(k, v.toJson()) }
+    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty })
+
+    /** 一樣的設定（上一步用來比對有沒有改） */
+    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar
+    override fun hashCode() = map.hashCode() * 31 + (topBar?.hashCode() ?: 0)
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        for ((k, v) in map) put(k, v.toJson())
+        topBar?.let { put(TOP_BAR, it.toJson()) }
+    }
 
     /** 整個鍵盤的背景圖（不是按鍵；跟按鍵樣式存在一起，上一步、匯出、恢復預設都會一起處理） */
     val keyboardImage: ImageFill? get() = map[KEYBOARD]?.bgImage
@@ -153,6 +199,8 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap()) {
         val EMPTY = KeyStyles()
         /** 鍵盤背景圖的代號 */
         const val KEYBOARD = "@keyboard"
+        /** 上方列顏色（存檔裡的代號） */
+        const val TOP_BAR = "@topbar"
 
         fun idOf(key: Key): String = when (key.act) {
             Act.ZHUYIN -> "zy:" + key.label
@@ -185,10 +233,11 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap()) {
             if (o == null) return EMPTY
             val m = LinkedHashMap<String, KeyStyle>()
             for (k in o.keys()) {
+                if (k == TOP_BAR) continue
                 val s = o.optJSONObject(k)?.let { KeyStyle.fromJson(it) } ?: continue
                 if (!s.isEmpty) m[k] = s
             }
-            return KeyStyles(m)
+            return KeyStyles(m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)))
         }
 
         fun load(prefs: Prefs): KeyStyles = try {
