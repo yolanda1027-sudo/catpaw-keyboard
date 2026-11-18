@@ -347,6 +347,7 @@ class SettingsActivity : Activity() {
         outer.addView(sv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         Ui.fitSystemBars(outer)
         setContentView(outer)
+        Ui.matchSystemBarIcons(this)
         updateBackCallback()
         actionBar?.title = info?.title?.substringAfter(' ') ?: getString(R.string.app_name)
         actionBar?.setDisplayHomeAsUpEnabled(info != null)
@@ -988,6 +989,8 @@ class SettingsActivity : Activity() {
                 textSize = 13f
                 minWidth = 0
                 minimumWidth = 0
+                // 一格只有螢幕的 1/4 寬：三星按鈕預設左右留白很多，箭頭會被擠到只剩一個點
+                setPadding(0, paddingTop, 0, paddingBottom)
                 isEnabled = enabled
                 alpha = if (enabled) 1f else 0.35f
                 contentDescription = if (dir < 0) "往前" else "往後"

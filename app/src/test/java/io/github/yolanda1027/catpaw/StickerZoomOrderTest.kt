@@ -102,9 +102,12 @@ class StickerZoomOrderTest {
         val kr = (f("keyRects").get(kv) as List<*>).first {
             (it!!.javaClass.getDeclaredField("key").apply { isAccessible = true }.get(it) as Key).text == name
         }
-        f("pressed").set(kv, kr)
-        (f("longPressRunnable").get(kv) as Runnable).run()
-        assertEquals(name, kv.stickerZoom)
+        // 真的按住不放（以前漏了：貼圖按下去根本沒開始算長按）
+        val r = kr!!.javaClass.getDeclaredField("rect").apply { isAccessible = true }.get(kr) as android.graphics.RectF
+        val t0 = android.os.SystemClock.uptimeMillis()
+        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, r.centerX(), r.centerY() + kv.floatH, 0))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(Prefs(ctx).longPressMs + 50L, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals("按住不放要跳出放大版", name, kv.stickerZoom)
         val b = Bitmap.createBitmap(kv.width, kv.height, Bitmap.Config.ARGB_8888)
         kv.draw(Canvas(b))
         File("build/renders").mkdirs()

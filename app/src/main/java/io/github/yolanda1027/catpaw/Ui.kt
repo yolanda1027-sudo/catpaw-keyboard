@@ -23,6 +23,18 @@ object Ui {
     }
 
     /**
+     * 滿版之後狀態列是透明的，直接疊在淺色的標題列上；系統不知道底下是淺色，
+     * 時間、電量還是畫白色，幾乎看不到。淺色模式時跟系統說「底下是淺色」，圖示改畫深色。
+     */
+    fun matchSystemBarIcons(a: Activity) {
+        val night = (a.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val both = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+            android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+        a.window.insetsController?.setSystemBarsAppearance(if (night) 0 else both, both)
+    }
+
+    /**
      * Android 15 以後（targetSdk ≥ 35）畫面一律「滿版」：App 會畫到狀態列、導覽列（手勢條）、
      * 瀏海和鍵盤底下。這裡讓這個 view 自動往內縮，內容不會被它們蓋住。
      *

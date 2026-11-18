@@ -47,4 +47,15 @@ class Api36Test {
         v.dispatchApplyWindowInsets(WindowInsets.Builder().setInsets(WindowInsets.Type.ime(), Insets.of(0, 0, 0, 700)).build())
         assertEquals(740, v.paddingBottom)
     }
+
+    /** 淺色模式：狀態列、導覽列的圖示要畫深色（不然白字疊在淺色標題列上看不到） */
+    @Test fun lightModeUsesDarkBarIcons() {
+        for (a in listOf(
+            Robolectric.buildActivity(SettingsActivity::class.java).setup().get(),
+            Robolectric.buildActivity(StudioActivity::class.java).setup().get(),
+        )) {
+            val want = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+            assertEquals(a.javaClass.simpleName, want, a.window.insetsController!!.systemBarsAppearance and want)
+        }
+    }
 }

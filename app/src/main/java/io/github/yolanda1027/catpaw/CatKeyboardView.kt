@@ -1781,7 +1781,8 @@ class CatKeyboardView(
         playEffect(kr)
         when {
             kr.key.act == Act.BACKSPACE -> handler.postDelayed(repeatRunnable, 400)
-            kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP || itemActions?.invoke(kr.key) != null ->
+            kr.key.sub != null || kr.key.act == Act.SPACE || kr.key.act == Act.CLIP || kr.key.act == Act.STICKER ||
+                itemActions?.invoke(kr.key) != null ->
                 handler.postDelayed(longPressRunnable, prefs.longPressMs.toLong())
         }
         invalidate()
