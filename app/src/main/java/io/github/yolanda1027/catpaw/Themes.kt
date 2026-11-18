@@ -106,6 +106,13 @@ abstract class KbTheme(protected val dp: Float) {
         fill.alpha = if (pressed) 60 else 22
         c.drawRoundRect(box, 10 * dp, 10 * dp, fill)
         fill.alpha = 255
+        drawClipText(c, r, label, rowH, text)
+    }
+
+    /** 剪貼簿條上的字：靠左，太長就截掉加「…」 */
+    fun drawClipText(c: Canvas, r: RectF, label: String, rowH: Float, color: Int) {
+        if (label.isEmpty()) return
+        val box = RectF(r.left + 6 * dp, r.top + 4 * dp, r.right - 6 * dp, r.bottom - 4 * dp)
         val size = rowH * 0.3f
         val maxW = box.width() - 28 * dp
         var shown = label
@@ -113,7 +120,7 @@ abstract class KbTheme(protected val dp: Float) {
             while (shown.isNotEmpty() && measure("$shown…", size) > maxW) shown = shown.dropLast(1)
             shown += "…"
         }
-        drawTextLeft(c, shown, box.left + 14 * dp, box.centerY(), size, text)
+        drawTextLeft(c, shown, box.left + 14 * dp, box.centerY(), size, color)
     }
 
     /** 長按選單的配色 */
@@ -316,7 +323,8 @@ abstract class KbTheme(protected val dp: Float) {
         when (key.style) {
             Style.CHAR -> drawLabels(c, key, label, r.centerX(), r.centerY(), rowH, main, dim, maxW = r.width() * 0.9f)
             Style.SPACE -> drawText(c, label, r.centerX(), r.centerY(), rowH * 0.22f, main)
-            Style.CLIP -> Unit
+            // 剪貼簿條（借一般字鍵的樣式時走這裡；以前什麼都不畫，字就不見了）
+            Style.CLIP -> drawClipText(c, r, label, rowH, main)
             else -> {
                 val icon = key.icon
                 if (icon != null) drawIcon(c, icon, r.centerX(), r.centerY(), rowH * 0.46f, main, shift, backspaceCutout?.let { body ?: it })

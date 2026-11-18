@@ -462,7 +462,13 @@ class CatKeyboardView(
             sticker != null -> Stickers.draw(c, sticker, kr.rect, isPressed, 5 * dp)
             st?.hideLabel == true -> Unit
             else -> {
-                val main = st?.text ?: native?.text ?: theme.text
+                var main = st?.text ?: native?.text ?: theme.text
+                if (kr.key.act == Act.CLIP && st?.text == null) {
+                    // 剪貼簿條借了字鍵的底（顏色或圖片），主題原本的字色可能看不清楚：換成看得清楚的
+                    val under = bodyColor?.takeIf { android.graphics.Color.alpha(it) > 0 }
+                        ?: st?.bgImage?.let { f -> fillBitmap(f.img)?.let { b -> b.getPixel(b.width / 2, b.height / 2) } }
+                    if (under != null && !readable(main, under)) main = CustomTheme.contrastOn(under)
+                }
                 val dim = if (st?.text != null || native != null) (main and 0x00FFFFFF) or (0xA8 shl 24) else theme.textDim
                 // 透明的底色不能拿來挖刪除鍵的 X（不然 X 會不見）
                 theme.drawKeyContent(c, kr.rect, kr.key, labelFor(kr.key), shiftState, rowH, main, dim, bodyColor?.takeIf { android.graphics.Color.alpha(it) > 0 })

@@ -273,10 +273,17 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
         if (map.isEmpty()) return null
         val own = map[idOf(key)]
         val group = map[groupOf(key).id]
-        return when {
+        val st = when {
             own == null -> group
             else -> own.over(group)
-        }?.takeIf { !it.isEmpty }
+        }
+        // 剪貼簿那幾條：借一般字鍵的外觀（底圖、顏色、外框），但字的位置、隱藏、透明不借——
+        // 位置是照按鍵寬度算的，剪貼簿條是字鍵的 10 倍寬，字會跑出框外或整個不見
+        val fixed = if (key.act == Act.CLIP && st != null) st.copy(
+            hideLabel = null, labels = null, order = null,
+            text = st.text?.takeIf { android.graphics.Color.alpha(it) > 0 },
+        ) else st
+        return fixed?.takeIf { !it.isEmpty }
     }
 
     fun with(id: String, style: KeyStyle?): KeyStyles {
