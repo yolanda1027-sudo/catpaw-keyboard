@@ -13,7 +13,7 @@ android {
         targetSdk = 34
         // CI 每次建置的編號都會往上加，手機才能直接「更新」而不用先解除安裝
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.39.0"
+        versionName = "0.40.0"
     }
 
     signingConfigs {
@@ -44,6 +44,15 @@ android {
         jvmTarget = "17"
     }
 }
+
+// 開放原始碼授權：打包時把 repo 的 third_party/（授權全文）複製到 App 的 assets/licenses/，
+// 設定裡的「開放原始碼授權」頁就是讀這裡。授權檔只要維護 third_party/ 這一份。
+val copyLicenses = tasks.register<Copy>("copyLicenses") {
+    from(rootProject.file("third_party"))
+    into(layout.buildDirectory.dir("generated/licenseAssets/licenses"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets"))
+tasks.named("preBuild") { dependsOn(copyLicenses) }
 
 android {
     testOptions {

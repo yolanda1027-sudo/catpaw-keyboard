@@ -243,6 +243,7 @@ class SettingsActivity : Activity() {
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
         PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
+        PageInfo("licenses", "📜 開放原始碼授權", "注音詞庫、繁簡對照表、表情符號、字體的授權", false),
         // 從「外觀」的主題清單跳進來，不列在首頁
         PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true, parent = "look", listed = false),
     )
@@ -316,6 +317,7 @@ class SettingsActivity : Activity() {
             "clip" -> pageClip()
             "mystickers" -> pageMyStickers()
             "tips" -> pageTips()
+            "licenses" -> pageLicenses()
             else -> pageHome()
         }
         updateStatus()
@@ -962,6 +964,62 @@ class SettingsActivity : Activity() {
         setTypeface(typeface, Typeface.BOLD)
         setPadding(0, (24 * dp).toInt(), 0, (8 * dp).toInt())
     })
+
+    // ---------- 開放原始碼授權 ----------
+
+    private fun pageLicenses() {
+        note("貓爪鍵盤用到下面這些開放原始碼的資料和字體，感謝每一位作者。點「看授權全文」可以看完整的授權條款。")
+        for (e in OpenSource.ENTRIES) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val p = (14 * dp).toInt()
+                setPadding(p, (12 * dp).toInt(), p, (12 * dp).toInt())
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = 14 * dp
+                    setColor(0x0F888888)
+                    setStroke((1 * dp).toInt(), 0x22888888)
+                }
+            }
+            card.addView(TextView(this).apply { text = e.name; textSize = 16f; setTypeface(typeface, Typeface.BOLD) })
+            card.addView(TextView(this).apply { text = e.usage; textSize = 13f; alpha = 0.75f; setPadding(0, (2 * dp).toInt(), 0, (6 * dp).toInt()) })
+            card.addView(TextView(this).apply { text = e.license; textSize = 14f })
+            card.addView(TextView(this).apply { text = e.copyright; textSize = 12f; alpha = 0.75f })
+            card.addView(TextView(this).apply {
+                text = e.url
+                textSize = 12f
+                setTextIsSelectable(true)
+                setPadding(0, (2 * dp).toInt(), 0, 0)
+            })
+            // 授權全文：點了才展開（不然整頁會很長）
+            val full = TextView(this).apply {
+                textSize = 11f
+                typeface = Typeface.MONOSPACE
+                setTextIsSelectable(true)
+                visibility = View.GONE
+                setPadding(0, (8 * dp).toInt(), 0, 0)
+            }
+            card.addView(Button(this).apply {
+                text = "看授權全文"
+                isAllCaps = false
+                setOnClickListener {
+                    if (full.visibility == View.VISIBLE) {
+                        full.visibility = View.GONE
+                        text = "看授權全文"
+                    } else {
+                        full.text = e.files.joinToString("\n\n────────\n\n") { f -> OpenSource.text(this@SettingsActivity, f)?.let { OpenSource.reflow(it) } ?: "（找不到 $f）" }
+                        full.visibility = View.VISIBLE
+                        text = "收起來"
+                    }
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = (6 * dp).toInt() })
+            card.addView(full)
+            root.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (10 * dp).toInt()
+            })
+        }
+        subTitle("其他來源")
+        note(OpenSource.OTHER_SOURCES)
+    }
 
     private fun subTitle(s: String) = root.addView(TextView(this).apply {
         text = s

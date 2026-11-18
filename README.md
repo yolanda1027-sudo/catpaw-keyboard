@@ -37,7 +37,7 @@
 原檔未修改，放在 `app/src/main/assets/opencc/`。授權全文見 `third_party/opencc/`。
 
 表情符號清單（`app/src/main/assets/emoji.txt`）用 `tools/build_emoji.py` 從
-[unicode-emoji-json](https://github.com/muan/unicode-emoji-json)（MIT License，資料來自 unicode.org）轉出來，
+[unicode-emoji-json](https://github.com/muan/unicode-emoji-json)（MIT License，資料來自 unicode.org，Unicode License v3）轉出來，
 只收 Emoji 15.0 以前的。授權全文見 `third_party/emoji/`。
 
 ## 字體來源
@@ -46,6 +46,13 @@
 - [jf open 粉圓](https://github.com/justfont/open-huninn-font) 2.1（justfont）：原檔，未修改
 - [芫荽 Iansui](https://github.com/ButTaiwan/iansui)：只保留約 7,900 個常用字與注音、標點（子集化）
 - [霞鶩文楷 TC](https://github.com/lxgw/LxgwWenkaiTC) Regular：同上
+
+## 授權在 App 裡看得到
+
+`third_party/` 裡的授權全文，打包時會自動複製到 App 的 `assets/licenses/`，
+設定裡的「📜 開放原始碼授權」頁就是讀這裡（清單在 `OpenSource.kt`）。
+之後新增第三方資料時，授權檔放進 `third_party/`、再在 `OpenSource.kt` 加一筆；
+`LicensesPageTest` 會檢查有沒有漏掉。
 
 ## 顏文字來源
 
