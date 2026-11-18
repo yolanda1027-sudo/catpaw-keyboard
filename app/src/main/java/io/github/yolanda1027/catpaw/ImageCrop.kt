@@ -73,7 +73,62 @@ object ImageCrop {
             return (((ln(z) - lo) / (hi - lo)) * 1000).toInt().coerceIn(0, 1000)
         }
         var syncing = false
-        view.onChange = { f -> syncing = true; bar.progress = barOf(f.zoom); syncing = false }
+
+        // 拉寬／拉高（對數刻度：中間＝原比例，往右變寬、往左變高，最多 4 倍）
+        val stretchLabel = label("", 13f, 0.85f).apply { gravity = Gravity.START; setPadding((22 * dp).toInt(), (4 * dp).toInt(), 0, 0) }
+        root.addView(stretchLabel)
+        val stretchRow = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
+        }
+        stretchRow.addView(label("↕", 18f))
+        val sbar = SeekBar(a).apply { max = 1000 }
+        stretchRow.addView(sbar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        stretchRow.addView(label("↔", 18f))
+        root.addView(stretchRow)
+        val lnMax = ln(ImageFill.MAX_STRETCH)
+        fun sbarOf(st: Float) = (((ln(st) / lnMax) + 1f) * 500).toInt().coerceIn(0, 1000)
+        fun stretchText(st: Float) = when {
+            kotlin.math.abs(st - 1f) < 0.02f -> "拉寬／拉高：原比例"
+            st > 1f -> "拉寬／拉高：寬 ×%.2f".format(st)
+            else -> "拉寬／拉高：高 ×%.2f".format(1f / st)
+        }
+        fun sync(f: ImageFill) {
+            syncing = true
+            bar.progress = barOf(f.zoom)
+            sbar.progress = sbarOf(f.stretch)
+            stretchLabel.text = stretchText(f.stretch)
+            syncing = false
+        }
+        sbar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (syncing || !fromUser) return
+                var st = exp((p / 500f - 1f) * lnMax)
+                if (kotlin.math.abs(st - 1f) < 0.03f) st = 1f // 中間附近吸到原比例
+                view.setStretch(st)
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        val quick = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding((12 * dp).toInt(), 0, (12 * dp).toInt(), 0)
+        }
+        fun qbtn(s: String, onClick: () -> Unit) = quick.addView(Button(a).apply {
+            text = s
+            isAllCaps = false
+            textSize = 13f
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            val m = (4 * dp).toInt()
+            setMargins(m, 0, m, 0)
+        })
+        qbtn("原比例") { view.setStretch(1f) }
+        qbtn("剛好塞滿框") { view.fitFrame() }
+        root.addView(quick)
+
+        view.onChange = { f -> sync(f) }
         bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (syncing || !fromUser) return
@@ -84,7 +139,7 @@ object ImageCrop {
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
-        view.post { syncing = true; bar.progress = barOf(view.fill.zoom); syncing = false }
+        view.post { sync(view.fill) }
 
         val btns = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -132,7 +187,7 @@ class CropView(
     private val guide = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0x66FFFFFF }
     private val outside = Path()
 
-    val minZoom: Float get() = ImageFill.minZoom(frame, bmp.width, bmp.height)
+    val minZoom: Float get() = fill.minZoomFor(frame, bmp.width, bmp.height)
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         val pad = 24 * dp
@@ -153,8 +208,14 @@ class CropView(
 
     fun setZoom(z: Float) = set(fill.copy(zoom = z))
 
-    /** 重設：一般是「剛好鋪滿」；照圖片形狀的是「整張放進框裡」（毛邊才不會被裁掉） */
-    fun reset() = set(fill.copy(zoom = if (fill.shape) ImageFill.FIT else 1f, cx = 0.5f, cy = 0.5f))
+    /** 重設：一般是「剛好鋪滿」；照圖片形狀的是「整張放進框裡」（毛邊才不會被裁掉）；拉寬拉高回到原比例 */
+    fun reset() = set(fill.copy(zoom = if (fill.shape) ImageFill.FIT else 1f, cx = 0.5f, cy = 0.5f, stretch = 1f))
+
+    /** 只拉寬或只拉高（倍數＝寬度乘上多少） */
+    fun setStretch(st: Float) = set(fill.copy(stretch = st.coerceIn(ImageFill.MIN_STRETCH, ImageFill.MAX_STRETCH)))
+
+    /** 剛好塞滿框：拉到跟框一樣的比例，整張圖都看得到 */
+    fun fitFrame() = set(fill.fitFrame(frame, bmp.width, bmp.height))
 
     private val checker = Paint()
 

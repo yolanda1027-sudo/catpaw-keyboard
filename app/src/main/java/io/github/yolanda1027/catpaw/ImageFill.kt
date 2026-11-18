@@ -34,6 +34,8 @@ data class ImageFill(
     val nine: Boolean = false,
     val sx: Float = NineFrame.DEFAULT,
     val sy: Float = NineFrame.DEFAULT,
+    /** 只拉寬或只拉高：圖片的寬度乘上這個倍數（> 1 變寬、< 1 變高，1 = 原比例） */
+    val stretch: Float = 1f,
 ) {
     val isGif get() = img.endsWith(".gif")
 
@@ -41,8 +43,11 @@ data class ImageFill(
     val ownsShape get() = shape || nine
 
     /** 整張圖要畫在哪裡，框裡才會剛好露出選好的那一塊 */
-    fun destRect(frame: RectF, iw: Int, ih: Int): RectF {
-        if (iw <= 0 || ih <= 0 || frame.isEmpty) return RectF(frame)
+    fun destRect(frame: RectF, iw0: Int, ih0: Int): RectF {
+        if (iw0 <= 0 || ih0 <= 0 || frame.isEmpty) return RectF(frame)
+        // 拉寬／拉高：當成一張寬度不一樣的圖來算
+        val iw = iw0 * stretch
+        val ih = ih0.toFloat()
         val s = cover(frame, iw, ih) * zoom.coerceIn(minZoom(frame, iw, ih), MAX_ZOOM)
         val w = iw * s
         val h = ih * s
@@ -54,8 +59,10 @@ data class ImageFill(
     }
 
     /** 把中心點拉回合理的範圍（不會拖到圖片外面露出一大片空白） */
-    fun normalized(frame: RectF, iw: Int, ih: Int): ImageFill {
-        if (iw <= 0 || ih <= 0 || frame.isEmpty) return this
+    fun normalized(frame: RectF, iw0: Int, ih0: Int): ImageFill {
+        if (iw0 <= 0 || ih0 <= 0 || frame.isEmpty) return this
+        val iw = iw0 * stretch
+        val ih = ih0.toFloat()
         val z = zoom.coerceIn(minZoom(frame, iw, ih), MAX_ZOOM)
         val s = cover(frame, iw, ih) * z
         return copy(zoom = z, cx = clampCenter(cx, frame.width() / (iw * s)), cy = clampCenter(cy, frame.height() / (ih * s)))
@@ -66,7 +73,18 @@ data class ImageFill(
         .apply {
             if (shape) put("shape", true)
             if (nine) put("nine", true).put("sx", sx.toDouble()).put("sy", sy.toDouble())
+            if (stretch != 1f) put("stretch", stretch.toDouble())
         }
+
+    /** 這張圖（含拉寬／拉高）最小可以縮到多小 */
+    fun minZoomFor(frame: RectF, iw: Int, ih: Int): Float = minZoom(frame, iw * stretch, ih.toFloat())
+
+    /** 剛好塞滿框：拉寬或拉高到跟框一樣的比例，整張圖都看得到、不裁掉 */
+    fun fitFrame(frame: RectF, iw: Int, ih: Int): ImageFill {
+        if (iw <= 0 || ih <= 0 || frame.isEmpty) return this
+        val st = ((frame.width() / frame.height()) / (iw.toFloat() / ih)).coerceIn(MIN_STRETCH, MAX_STRETCH)
+        return copy(stretch = st, zoom = 1f, cx = 0.5f, cy = 0.5f)
+    }
 
     companion object {
         const val MAX_ZOOM = 8f
@@ -74,11 +92,17 @@ data class ImageFill(
         const val FIT = 0.05f
 
         /** 剛好鋪滿框的倍率 */
-        fun cover(frame: RectF, iw: Int, ih: Int) = max(frame.width() / iw, frame.height() / ih)
+        /** 拉寬／拉高最多到幾倍 */
+        const val MIN_STRETCH = 0.25f
+        const val MAX_STRETCH = 4f
+
+        fun cover(frame: RectF, iw: Int, ih: Int) = cover(frame, iw.toFloat(), ih.toFloat())
+        fun cover(frame: RectF, iw: Float, ih: Float) = max(frame.width() / iw, frame.height() / ih)
 
         /** 最小可以縮到多小：整張圖剛好放進框裡 */
-        fun minZoom(frame: RectF, iw: Int, ih: Int): Float =
-            if (iw <= 0 || ih <= 0 || frame.isEmpty) 1f else min(frame.width() / iw, frame.height() / ih) / cover(frame, iw, ih)
+        fun minZoom(frame: RectF, iw: Int, ih: Int): Float = minZoom(frame, iw.toFloat(), ih.toFloat())
+        fun minZoom(frame: RectF, iw: Float, ih: Float): Float =
+            if (iw <= 0f || ih <= 0f || frame.isEmpty) 1f else min(frame.width() / iw, frame.height() / ih) / cover(frame, iw, ih)
 
         /** @param visible 框佔圖片的幾分之幾（> 1 = 圖比框小，只能放正中間） */
         private fun clampCenter(c: Float, visible: Float): Float {
@@ -98,6 +122,7 @@ data class ImageFill(
                 nine = nine,
                 sx = f("sx", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
                 sy = f("sy", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
+                stretch = f("stretch", 1f, MIN_STRETCH, MAX_STRETCH),
             )
         }
 
