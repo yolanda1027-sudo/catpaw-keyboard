@@ -29,16 +29,17 @@ class ClipLabelTest {
         labels = mapOf("main" to LabelStyle(dx = 0.3f, hidden = true), "sub" to LabelStyle(dy = 0.2f)),
     )
 
-    @Test fun clipItemsKeepLookButNotLabelTweaks() {
+    /** 每一頁分開設計：注音／英文頁的字鍵樣式不會套到剪貼簿；剪貼簿頁自己設計的才會 */
+    @Test fun clipPageHasItsOwnDesign() {
+        val clip = Layouts.clipRows(listOf(ClipHistory.Item("貓爪鍵盤測試", 0L, false)), 0).onPage("clip")[0][0]
+        assertEquals("clip/@clip", KeyStyles.groupIdOf(clip))
         val ks = KeyStyles(mapOf(KeyStyles.Group.CHAR.id to charStyle))
-        val clip = Layouts.clipRows(listOf(ClipHistory.Item("貓爪鍵盤測試", 0L, false)), 0)[0][0]
-        val st = ks.resolve(clip)!!
-        assertEquals("外觀照借", charStyle.bg, st.bg)
-        assertNull(st.hideLabel)
-        assertNull(st.labels)
-        assertNull("透明的字色不借", st.text)
+        assertNull("注音／英文頁的字鍵樣式不借給剪貼簿", ks.resolve(clip))
+        val mine = KeyStyle(bg = 0xFFCCE5FF.toInt(), text = 0xFF223344.toInt())
+        val ks2 = ks.with("clip/@clip", mine)
+        assertEquals(mine.bg, ks2.resolve(clip)!!.bg)
         // 一般字鍵本身不受影響
-        assertEquals(true, ks.resolve(Key("a", Act.TEXT))!!.hideLabel)
+        assertEquals(true, ks2.resolve(Key("a", Act.TEXT))!!.hideLabel)
     }
 
     @Test fun renderClipPageWithTweakedCharStyle() {
@@ -47,7 +48,8 @@ class ClipLabelTest {
         KeyStyles.save(prefs, KeyStyles(mapOf(KeyStyles.Group.CHAR.id to charStyle)))
         val kv = CatKeyboardView(ctx, prefs, Haptics(ctx))
         kv.reloadPrefs()
-        kv.rows = Layouts.clipRows(listOf(ClipHistory.Item("貓爪鍵盤測試", 0L, false), ClipHistory.Item("第二筆", 0L, true)), 0)
+        kv.pageScope = "clip"
+        kv.rows = Layouts.clipRows(listOf(ClipHistory.Item("貓爪鍵盤測試", 0L, false), ClipHistory.Item("第二筆", 0L, true)), 0).onPage("clip")
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         val bmp = Bitmap.createBitmap(kv.width, kv.height, Bitmap.Config.ARGB_8888)

@@ -123,6 +123,22 @@ class CatKeyboardView(
         }
     private val kbH get() = height - floatH - navInset
 
+    /**
+     * 現在顯示的是哪一頁（KeyStyles.PAGES）："" 注音／英文、"sym" 符號…
+     * 背景圖、上方列、背景圖案都照這一頁自己的設定；按鍵本身用 Key.page 分。
+     */
+    var pageScope: String = ""
+        set(v) {
+            if (field == v) return
+            field = v
+            stripCache = null
+            panelCache = null
+            invalidate()
+        }
+
+    /** 這個圖案是貼在「這一頁」的背景上 */
+    private fun onMyBg(d: Decal) = d.target == Decal.bgFor(pageScope)
+
     /** 導覽列那一條塗鍵盤底色（設定裡的開關）；false = 塗系統原本的導覽列顏色 */
     private var navBarBg = false
 
@@ -379,7 +395,7 @@ class CatKeyboardView(
             c.drawRect(0f, kbH, w, kbH + navInset, navPaint)
         }
         drawTopBarBg(c, w)
-        keyStyles.keyboardImage?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
+        keyStyles.keyboardImageFor(pageScope)?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
         drawBgDecals(c, front = false)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
         drawTopBar(c, w)
@@ -655,7 +671,7 @@ class CatKeyboardView(
 
     // ---------- 上方列（中／En、選字列、符號分類列）的顏色 ----------
 
-    private val topStyle get() = keyStyles.topBar
+    private val topStyle get() = keyStyles.topBarFor(pageScope)
     /** 上方列設成透明：背景圖片往上鋪滿整個鍵盤 */
     private val topBarClear get() = topStyle?.bg?.let { android.graphics.Color.alpha(it) == 0 } == true
     private val topText get() = topStyle?.text ?: theme.text
@@ -825,7 +841,7 @@ class CatKeyboardView(
     private fun drawBgDecals(c: Canvas, front: Boolean) {
         if (decals.isEmpty()) return
         val r = bgRect
-        for (d in decals) if (d.onBackground && d.front == front) Decals.draw(c, d, r, r.height(), decalBitmaps[d.fileName], animOf(d))
+        for (d in decals) if (onMyBg(d) && d.front == front) Decals.draw(c, d, r, r.height(), decalBitmaps[d.fileName], animOf(d))
     }
 
     private fun drawKeyDecals(c: Canvas, kr: KeyRect) {
@@ -970,11 +986,11 @@ class CatKeyboardView(
     private fun decalAt(x: Float, y: Float): Decal? {
         val slop = 10 * dp
         fun hit(d: Decal) = targetOf(d)?.let { (r, ref) -> Decals.hit(d, r, ref, decalBitmaps[d.fileName], x, y, slop) } == true
-        decals.lastOrNull { it.onBackground && it.front && hit(it) }?.let { return it }
+        decals.lastOrNull { onMyBg(it) && it.front && hit(it) }?.let { return it }
         decals.lastOrNull { !it.onBackground && hit(it) }?.let { return it }
         // 按鍵後面的背景圖案：點在按鍵上就算點按鍵
         val onKey = keyRects.any { it.key.act != Act.GAP && it.rect.contains(x, y) }
-        return if (onKey) null else decals.lastOrNull { it.onBackground && !it.front && hit(it) }
+        return if (onKey) null else decals.lastOrNull { onMyBg(it) && !it.front && hit(it) }
     }
 
     /** 主題工作室選到的圖案（畫虛線框，手勢會移動它） */

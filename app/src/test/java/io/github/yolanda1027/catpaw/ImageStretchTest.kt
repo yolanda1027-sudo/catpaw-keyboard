@@ -88,7 +88,7 @@ class ImageStretchTest {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
         val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val root = a.window.decorView
-        (find(root) { it is Button && it.text.toString().startsWith("🖼️ 鍵盤背景") } as Button).performClick()
+        (find(root) { it is Button && it.text.toString().startsWith("🖼️ 這一頁的鍵盤背景") } as Button).performClick()
         ShadowLooper.idleMainLooper()
         (find(root) { it is Button && it.text == "📷 上傳圖片" } as Button).performClick()
         val req = shadowOf(a).nextStartedActivityForResult

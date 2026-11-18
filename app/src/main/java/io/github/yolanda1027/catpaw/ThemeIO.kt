@@ -242,7 +242,7 @@ object ThemeIO {
                     val n = rename[f.img]
                     if (n != null) q.copy(frame = f.copy(img = n)) else { lostImage = true; q.copy(frame = null) }
                 } ?: q
-            }))
+            }, loaded.pageTops))
             if (lostImage) warnings.add("有底圖的圖片壞掉了，那幾顆鍵先用底色")
         }
         o.optJSONObject("decals")?.let {

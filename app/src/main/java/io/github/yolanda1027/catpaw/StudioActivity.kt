@@ -30,8 +30,8 @@ class StudioActivity : Activity() {
     private var themeId = "classic"
     private lateinit var kv: CatKeyboardView
     private lateinit var panel: LinearLayout
-    private lateinit var tabZhuyin: Button
-    private lateinit var tabEnglish: Button
+    /** 上面那排分頁按鈕（注音、英文、符號…） */
+    private val tabButtons = LinkedHashMap<String, Button>()
     /** 放大的單顆按鍵（蓋在鍵盤上面） */
     private lateinit var zoom: KeyZoomView
     private lateinit var zoomBox: android.widget.FrameLayout
@@ -42,7 +42,12 @@ class StudioActivity : Activity() {
     private var selected: Key? = null
     /** true = 改「同一類的全部按鍵」，false = 只改選到的這顆 */
     private var groupScope = false
-    private var english = false
+    /** 正在編輯哪一頁：zh 注音、en 英文、sym 符號、kao 顏文字、emo 表情、stk 我的貼圖、clip 剪貼簿、num 數字 */
+    private var tab = "zh"
+    /** 這一頁在主題裡的代號（注音、英文都是 ""） */
+    private val page get() = if (tab == "zh" || tab == "en") "" else tab
+    /** 這一頁的鍵盤背景圖代號 */
+    private val kbId get() = KeyStyles.scoped(page, KeyStyles.KEYBOARD)
 
     private var decals: List<Decal> = emptyList()
     /** 正在編輯鍵盤背景（沒選按鍵） */
@@ -72,21 +77,25 @@ class StudioActivity : Activity() {
         prefs = if (savedInstanceState == null) ThemeStore.openWork(this, live, themeId) else Prefs(this, ThemeStore.WORK)
         styles = KeyStyles.load(prefs)
         decals = Decals.load(prefs)
-        english = savedInstanceState?.getBoolean("english") ?: false
+        tab = savedInstanceState?.getString("tab") ?: "zh"
         updateTitle()
 
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        // 要編輯哪一種鍵盤
+        // 要編輯哪一頁（每一頁的按鍵、背景、上方列可以各自設計）
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(px(12f), px(4f), px(12f), px(4f))
+            setPadding(px(8f), px(4f), px(8f), px(4f))
         }
-        tabZhuyin = tabButton("注音鍵盤") { switchLayout(false) }
-        tabEnglish = tabButton("英文鍵盤") { switchLayout(true) }
-        tabs.addView(tabZhuyin, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        tabs.addView(tabEnglish, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        outer.addView(tabs)
+        for ((id, title) in TABS) {
+            val b = tabButton(title) { switchTab(id) }
+            tabButtons[id] = b
+            tabs.addView(b, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        outer.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tabs)
+        })
 
         kv = CatKeyboardView(this, prefs, Haptics(this)).apply {
             // 快捷符號列有開的話預覽也放上去，看起來才跟實際打字時一樣
@@ -202,12 +211,12 @@ class StudioActivity : Activity() {
         // 上次離開時沒清掉的圖檔（例如 App 被系統關掉）先清一清；之後要等離開工作室才清，「上一步」才救得回刪掉的圖
         Decals.cleanup(this, decals)
         committed = snapshot()
-        switchLayout(english)
+        switchTab(tab)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putBoolean("english", english)
+        outState.putString("tab", tab)
         outState.putString(EXTRA_THEME, themeId)
     }
 
@@ -304,12 +313,53 @@ class StudioActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    private fun switchLayout(en: Boolean) {
-        english = en
-        kv.rows = if (en) Layouts.ENGLISH else Layouts.ZHUYIN
-        kv.isChinese = !en
-        tabZhuyin.alpha = if (en) 0.5f else 1f
-        tabEnglish.alpha = if (en) 1f else 0.5f
+    /** 換到某一頁：預覽換成那一頁的樣子（跟真的打字時一樣的分類列） */
+    private fun switchTab(id: String) {
+        tab = if (TABS.any { it.first == id }) id else "zh"
+        // 表情、顏文字的清單平常是鍵盤自己讀的；工作室單獨打開時還沒讀過
+        if (Emojis.groups.isEmpty()) Emojis.load(assets.open("emoji.txt").bufferedReader().use { it.readText() })
+        if (Symbols.kaomojiGroups.isEmpty()) Symbols.loadKaomoji(assets.open("kaomoji.txt").bufferedReader().use { it.readText() })
+        val p = page
+        kv.pageScope = p
+        kv.isChinese = tab != "en"
+        kv.quickItems = if (p.isEmpty() && prefs.quickBar) prefs.quickList() else emptyList()
+        kv.symbolTabs = null
+        kv.rows = when (tab) {
+            "en" -> Layouts.ENGLISH
+            "sym" -> {
+                val c = Symbols.categories[1]
+                kv.symbolTabs = Symbols.categories.map { it.tab }; kv.symbolTab = 1
+                kv.symbolPageCount = c.pages.size; kv.symbolPage = 0
+                Symbols.rows(c.pages[0], c.wide)
+            }
+            "kao" -> {
+                kv.symbolTabs = listOf<String?>("◁", null) + Symbols.kaomojiGroups.map { it.first }; kv.symbolTab = 2
+                val all = Symbols.kaomojiGroups.firstOrNull()?.second ?: emptyList()
+                kv.symbolPageCount = ((all.size + Symbols.PER_PAGE_WIDE - 1) / Symbols.PER_PAGE_WIDE).coerceAtLeast(1); kv.symbolPage = 0
+                Symbols.rows(all.take(Symbols.PER_PAGE_WIDE), true)
+            }
+            "emo", "stk" -> {
+                kv.symbolTabs = listOf<String?>(null, "🖼️") + Emojis.groups.map { it.first }
+                kv.symbolTab = if (tab == "stk") 1 else 2
+                kv.symbolPageCount = 1; kv.symbolPage = 0
+                if (tab == "stk") MyStickers.rows(this, 0) else Emojis.rows(Emojis.page(Emojis.groups[0].second, 0))
+            }
+            "clip" -> {
+                kv.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選、排順序"); kv.symbolTab = 0
+                kv.symbolPageCount = 1; kv.symbolPage = 0
+                Layouts.clipRows(listOf(
+                    ClipHistory.Item("複製過的文字會出現在這裡", 0L, false),
+                    ClipHistory.Item("釘選的會排在最前面", 0L, true),
+                ), 0)
+            }
+            "num" -> {
+                kv.symbolTabs = listOf("數字"); kv.symbolTab = 0
+                kv.symbolPageCount = 1; kv.symbolPage = 0
+                Layouts.NUMPAD
+            }
+            else -> Layouts.ZHUYIN
+        }.onPage(p)
+        for ((id, b) in tabButtons) b.alpha = if (id == tab) 1f else 0.5f
         selected = null
         groupScope = false
         animMode = null
@@ -323,7 +373,7 @@ class StudioActivity : Activity() {
     /** 目前在改的是哪個代號（單顆鍵或一整類） */
     private fun currentId(): String? {
         val key = selected ?: return null
-        return if (groupScope) KeyStyles.groupOf(key).id else KeyStyles.idOf(key)
+        return if (groupScope) KeyStyles.groupIdOf(key) else KeyStyles.idOf(key)
     }
 
     private fun update(change: (KeyStyle) -> KeyStyle?, rebuild: Boolean = true) {
@@ -463,7 +513,7 @@ class StudioActivity : Activity() {
         kv.editTopBar = topSelected
         kv.editQuickBar = quickSelected
         // 快捷列在設定裡關著的話，改它的顏色時先顯示出來看
-        kv.quickItems = if (prefs.quickBar || quickSelected) prefs.quickList() else emptyList()
+        kv.quickItems = if (page.isEmpty() && (prefs.quickBar || quickSelected)) prefs.quickList() else emptyList()
         // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
         val zoomKey = selected?.takeIf { !bgSelected && !groupScope && animMode != GLOBAL }
         zoomBox.visibility = if (zoomKey != null) View.VISIBLE else View.GONE
@@ -482,11 +532,12 @@ class StudioActivity : Activity() {
         val key = selected
         if (key == null) {
             kv.editHighlight = null
-            text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面「中／En」那一列），就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
-            text("改好會直接套用到鍵盤上。想換整體主題、字體，到「${getString(R.string.app_name)}」設定的外觀頁。", 13f, dim = true)
-            button("🖼️ 鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
-            button("🔝 上方列（中／En、選字列）的顏色") { topSelected = true; refresh() }
-            button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
+            text("正在設計：${TABS.first { it.first == tab }.second}頁", 18f, bold = true).setPadding(0, px(10f), 0, 0)
+            text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面那一列），就可以開始改它的樣子。每一頁（上面的分頁）各自設計；沒設計過的頁是主題原本的樣子。", 15f).setPadding(0, px(8f), 0, px(8f))
+            text("改好按右上角「儲存」才會套用到鍵盤上。想換整體主題、字體，到「${getString(R.string.app_name)}」設定的外觀頁。", 13f, dim = true)
+            button("🖼️ 這一頁的鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
+            button("🔝 這一頁的上方列顏色") { topSelected = true; refresh() }
+            if (page.isEmpty()) button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             if (styles.keyEntries.isNotEmpty()) {
                 text("目前有 ${styles.keyEntries.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
@@ -515,6 +566,12 @@ class StudioActivity : Activity() {
                 refresh()
             }
             panel.addView(rg)
+        }
+        val cid = currentId()!!
+        if (styles.map[cid] != null || decals.any { it.target == cid }) {
+            button("📋 這${if (groupScope) "一類" else "顆鍵"}的設計套用到所有頁面") {
+                confirmAllPages(if (groupScope) "「${group.title}」的設計" else "${KeyStyles.nameOf(key)}的設計（含上面的圖案）") { copyKeyToAllPages(cid) }
+            }
         }
 
         val cur = styles.map[currentId()] ?: KeyStyle()
@@ -616,6 +673,84 @@ class StudioActivity : Activity() {
         refresh()
     }
 
+    // ---------- 套用到所有頁面 ----------
+
+    /** 先問一下（會蓋掉其他頁原本的設計） */
+    private fun confirmAllPages(what: String, go: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle("套用到所有頁面？")
+            .setMessage("把${what}複製到每一頁（注音／英文、符號、顏文字、表情、我的貼圖、剪貼簿、數字），其他頁原本的這部分會被換掉。\n\n複製過去之後，每一頁還是可以各自再調。")
+            .setPositiveButton("套用") { _, _ -> go() }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+     * 圖案複製到每一頁：貼在 [fromTarget] 上的圖案，每一頁的同一個位置各放一份（那些頁原本的先清掉）。
+     * @return 每一頁的「舊圖案 id → 新圖案 id」（按鍵上字和圖案的上下順序要跟著換）
+     */
+    private fun copyDecalsToAllPages(fromTarget: String): Map<String, Map<String, String>> {
+        val base = KeyStyles.baseOf(fromTarget)
+        val mine = decals.filter { it.target == fromTarget }
+        val others = KeyStyles.PAGES.map { KeyStyles.scoped(it.id, base) }.filter { it != fromTarget }
+        val idMaps = HashMap<String, Map<String, String>>()
+        val copies = ArrayList<Decal>()
+        for (t in others) {
+            val m = HashMap<String, String>()
+            for (d in mine) {
+                val n = d.copy(id = Decals.newId(), target = t)
+                m[d.id] = n.id
+                copies.add(n)
+            }
+            idMaps[t] = m
+        }
+        saveDecals(decals.filter { it.target !in others } + copies, rebuild = false)
+        return idMaps
+    }
+
+    /** 這顆鍵（或這一整類）的設計，連同貼在這顆鍵上的圖案，複製到每一頁 */
+    private fun copyKeyToAllPages(id: String) {
+        commitHistory()
+        styles = styles.copyToAllPages(id)
+        if (!KeyStyles.baseOf(id).startsWith("@")) {
+            val idMaps = copyDecalsToAllPages(id)
+            // 按鍵上字和圖案的上下順序：換成那一頁的圖案 id
+            var m = styles
+            for ((t, map) in idMaps) {
+                val st = m.map[t] ?: continue
+                val order = st.order ?: continue
+                m = m.with(t, st.copy(order = order.map { map[it] ?: it }))
+            }
+            styles = m
+        }
+        KeyStyles.save(prefs, styles)
+        kv.reloadPrefs()
+        kv.setDecalsLive(decals)
+        zoom.invalidate()
+        android.widget.Toast.makeText(this, "已套用到所有頁面，每一頁還是可以自己再調", android.widget.Toast.LENGTH_SHORT).show()
+        refresh()
+    }
+
+    /** 這一頁的背景（背景圖片、背景上的圖案）複製到每一頁 */
+    private fun copyBackgroundToAllPages() {
+        commitHistory()
+        styles = styles.copyToAllPages(kbId)
+        KeyStyles.save(prefs, styles)
+        copyDecalsToAllPages(Decal.bgFor(page))
+        kv.reloadPrefs()
+        android.widget.Toast.makeText(this, "已套用到所有頁面，每一頁還是可以自己再調", android.widget.Toast.LENGTH_SHORT).show()
+        refresh()
+    }
+
+    private fun copyTopBarToAllPages() {
+        commitHistory()
+        styles = styles.copyTopBarToAllPages(page)
+        KeyStyles.save(prefs, styles)
+        kv.reloadPrefs()
+        android.widget.Toast.makeText(this, "已套用到所有頁面，每一頁還是可以自己再調", android.widget.Toast.LENGTH_SHORT).show()
+        refresh()
+    }
+
     private fun saveDecals(list: List<Decal>, rebuild: Boolean = true) {
         decals = list
         Decals.save(prefs, list)
@@ -630,7 +765,7 @@ class StudioActivity : Activity() {
     }
 
     /** 新圖案的預設位置：按鍵上放左上角（像你畫的小貓）、背景放正中間 */
-    private fun newDecal(target: String, img: String) = if (target == Decal.BG)
+    private fun newDecal(target: String, img: String) = if (KeyStyles.baseOf(target) == Decal.BG)
         Decal(Decals.newId(), target, img, x = 0.5f, y = 0.5f, size = 0.3f)
     else
         Decal(Decals.newId(), target, img, x = 0.24f, y = 0.27f, size = 0.36f)
@@ -639,11 +774,14 @@ class StudioActivity : Activity() {
         kv.editHighlight = null
         text("正在編輯：鍵盤背景", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
         section("背景圖片")
-        imageRow(KeyStyles.KEYBOARD, "", styles.keyboardImage)
+        imageRow(kbId, "", styles.keyboardImageFor(page))
         text("鋪滿選字列下面的整塊（按鍵後面）。", 13f, dim = true)
         section("背景上的圖案")
         text("背景的圖案預設在按鍵後面（可以放在鍵和鍵之間的空隙），也可以設定成蓋在按鍵上面。", 13f, dim = true)
-        decalList(Decal.BG)
+        decalList(Decal.bgFor(page))
+        if (styles.keyboardImageFor(page) != null || decals.any { it.target == Decal.bgFor(page) }) {
+            button("📋 這一頁的背景套用到所有頁面") { confirmAllPages("這一頁的背景圖片和背景上的圖案") { copyBackgroundToAllPages() } }
+        }
         button("← 回到選按鍵") { bgSelected = false; refresh() }
     }
 
@@ -1100,8 +1238,8 @@ class StudioActivity : Activity() {
         button("↺ 恢復主題預設") {
             val nDecals = decals.size
             val nStyles = styles.keyEntries.size
-            val hasBgImage = styles.keyboardImage != null
-            val hasTop = styles.topBar != null
+            val hasBgImage = styles.map.keys.any { KeyStyles.baseOf(it) == KeyStyles.KEYBOARD }
+            val hasTop = styles.topBar != null || styles.pageTops.isNotEmpty()
             val hasQuick = styles.quick != null
             if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop && !hasQuick) {
                 android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
@@ -1171,14 +1309,14 @@ class StudioActivity : Activity() {
                 if (nowClear) "上方列變透明，背景圖片會往上鋪滿整個鍵盤，比例變高了，圖片可能被放大、左右被裁掉一點。要現在重新調整嗎？"
                 else "上方列不透明了，背景圖片只鋪在上方列下面，比例變扁了，圖片可能被放大、上下被裁掉一點。要現在重新調整嗎？",
             )
-            .setPositiveButton("調整") { _, _ -> openCrop(KeyStyles.KEYBOARD, bg) }
+            .setPositiveButton("調整") { _, _ -> openCrop(kbId, bg) }
             .setNegativeButton("之後再說", null)
             .show()
     }
 
     /** 拖滑桿時：只更新畫面，不重建面板（放開時滑桿會自己記一步） */
     private fun setTopBarLive(change: (TopBarStyle) -> TopBarStyle?) {
-        styles = styles.withTopBar(change(styles.topBar ?: TopBarStyle()))
+        styles = styles.withTopBarFor(page, change(styles.topBarFor(page) ?: TopBarStyle()))
         KeyStyles.save(prefs, styles)
         kv.setKeyStylesLive(styles)
     }
@@ -1187,13 +1325,16 @@ class StudioActivity : Activity() {
         kv.editHighlight = null
         text("正在編輯：上方列", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
         text("「中／En」那一列。打字時會變成選字列、切到符號時是分類列，顏色都照這裡的。", 13f, dim = true)
-        val cur = styles.topBar ?: TopBarStyle()
+        val cur = styles.topBarFor(page) ?: TopBarStyle()
         val now = kv.topBarColors()
+        if (styles.topBarFor(page) != null) {
+            button("📋 這一頁的上方列套用到所有頁面") { confirmAllPages("這一頁上方列的設計") { copyTopBarToAllPages() } }
+        }
         colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v ->
             val wasClear = kv.keyboardImageFrame().top == 0f
             setTopBar { it.copy(bg = v) }
             // 上方列透明↔不透明：背景圖片鋪的範圍變了（變高或變扁），問要不要重新調整
-            val bg = styles.keyboardImage
+            val bg = styles.keyboardImageFor(page)
             if (bg != null && wasClear != (kv.keyboardImageFrame().top == 0f)) askRecropBackground(bg)
         }
         text("透明：看得到下面的鍵盤背景；有背景圖片的話，圖片會往上鋪滿整個鍵盤（範圍變高，可以到「鍵盤背景」按「裁切」重新調整）。", 12f, dim = true)
@@ -1211,7 +1352,7 @@ class StudioActivity : Activity() {
         colorRow("文字（選中的「中」、候選字）", cur.text, now.text!!) { v -> setTopBar { it.copy(text = v) } }
         colorRow("文字（沒選中的「En」）", cur.textDim, now.textDim!!) { v -> setTopBar { it.copy(textDim = v) } }
         colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
-        if (styles.topBar != null) button("全部改回主題原本的顏色") { setTopBar { null } }
+        if (styles.topBarFor(page) != null) button("全部改回主題原本的顏色") { setTopBar { null } }
         button("← 回到選按鍵") { topSelected = false; refresh() }
     }
 
@@ -1415,7 +1556,7 @@ class StudioActivity : Activity() {
         }
         panel.addView(row)
         // 按鍵才有：圖片怎麼用（鋪滿裁切／照圖片的形狀／九宮格）
-        if (fill != null && target != KeyStyles.KEYBOARD) {
+        if (fill != null && KeyStyles.baseOf(target) != KeyStyles.KEYBOARD) {
             text("圖片怎麼用", 14f).setPadding(0, px(6f), 0, 0)
             val modes = listOf(
                 "鋪滿裁切（可以放大縮小、選要露出哪一塊）",
@@ -1481,13 +1622,13 @@ class StudioActivity : Activity() {
             android.widget.Toast.makeText(this, "這張圖讀不出來，換一張試試", android.widget.Toast.LENGTH_LONG).show()
             return
         }
-        val (frame, corner, title) = if (target == KeyStyles.KEYBOARD) {
+        val (frame, corner, title) = if (KeyStyles.baseOf(target) == KeyStyles.KEYBOARD) {
             Triple(kv.keyboardImageFrame(), 0f, "裁切鍵盤背景圖片")
         } else {
             val key = selected ?: return
             val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
             val (box, rad) = kv.keyImageFrame(key, st) ?: return
-            Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (target.startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == target }?.title ?: "" else KeyStyles.nameOf(key)) + "的底圖")
+            Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (KeyStyles.baseOf(target).startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == KeyStyles.baseOf(target) }?.title ?: "" else KeyStyles.nameOf(key)) + "的底圖")
         }
         if (frame.isEmpty) return
         ImageCrop.show(this, bmp, title, frame.width() / frame.height(), corner, fill) { f ->
@@ -1708,14 +1849,19 @@ class StudioActivity : Activity() {
         private const val REQ_QUICK_FRAME = 503
         private const val GLOBAL = "global"
         private const val KEY = "key"
+        /** 工作室上面的分頁 */
+        val TABS = listOf(
+            "zh" to "注音", "en" to "英文", "sym" to "符號", "kao" to "顏文字",
+            "emo" to "表情", "stk" to "我的貼圖", "clip" to "剪貼簿", "num" to "數字",
+        )
     }
 
     private fun clearAllButton() {
         button("清除所有按鍵設定") {
             AlertDialog.Builder(this)
-                .setMessage("要把所有按鍵都恢復成主題原本的樣子嗎？（鍵盤背景圖片、上方列和快捷列的顏色會留著）")
+                .setMessage("要把「${KeyStyles.pageTitle(page)}」這一頁的所有按鍵都恢復成主題原本的樣子嗎？（其他頁、鍵盤背景圖片、上方列和快捷列的顏色會留著）")
                 .setPositiveButton("全部清除") { _, _ ->
-                    styles = styles.withMap(styles.map.filterKeys { it == KeyStyles.KEYBOARD })
+                    styles = styles.withMap(styles.map.filterKeys { KeyStyles.pageOf(it) != page || KeyStyles.baseOf(it) == KeyStyles.KEYBOARD })
                     KeyStyles.save(prefs, styles)
                     kv.reloadPrefs()
                     refresh()

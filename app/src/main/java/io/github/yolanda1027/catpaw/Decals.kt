@@ -61,7 +61,11 @@ data class Decal(
     val isShape get() = img.startsWith(SHAPE)
     val shapeName get() = img.removePrefix(SHAPE)
     val fileName get() = img.removePrefix(FILE)
-    val onBackground get() = target == BG
+    /** 貼在鍵盤背景上（哪一頁都算；注音／英文頁是 @bg，其他頁是「頁/@bg」） */
+    val onBackground get() = KeyStyles.baseOf(target) == BG
+
+    /** 貼在哪一頁 */
+    val page get() = KeyStyles.pageOf(target)
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("target", target).put("img", img)
@@ -80,6 +84,9 @@ data class Decal(
 
     companion object {
         const val BG = "@bg"
+
+        /** 某一頁的鍵盤背景 */
+        fun bgFor(page: String) = KeyStyles.scoped(page, BG)
         const val SHAPE = "shape:"
         const val FILE = "file:"
 

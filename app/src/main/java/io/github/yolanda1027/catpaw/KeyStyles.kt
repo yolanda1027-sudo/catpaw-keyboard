@@ -258,7 +258,17 @@ data class QuickBarStyle(
  * - 一整類：@zhuyin（所有注音鍵）、@char、@func、@space、@enter
  * 單顆的設定會蓋過整類的設定。
  */
-class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarStyle? = null, val quick: QuickBarStyle? = null) {
+class KeyStyles(
+    val map: Map<String, KeyStyle> = emptyMap(),
+    /** 注音／英文鍵盤的上方列 */
+    val topBar: TopBarStyle? = null,
+    val quick: QuickBarStyle? = null,
+    /** 其他頁（符號、表情…）自己的上方列，key 是頁的代號 */
+    val pageTops: Map<String, TopBarStyle> = emptyMap(),
+) {
+
+    /** 鍵盤的每一頁（主題工作室可以各自設計）；"" 是注音和英文鍵盤 */
+    class Page(val id: String, val title: String)
 
     enum class Group(val id: String, val title: String) {
         ZHUYIN("@zhuyin", "所有注音鍵"),
@@ -266,58 +276,114 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
         FUNC("@func", "所有功能鍵"),
         SPACE("@space", "空白鍵"),
         ENTER("@enter", "Enter 鍵"),
+        CLIP("@clip", "所有剪貼簿項目"),
     }
 
     /** 這顆鍵最後要長怎樣（沒有任何設定就是 null） */
     fun resolve(key: Key): KeyStyle? {
         if (map.isEmpty()) return null
+        // 每一頁只看自己頁的設定（沒設計過的頁＝主題原本的樣子，不借注音鍵盤的）
         val own = map[idOf(key)]
-        val group = map[groupOf(key).id]
+        val group = map[groupIdOf(key)]
         val st = when {
             own == null -> group
             else -> own.over(group)
         }
-        // 剪貼簿那幾條：借一般字鍵的外觀（底圖、顏色、外框），但字的位置、隱藏、透明不借——
-        // 位置是照按鍵寬度算的，剪貼簿條是字鍵的 10 倍寬，字會跑出框外或整個不見
-        val fixed = if (key.act == Act.CLIP && st != null) st.copy(
-            hideLabel = null, labels = null, order = null,
-            text = st.text?.takeIf { android.graphics.Color.alpha(it) > 0 },
-        ) else st
-        return fixed?.takeIf { !it.isEmpty }
+        return st?.takeIf { !it.isEmpty }
     }
 
     fun with(id: String, style: KeyStyle?): KeyStyles {
         val m = LinkedHashMap(map)
         if (style == null || style.isEmpty) m.remove(id) else m[id] = style
-        return KeyStyles(m, topBar, quick)
+        return KeyStyles(m, topBar, quick, pageTops)
     }
 
-    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty }, quick)
-    fun withQuick(q: QuickBarStyle?): KeyStyles = KeyStyles(map, topBar, q?.takeIf { !it.isEmpty })
+    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty }, quick, pageTops)
+    fun withQuick(q: QuickBarStyle?): KeyStyles = KeyStyles(map, topBar, q?.takeIf { !it.isEmpty }, pageTops)
     /** 只換按鍵的部分（上方列、快捷列的顏色留著） */
-    fun withMap(m: Map<String, KeyStyle>): KeyStyles = KeyStyles(m, topBar, quick)
+    fun withMap(m: Map<String, KeyStyle>): KeyStyles = KeyStyles(m, topBar, quick, pageTops)
 
     /** 一樣的設定（上一步用來比對有沒有改） */
-    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar && other.quick == quick
-    override fun hashCode() = (map.hashCode() * 31 + (topBar?.hashCode() ?: 0)) * 31 + (quick?.hashCode() ?: 0)
+    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar && other.quick == quick && other.pageTops == pageTops
+    override fun hashCode() = ((map.hashCode() * 31 + (topBar?.hashCode() ?: 0)) * 31 + (quick?.hashCode() ?: 0)) * 31 + pageTops.hashCode()
 
     fun toJson(): JSONObject = JSONObject().apply {
         for ((k, v) in map) put(k, v.toJson())
         topBar?.let { put(TOP_BAR, it.toJson()) }
         quick?.let { put(QUICK, it.toJson()) }
+        for ((p, t) in pageTops) put(scoped(p, TOP_BAR), t.toJson())
     }
 
     /** 整個鍵盤的背景圖（不是按鍵；跟按鍵樣式存在一起，上一步、匯出、恢復預設都會一起處理） */
     val keyboardImage: ImageFill? get() = map[KEYBOARD]?.bgImage
 
+    /** 某一頁的背景圖（沒設＝主題原本的背景） */
+    fun keyboardImageFor(page: String): ImageFill? = map[scoped(page, KEYBOARD)]?.bgImage
+
+    /** 某一頁的上方列 */
+    fun topBarFor(page: String): TopBarStyle? = if (page.isEmpty()) topBar else pageTops[page]
+
+    fun withTopBarFor(page: String, t: TopBarStyle?): KeyStyles {
+        if (page.isEmpty()) return withTopBar(t)
+        val m = LinkedHashMap(pageTops)
+        if (t == null || t.isEmpty) m.remove(page) else m[page] = t
+        return KeyStyles(map, topBar, quick, m)
+    }
+
+    /**
+     * 「套用到所有頁面」：把這個代號（單顆鍵、整類、背景圖）的設計複製到每一頁的同一個代號。
+     * 是複製，所以之後每一頁還是可以自己再調。
+     */
+    fun copyToAllPages(id: String): KeyStyles {
+        val base = baseOf(id)
+        val st = map[id]
+        val m = LinkedHashMap(map)
+        for (p in PAGES) {
+            val target = scoped(p.id, base)
+            if (target == id) continue
+            if (st == null) m.remove(target) else m[target] = st
+        }
+        return KeyStyles(m, topBar, quick, pageTops)
+    }
+
+    /** 上方列套用到所有頁面 */
+    fun copyTopBarToAllPages(page: String): KeyStyles {
+        val t = topBarFor(page)
+        var out = this
+        for (p in PAGES) if (p.id != page) out = out.withTopBarFor(p.id, t)
+        return out
+    }
+
     /** 真的是按鍵的設定（不算鍵盤背景圖） */
-    val keyEntries: Map<String, KeyStyle> get() = map.filterKeys { it != KEYBOARD }
+    val keyEntries: Map<String, KeyStyle> get() = map.filterKeys { baseOf(it) != KEYBOARD }
 
     /** 所有用到的圖檔名（按鍵底圖、鍵盤背景圖、快捷列按鈕圖片） */
     val imageFiles: Set<String> get() = map.values.mapNotNull { it.bgImage?.img }.toSet() + listOfNotNull(quick?.frame?.img)
 
     companion object {
         val EMPTY = KeyStyles()
+
+        /** 鍵盤的每一頁 */
+        val PAGES = listOf(
+            Page("", "注音／英文"),
+            Page("sym", "符號"),
+            Page("kao", "顏文字"),
+            Page("emo", "表情符號"),
+            Page("stk", "我的貼圖"),
+            Page("clip", "剪貼簿"),
+            Page("num", "數字鍵盤"),
+        )
+
+        fun pageTitle(page: String) = PAGES.firstOrNull { it.id == page }?.title ?: page
+
+        /** 代號加上頁面：注音／英文頁不加（跟以前存的一樣），其他頁加「頁/」 */
+        fun scoped(page: String, id: String) = if (page.isEmpty()) id else "$page/$id"
+
+        /** 代號是哪一頁的 */
+        fun pageOf(id: String): String = id.substringBefore('/', "")
+
+        /** 代號拿掉頁面的部分 */
+        fun baseOf(id: String): String = id.substringAfter('/')
         /** 鍵盤背景圖的代號 */
         const val KEYBOARD = "@keyboard"
         /** 上方列顏色（存檔裡的代號） */
@@ -325,13 +391,18 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
         /** 快捷符號列的顏色（存檔裡的代號） */
         const val QUICK = "@quick"
 
-        fun idOf(key: Key): String = when (key.act) {
+        /** 按鍵的代號（帶頁面：符號頁的刪除鍵是 sym/backspace） */
+        fun idOf(key: Key): String = scoped(key.page, when (key.act) {
             Act.ZHUYIN -> "zy:" + key.label
             Act.TEXT -> "t:" + key.label
             else -> key.act.name.lowercase()
-        }
+        })
+
+        /** 按鍵所屬那一整類的代號（帶頁面） */
+        fun groupIdOf(key: Key): String = scoped(key.page, groupOf(key).id)
 
         fun groupOf(key: Key): Group = when {
+            key.style == Style.CLIP -> Group.CLIP
             key.act == Act.ZHUYIN -> Group.ZHUYIN
             key.style == Style.SPACE -> Group.SPACE
             key.style == Style.ENTER -> Group.ENTER
@@ -355,12 +426,17 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
         fun fromJson(o: JSONObject?): KeyStyles {
             if (o == null) return EMPTY
             val m = LinkedHashMap<String, KeyStyle>()
+            val tops = LinkedHashMap<String, TopBarStyle>()
             for (k in o.keys()) {
                 if (k == TOP_BAR || k == QUICK) continue
+                if (baseOf(k) == TOP_BAR) {
+                    TopBarStyle.fromJson(o.optJSONObject(k))?.let { tops[pageOf(k)] = it }
+                    continue
+                }
                 val s = o.optJSONObject(k)?.let { KeyStyle.fromJson(it) } ?: continue
                 if (!s.isEmpty) m[k] = s
             }
-            return KeyStyles(m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)), QuickBarStyle.fromJson(o.optJSONObject(QUICK)))
+            return KeyStyles(m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)), QuickBarStyle.fromJson(o.optJSONObject(QUICK)), tops)
         }
 
         fun load(prefs: Prefs): KeyStyles = try {

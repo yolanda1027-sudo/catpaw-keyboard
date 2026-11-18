@@ -20,6 +20,11 @@ data class Key(
     val icon: Icon? = null,
     /** true = 照原樣打出來，不管大寫開沒開（長按選單選的字） */
     val exact: Boolean = false,
+    /**
+     * 在哪一頁（見 KeyStyles.PAGES）："" = 注音／英文，"sym" 符號、"emo" 表情…
+     * 每一頁的按鍵樣式分開存（代號前面加「頁/」），所以符號頁不會借到注音鍵盤的樣式。
+     */
+    val page: String = "",
 ) {
     /** 長按的字畫在主字下面（注音鍵、英文字母鍵）；其他（標點）畫在上面 */
     val subBelow: Boolean
@@ -146,3 +151,7 @@ object Layouts {
     /** 表情符號鍵盤最下面那排（表情鍵換成「符號」）；上面的表情見 Emojis */
     val emojiBottom: List<Key> = pageBottom.map { if (it.act == Act.TO_EMOJI) toSymbol.copy(weight = 1f, label = "符號") else it }
 }
+
+/** 這幾排按鍵都標成在某一頁 */
+fun List<List<Key>>.onPage(page: String): List<List<Key>> =
+    if (page.isEmpty()) this else map { row -> row.map { it.copy(page = page) } }

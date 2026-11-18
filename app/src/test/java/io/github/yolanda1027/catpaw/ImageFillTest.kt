@@ -162,7 +162,7 @@ class ImageFillTest {
         a.runOnUiThread {}
         StudioActivity::class.java.getDeclaredField("selected").apply { isAccessible = true }.set(a, null)
         StudioActivity::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }.invoke(a)
-        button(root, "🖼️ 鍵盤背景（背景圖片、貼圖案）").performClick()
+        button(root, "🖼️ 這一頁的鍵盤背景（背景圖片、貼圖案）").performClick()
         ShadowLooper.idleMainLooper()
         render(root, "fill-studio-bg-empty")
         button(root, "📷 上傳圖片").performClick()
