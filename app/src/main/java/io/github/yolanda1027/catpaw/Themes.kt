@@ -43,6 +43,21 @@ abstract class KbTheme(protected val dp: Float) {
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val path = Path()
 
+    /**
+     * 每張畫面開始前把共用的畫筆整理乾淨。
+     * fill、stroke 是大家共用的：上一張畫面最後誰設了半透明、透明（例如底色設透明的按鍵）、
+     * 遮罩或虛線，都會留下來；背景的漸層用 shader 畫時會跟著那個透明度，整片背景就不見了。
+     */
+    fun resetPaints() {
+        fill.reset()
+        fill.isAntiAlias = true
+        stroke.reset()
+        stroke.isAntiAlias = true
+        stroke.style = Paint.Style.STROKE
+        stroke.strokeCap = Paint.Cap.ROUND
+        stroke.strokeJoin = Paint.Join.ROUND
+    }
+
     open fun drawBackground(c: Canvas, w: Float, h: Float, topH: Float) {
         // 只塗鍵盤本體（不能用 drawColor，不然上方透明區也會被塗滿）
         fill.shader = null
@@ -246,6 +261,7 @@ abstract class KbTheme(protected val dp: Float) {
 
     fun drawStyledBody(c: Canvas, r: RectF, st: KeyStyle, pressed: Boolean) {
         val color = st.bg ?: return
+        if (Color.alpha(color) == 0) return // 透明的底色不用畫（也不要把共用畫筆設成透明）
         val box = styledBox(r)
         val rad = styledRadius(box, st)
         fill.shader = null
@@ -614,6 +630,7 @@ class StitchTheme(dp: Float) : KbTheme(dp) {
     private val dash = DashPathEffect(floatArrayOf(4 * dp, 3 * dp), 0f)
 
     override fun drawBackground(c: Canvas, w: Float, h: Float, topH: Float) {
+        fill.color = Color.BLACK // 不透明：漸層才不會跟著上一個人留下的透明度
         fill.shader = LinearGradient(0f, 0f, 0f, h, Color.parseColor("#FBD7E1"), Color.parseColor("#F6BCCB"), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, w, h, fill)
         fill.shader = null
@@ -983,6 +1000,7 @@ class MagicTheme(dp: Float, private val pal: MagicPalette) : KbTheme(dp) {
     override val backspaceCutout: Int? = null
 
     override fun drawBackground(c: Canvas, w: Float, h: Float, topH: Float) {
+        fill.color = Color.BLACK // 不透明：漸層才不會跟著上一個人留下的透明度
         fill.shader = LinearGradient(0f, 0f, 0f, h, houseC, houseDarkC, Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, w, h, fill)
         fill.shader = null

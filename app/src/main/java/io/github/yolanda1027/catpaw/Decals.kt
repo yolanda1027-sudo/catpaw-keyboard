@@ -264,12 +264,13 @@ object Decals {
         val ih = a.intrinsicHeight
         if (iw <= 0 || ih <= 0) return
         if (a.bounds.width() != iw || a.bounds.height() != ih || a.bounds.left != 0 || a.bounds.top != 0) a.setBounds(0, 0, iw, ih)
-        c.save()
+        // 半透明的話會多開一層：用 restoreToCount 一次關乾淨（不然之後畫的東西會畫在錯的層、錯的位置）
+        val count = c.save()
         c.translate(r.left, r.top)
         c.scale(r.width() / iw, r.height() / ih)
         if (alpha < 255) c.saveLayerAlpha(0f, 0f, iw.toFloat(), ih.toFloat(), alpha)
         a.draw(c)
-        c.restore()
+        c.restoreToCount(count)
     }
 
     /** @param anim 會動的圖（GIF）；有的話用它，沒有就用 bmp（GIF 的第一格） */

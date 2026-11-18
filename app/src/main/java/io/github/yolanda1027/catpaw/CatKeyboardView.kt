@@ -342,6 +342,7 @@ class CatKeyboardView(
         if (reading.isNotEmpty()) drawReadingBox(c)
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
+        theme.resetPaints() // 上一張畫面留下的透明度、遮罩清掉（不然背景有時候會整片透明）
         theme.drawBackground(c, w, kbH, topH)
         drawTopBarBg(c, w)
         keyStyles.keyboardImage?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
@@ -660,6 +661,7 @@ class CatKeyboardView(
         c.clipRect(0f, 0f, w, topH)
         // 先畫成跟下面一樣的主題背景（往上挪一列，主題自己的上方列就被擠到看不到的地方）
         c.translate(0f, -topH)
+        theme.resetPaints()
         theme.drawBackground(c, w, kbH + topH, topH)
         c.restore()
         if (android.graphics.Color.alpha(col) > 0) {
