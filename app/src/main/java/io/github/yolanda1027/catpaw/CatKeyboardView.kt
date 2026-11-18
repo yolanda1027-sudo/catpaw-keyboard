@@ -123,6 +123,9 @@ class CatKeyboardView(
         }
     private val kbH get() = height - floatH - navInset
 
+    /** 導覽列那一條塗鍵盤底色（設定裡的開關）；false = 不畫，讓系統照手機主題畫 */
+    private var navBarBg = false
+
     /** 符號鍵盤的分類列（null = 不是符號鍵盤）；裡面的 null 代表「最近使用」的時鐘圖示 */
     var symbolTabs: List<String?>? = null
         set(v) { field = v; invalidate() }
@@ -304,6 +307,7 @@ class CatKeyboardView(
         stripCache = null
         panelCache = null
         keyH = prefs.keyHeightDp * dp
+        navBarBg = prefs.navBarKeyboardBg
         requestLayout()
         layoutKeys()
         invalidate()
@@ -357,8 +361,8 @@ class CatKeyboardView(
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.resetPaints() // 上一張畫面留下的透明度、遮罩清掉（不然背景有時候會整片透明）
         theme.drawBackground(c, w, kbH, topH)
-        if (navInset > 0) {
-            // 導覽列底下：背景延伸下去，不要露出後面的 App
+        if (navInset > 0 && navBarBg) {
+            // 導覽列底下：設定要塗鍵盤底色時，背景延伸下去
             c.save()
             c.clipRect(0f, kbH, w, kbH + navInset)
             theme.drawBackground(c, w, kbH + navInset, topH)

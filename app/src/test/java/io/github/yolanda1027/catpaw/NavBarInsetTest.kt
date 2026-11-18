@@ -47,11 +47,18 @@ class NavBarInsetTest {
         val bmp = layout(kv)
         assertEquals("鍵盤多出導覽列那一段", h0 + 126, kv.height)
         assertEquals("按鍵位置不變（離鍵盤頂端一樣遠），所以整個往上讓出 126px", bottom0, lowestKeyBottom(kv), 0.5f)
-        // 導覽列那一段有畫背景，不是透明
-        val px = bmp.getPixel(kv.width / 2, kv.height - 10)
-        assertNotEquals("導覽列底下要有鍵盤背景", 0, android.graphics.Color.alpha(px))
+        // 預設：導覽列那一段不畫，讓系統照手機主題畫導覽列
+        assertEquals("預設導覽列底下是透明的", 0, android.graphics.Color.alpha(bmp.getPixel(kv.width / 2, kv.height - 10)))
+        assertNotEquals("鍵盤本體照樣有背景", 0, android.graphics.Color.alpha(bmp.getPixel(kv.width / 2, kv.height - 126 - 5)))
         File("build/renders").mkdirs()
         File("build/renders/navbar-inset.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+        // 設定打開「導覽列也塗鍵盤底色」
+        Prefs(kv.context).navBarKeyboardBg = true
+        kv.reloadPrefs()
+        val painted = layout(kv)
+        assertNotEquals("導覽列底下要有鍵盤背景", 0, android.graphics.Color.alpha(painted.getPixel(kv.width / 2, kv.height - 10)))
+        Prefs(kv.context).navBarKeyboardBg = false
 
         // 導覽列藏起來（例如全螢幕遊戲）：恢復原本高度
         kv.dispatchApplyWindowInsets(WindowInsets.Builder().build())

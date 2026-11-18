@@ -101,6 +101,14 @@ class Prefs(context: Context) {
         get() = sp.getString("recent_kaomoji", "") ?: ""
         set(v) = sp.edit().putString("recent_kaomoji", v).apply()
 
+    /**
+     * 最下面導覽列（三顆按鈕／手勢條）那一條要不要塗鍵盤的底色。
+     * 預設不塗：讓系統照手機主題畫導覽列，跟其他 App 裡看到的一樣。
+     */
+    var navBarKeyboardBg: Boolean
+        get() = sp.getBoolean("nav_bar_keyboard_bg", false)
+        set(v) = sp.edit().putBoolean("nav_bar_keyboard_bg", v).apply()
+
     /** 記錄剪貼簿（點鍵盤上方的剪貼簿按鈕可以看到、貼上） */
     var clipboardHistory: Boolean
         get() = sp.getBoolean("clipboard_history", true)
