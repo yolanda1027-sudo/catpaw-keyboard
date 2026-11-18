@@ -1018,6 +1018,20 @@ class StudioActivity : Activity() {
         refresh()
     }
 
+    /** 背景圖片鋪的範圍變了：問要不要現在重新裁切 */
+    private fun askRecropBackground(bg: ImageFill) {
+        val nowClear = kv.keyboardImageFrame().top == 0f
+        AlertDialog.Builder(this)
+            .setTitle("背景圖片的範圍變了")
+            .setMessage(
+                if (nowClear) "上方列變透明，背景圖片會往上鋪滿整個鍵盤，比例變高了，圖片可能被放大、左右被裁掉一點。要現在重新調整嗎？"
+                else "上方列不透明了，背景圖片只鋪在上方列下面，比例變扁了，圖片可能被放大、上下被裁掉一點。要現在重新調整嗎？",
+            )
+            .setPositiveButton("調整") { _, _ -> openCrop(KeyStyles.KEYBOARD, bg) }
+            .setNegativeButton("之後再說", null)
+            .show()
+    }
+
     /** 拖滑桿時：只更新畫面，不重建面板（放開時滑桿會自己記一步） */
     private fun setTopBarLive(change: (TopBarStyle) -> TopBarStyle?) {
         styles = styles.withTopBar(change(styles.topBar ?: TopBarStyle()))
@@ -1031,8 +1045,14 @@ class StudioActivity : Activity() {
         text("「中／En」那一列。打字時會變成選字列、切到符號時是分類列，顏色都照這裡的。", 13f, dim = true)
         val cur = styles.topBar ?: TopBarStyle()
         val now = kv.topBarColors()
-        colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setTopBar { it.copy(bg = v) } }
-        text("透明：看得到下面的鍵盤背景；有背景圖片的話，圖片會往上鋪滿整個鍵盤。", 12f, dim = true)
+        colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v ->
+            val wasClear = kv.keyboardImageFrame().top == 0f
+            setTopBar { it.copy(bg = v) }
+            // 上方列透明↔不透明：背景圖片鋪的範圍變了（變高或變扁），問要不要重新調整
+            val bg = styles.keyboardImage
+            if (bg != null && wasClear != (kv.keyboardImageFrame().top == 0f)) askRecropBackground(bg)
+        }
+        text("透明：看得到下面的鍵盤背景；有背景圖片的話，圖片會往上鋪滿整個鍵盤（範圍變高，可以到「鍵盤背景」按「裁切」重新調整）。", 12f, dim = true)
         colorRow("選中的底色（「中」底下那塊）", cur.tab, now.tab!!, allowTransparent = true) { v -> setTopBar { it.copy(tab = v) } }
         colorRow("選中那塊的外框", cur.tabBorder, now.tabBorder!!, allowTransparent = true) { v -> setTopBar { it.copy(tabBorder = v) } }
         borderEditor(
