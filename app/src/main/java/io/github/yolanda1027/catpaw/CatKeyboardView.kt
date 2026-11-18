@@ -401,7 +401,7 @@ class CatKeyboardView(
         val native = if (st != null) nativeColors(kr) else null
         // 底框
         var bodyColor: Int? = null
-        if (shaped && st != null && st.bgImage?.shape == true) {
+        if (shaped && st != null && st.bgImage?.ownsShape == true) {
             // 照圖片的形狀：只畫圖片（底色、外框都交給圖片自己）
             drawKeyImage(c, kr.rect, st, st.bgImage, isPressed)
         } else if (shaped && st != null && native != null) {
@@ -473,7 +473,7 @@ class CatKeyboardView(
 
     private fun drawLabel(c: Canvas, kr: KeyRect, e: KbTheme.LabelElem, st: KeyStyle?) {
         val ls = st?.labels?.get(e.id) ?: LabelStyle()
-        val shaped = st?.isShaped == true && st.bgImage?.shape != true
+        val shaped = st?.isShaped == true && st.bgImage?.ownsShape != true
         val body = (st?.bg ?: nativeColors(kr)?.takeIf { shaped && it.hasBody }?.bg)?.takeIf { android.graphics.Color.alpha(it) > 0 }
         c.save()
         c.translate(e.cx + ls.dx * kr.rect.width(), e.cy + ls.dy * kr.rect.height())
@@ -569,6 +569,15 @@ class CatKeyboardView(
     /** 按鍵底圖：照這顆鍵的圓角裁掉；按下去暗一點 */
     private fun drawKeyImage(c: Canvas, r: RectF, st: KeyStyle, fill: ImageFill, pressed: Boolean) {
         val box = theme.styledBox(r)
+        if (fill.nine) {
+            // 九宮格：四個角不變形；按下去只有圖片本身變暗
+            val bmp = fillBitmap(fill.img) ?: return
+            c.saveLayer(box, null)
+            NineFrame.draw(c, bmp, fill.sx, fill.sy, box)
+            if (pressed) c.drawRect(box, pressShadeAtop)
+            c.restore()
+            return
+        }
         if (fill.shape) {
             c.saveLayer(box, null)
             ImageFill.draw(c, fill, box, null, fillBitmap(fill.img), fillAnim(fill))
@@ -1395,7 +1404,10 @@ class CatKeyboardView(
     private fun drawStyledPreview(c: Canvas, box: RectF, kr: KeyRect, st: KeyStyle, label: String) {
         val fill = st.bgImage
         val col = lookOf(kr, st)
-        if (fill?.shape == true) {
+        if (fill?.nine == true) {
+            // 九宮格：泡泡也套同一個框
+            fillBitmap(fill.img)?.let { NineFrame.draw(c, it, fill.sx, fill.sy, box) }
+        } else if (fill?.shape == true) {
             // 照圖片的形狀：泡泡就是那張圖
             ImageFill.draw(c, fill, box, null, fillBitmap(fill.img), fillAnim(fill))
         } else {

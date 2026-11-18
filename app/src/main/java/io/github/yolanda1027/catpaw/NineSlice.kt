@@ -47,7 +47,8 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
             return NineFrame(img, f("sx"), f("sy"))
         }
 
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        /** 不開反鋸齒：九塊拼起來的地方才不會有細縫（圖片本身還是會平滑縮放） */
+        private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
         /**
          * 把框圖畫進 dst。角落照「圖片高度剛好等於框的高度」的比例縮放；
@@ -67,8 +68,10 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
             val dr = r * k
             val dt = t * k
             val db = b * k
-            val xs = floatArrayOf(dst.left, dst.left + dl, dst.right - dr, dst.right)
-            val ys = floatArrayOf(dst.top, dst.top + dt, dst.bottom - db, dst.bottom)
+            // 切線對齊整數像素，九塊剛好接起來
+            fun px(v: Float) = Math.round(v).toFloat()
+            val xs = floatArrayOf(px(dst.left), px(dst.left + dl), px(dst.right - dr), px(dst.right))
+            val ys = floatArrayOf(px(dst.top), px(dst.top + dt), px(dst.bottom - db), px(dst.bottom))
             val sxs = intArrayOf(0, l, iw - r, iw)
             val sys = intArrayOf(0, t, ih - b, ih)
             val s = Rect()
@@ -77,8 +80,7 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
                 if (sxs[col + 1] <= sxs[col] || sys[row + 1] <= sys[row]) continue
                 if (xs[col + 1] <= xs[col] || ys[row + 1] <= ys[row]) continue
                 s.set(sxs[col], sys[row], sxs[col + 1], sys[row + 1])
-                // 多畫半個像素，拼接的地方才不會出現細縫
-                d.set(xs[col], ys[row], xs[col + 1] + if (col < 2) 0.5f else 0f, ys[row + 1] + if (row < 2) 0.5f else 0f)
+                d.set(xs[col], ys[row], xs[col + 1], ys[row + 1])
                 c.drawBitmap(bmp, s, d, paint)
             }
         }
@@ -90,7 +92,11 @@ object NineSliceDialog {
     /**
      * @param buttonW 快捷列一顆按鈕實際的寬（預覽用；0 = 不知道）
      */
-    fun show(a: Activity, bmp: Bitmap, initial: NineFrame, label: String, textColor: Int, buttonW: Float = 0f, done: (NineFrame?) -> Unit): Dialog {
+    fun show(
+        a: Activity, bmp: Bitmap, initial: NineFrame, label: String, textColor: Int, buttonW: Float = 0f,
+        buttonH: Float = 0f, title: String = "調整按鈕圖片的邊角", caption: String = "預覽：快捷列按鈕實際的大小，和更窄、更寬的",
+        done: (NineFrame?) -> Unit,
+    ): Dialog {
         val dp = a.resources.displayMetrics.density
         val d = Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = LinearLayout(a).apply {
@@ -106,9 +112,9 @@ object NineSliceDialog {
             val p = (8 * dp).toInt()
             setPadding(p * 2, p, p * 2, p)
         }
-        root.addView(label("調整按鈕圖片的邊角", 17f))
+        root.addView(label(title, 17f))
         root.addView(label("虛線外面的四個角不會變形，按鈕變寬變窄時只拉長中間那段", 13f, 0.75f))
-        val view = NineSliceView(a, bmp, initial, label, textColor, buttonW)
+        val view = NineSliceView(a, bmp, initial, label, textColor, buttonW, buttonH, caption)
         root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         fun bar(title: String, value: Float, set: (Float) -> Unit) {
@@ -163,6 +169,8 @@ object NineSliceDialog {
 class NineSliceView(
     ctx: Context, val bmp: Bitmap, initial: NineFrame, private val label: String, private val textColor: Int,
     private val buttonW: Float = 0f,
+    private val buttonH: Float = 0f,
+    private val captionText: String = "預覽：快捷列按鈕實際的大小，和更窄、更寬的",
 ) : View(ctx) {
     var frame: NineFrame = initial
         set(v) { field = v; invalidate() }
@@ -199,9 +207,9 @@ class NineSliceView(
 
         // 下面：實際按鈕大小，再加一顆窄的、一顆寬的
         caption.textSize = 13 * dp
-        val bh = 32 * dp // 快捷列按鈕實際的高度
+        val bh = if (buttonH > 0f) buttonH else 32 * dp // 按鈕實際的高度
         var y = r.bottom + 34 * dp
-        c.drawText("預覽：快捷列按鈕實際的大小，和更窄、更寬的", width / 2f, y, caption)
+        c.drawText(captionText, width / 2f, y, caption)
         y += 14 * dp
         val real = if (buttonW > 0f) min(buttonW, w) else w * 0.24f
         val widths = floatArrayOf(real * 0.7f, real, min(w, real * 2.6f))

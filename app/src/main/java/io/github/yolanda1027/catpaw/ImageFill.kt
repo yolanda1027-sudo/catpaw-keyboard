@@ -30,8 +30,15 @@ data class ImageFill(
      * PNG 透明的地方就是按鍵外面（毛邊、雲朵形的鍵）。
      */
     val shape: Boolean = false,
+    /** 九宮格（只有按鍵用）：四個角不變形，按鍵變寬只拉長中間；sx、sy 是保留的邊角大小 */
+    val nine: Boolean = false,
+    val sx: Float = NineFrame.DEFAULT,
+    val sy: Float = NineFrame.DEFAULT,
 ) {
     val isGif get() = img.endsWith(".gif")
+
+    /** 圖片自己決定按鍵的形狀（照圖片的形狀、九宮格）：底色、外框、圓角都不畫 */
+    val ownsShape get() = shape || nine
 
     /** 整張圖要畫在哪裡，框裡才會剛好露出選好的那一塊 */
     fun destRect(frame: RectF, iw: Int, ih: Int): RectF {
@@ -56,7 +63,10 @@ data class ImageFill(
 
     fun toJson(): JSONObject = JSONObject().put("img", img)
         .put("zoom", zoom.toDouble()).put("cx", cx.toDouble()).put("cy", cy.toDouble())
-        .apply { if (shape) put("shape", true) }
+        .apply {
+            if (shape) put("shape", true)
+            if (nine) put("nine", true).put("sx", sx.toDouble()).put("sy", sy.toDouble())
+        }
 
     companion object {
         const val MAX_ZOOM = 8f
@@ -81,7 +91,14 @@ data class ImageFill(
             val img = o.optString("img")
             if (!Decals.safeName(img)) return null
             fun f(k: String, d: Float, lo: Float, hi: Float) = o.optDouble(k, d.toDouble()).toFloat().let { if (it.isNaN()) d else it }.coerceIn(lo, hi)
-            return ImageFill(img, f("zoom", 1f, 0.05f, MAX_ZOOM), f("cx", 0.5f, 0f, 1f), f("cy", 0.5f, 0f, 1f), o.optBoolean("shape", false))
+            val nine = o.optBoolean("nine", false)
+            return ImageFill(
+                img, f("zoom", 1f, 0.05f, MAX_ZOOM), f("cx", 0.5f, 0f, 1f), f("cy", 0.5f, 0f, 1f),
+                shape = o.optBoolean("shape", false) && !nine,
+                nine = nine,
+                sx = f("sx", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
+                sy = f("sy", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
+            )
         }
 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)

@@ -411,7 +411,7 @@ class StudioActivity : Activity() {
         val now = kv.sampleColors(key)
         // 「照圖片的形狀」：底色、外框、圓角都交給圖片，這幾項變灰
         val eff = if (groupScope) cur else styles.resolve(key) ?: cur
-        val shapeMode = eff.bgImage?.shape == true
+        val shapeMode = eff.bgImage?.ownsShape == true
         greyIf(shapeMode) { colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) } }
         imageRow(currentId()!!, "底圖", cur.bgImage)
         colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
@@ -438,7 +438,7 @@ class StudioActivity : Activity() {
             })
             text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
         }
-        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「照圖片的形狀」，這些都交給圖片。", 12f, dim = true)
+        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「" + (if (eff.bgImage?.nine == true) "九宮格" else "照圖片的形狀") + "」，這些都交給圖片。", 12f, dim = true)
 
         panel.addView(CheckBox(this).apply {
             text = "不顯示文字（只留底色和外框）"
@@ -618,7 +618,12 @@ class StudioActivity : Activity() {
             val name = readImage(uri, Decals.FILL_MAX_PX) ?: return
             // 上傳完直接進裁切畫面；按取消就不套用。原本是「照圖片的形狀」就沿用
             val prev = styles.map[target]?.bgImage
-            openCrop(target, if (prev?.shape == true) ImageFill(name, zoom = ImageFill.FIT, shape = true) else ImageFill(name))
+            when {
+                // 原本是九宮格：沿用邊角設定，直接打開調整邊角
+                prev?.nine == true -> ImageFill(name, nine = true, sx = prev.sx, sy = prev.sy).let { setFill(target, it); openKeyNine(target, it) }
+                prev?.shape == true -> openCrop(target, ImageFill(name, zoom = ImageFill.FIT, shape = true))
+                else -> openCrop(target, ImageFill(name))
+            }
             return
         }
         if (requestCode == REQ_EFFECT_IMAGE) {
@@ -1240,22 +1245,59 @@ class StudioActivity : Activity() {
             startActivityForResult(i, REQ_FILL)
         }
         if (fill != null) {
-            b("✂️ 裁切") { openCrop(target, fill) }
+            if (fill.nine) b("📐 調整邊角") { openKeyNine(target, fill) }
+            else b("✂️ 裁切") { openCrop(target, fill) }
             b("拿掉") { setFill(target, null) }
         }
         panel.addView(row)
-        // 按鍵才有：照圖片的形狀（毛邊、雲朵形）
+        // 按鍵才有：圖片怎麼用（鋪滿裁切／照圖片的形狀／九宮格）
         if (fill != null && target != KeyStyles.KEYBOARD) {
-            panel.addView(CheckBox(this).apply {
-                text = "照圖片的形狀（去背 PNG 透明的地方就是按鍵外面）"
-                isChecked = fill.shape
-                setPadding(0, px(4f), 0, px(4f))
-                setOnCheckedChangeListener { _, on ->
-                    // 打開時改成整張放進按鍵裡，毛邊才不會被裁掉
-                    setFill(target, if (on) fill.copy(shape = true, zoom = ImageFill.FIT, cx = 0.5f, cy = 0.5f) else fill.copy(shape = false, zoom = 1f, cx = 0.5f, cy = 0.5f))
+            text("圖片怎麼用", 14f).setPadding(0, px(6f), 0, 0)
+            val modes = listOf(
+                "鋪滿裁切（可以放大縮小、選要露出哪一塊）",
+                "照圖片的形狀（去背 PNG 透明的地方就是按鍵外面）",
+                "九宮格（四個角不變形，按鍵變寬只拉長中間）",
+            )
+            val current = when { fill.nine -> 2; fill.shape -> 1; else -> 0 }
+            val rg = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+            val ids = modes.map { m ->
+                RadioButton(this).apply { id = View.generateViewId(); text = m; textSize = 14f }.also { rg.addView(it) }.id
+            }
+            rg.check(ids[current])
+            rg.setOnCheckedChangeListener { _, id ->
+                when (ids.indexOf(id)) {
+                    0 -> setFill(target, fill.copy(shape = false, nine = false, zoom = 1f, cx = 0.5f, cy = 0.5f))
+                    // 照圖片的形狀：整張放進按鍵裡，毛邊才不會被裁掉
+                    1 -> setFill(target, fill.copy(shape = true, nine = false, zoom = ImageFill.FIT, cx = 0.5f, cy = 0.5f))
+                    // 九宮格：切換過去就打開調整邊角
+                    2 -> fill.copy(shape = false, nine = true).let { setFill(target, it); openKeyNine(target, it) }
                 }
-            })
-            if (fill.shape) text("這個模式不畫底色和外框（形狀、邊框都交給圖片），按下去只有圖片本身會變暗。", 12f, dim = true)
+            }
+            panel.addView(rg)
+            if (fill.ownsShape) text("這個模式不畫底色和外框（形狀、邊框都交給圖片），按下去只有圖片本身會變暗。", 12f, dim = true)
+        }
+    }
+
+    /** 按鍵的九宮格：調整邊角（預覽用這顆鍵實際的大小） */
+    private fun openKeyNine(target: String, fill: ImageFill) {
+        val bmp = java.io.File(Decals.dir(this), fill.img).takeIf { Decals.safeName(fill.img) && it.exists() }
+            ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+        if (bmp == null) {
+            android.widget.Toast.makeText(this, "這張圖讀不出來，換一張試試", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val key = selected ?: return
+        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
+        val box = kv.keyImageFrame(key, st)?.first ?: return
+        val label = key.label.ifEmpty { KeyStyles.nameOf(key) }
+        val textColor = st.text ?: kv.sampleColors(key)?.text ?: Color.BLACK
+        NineSliceDialog.show(
+            this, bmp, NineFrame(fill.img, fill.sx, fill.sy), label, textColor,
+            buttonW = box.width(), buttonH = box.height(),
+            title = "調整按鍵圖片的邊角",
+            caption = "預覽：這顆鍵實際的大小，和更窄、更寬的",
+        ) { done ->
+            if (done != null) setFill(target, fill.copy(nine = true, shape = false, sx = done.sx, sy = done.sy))
         }
     }
 

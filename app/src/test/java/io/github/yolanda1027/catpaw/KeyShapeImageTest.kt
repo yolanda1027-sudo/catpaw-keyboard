@@ -146,7 +146,7 @@ class KeyShapeImageTest {
         ShadowLooper.idleMainLooper()
         StudioActivity::class.java.declaredMethods.first { it.name == "setFill" }.apply { isAccessible = true }.invoke(a, "@zhuyin", ImageFill(name))
         ShadowLooper.idleMainLooper()
-        val box = find(root) { it is CheckBox && it.text.startsWith("照圖片的形狀") } as CheckBox
+        val box = find(root) { it is android.widget.RadioButton && it.text.startsWith("照圖片的形狀") } as android.widget.RadioButton
         box.performClick()
         ShadowLooper.idleMainLooper()
         val f = KeyStyles.load(Prefs(ctx)).map["@zhuyin"]!!.bgImage!!
