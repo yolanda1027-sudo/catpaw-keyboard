@@ -197,8 +197,10 @@ class CatKeyboardView(
     }
 
     private fun popupRectFor(kr: KeyRect, o: PopupOptions): RectF {
-        // 動作選單的字比較多（「釘選」「往前」），每格寬一點
-        val optW = if (o.actions != null) max(kr.rect.width(), keyH * 1.3f) else kr.rect.width()
+        // 動作選單的字比較多（「釘選」「往前」），每格寬一點；
+        // 但不能比「螢幕寬 ÷ 選項數」寬（剪貼簿那種整排寬的鍵，選單才放得進畫面）
+        val raw = if (o.actions != null) max(kr.rect.width(), keyH * 1.3f) else kr.rect.width()
+        val optW = if (o.actions != null) min(raw, min(keyH * 2.4f, width.toFloat() / o.items.size)) else min(raw, width.toFloat() / o.items.size)
         val w = optW * o.items.size
         // 預設的選項剛好在按鍵正上方
         var left = kr.rect.centerX() - optW * (o.default + 0.5f)

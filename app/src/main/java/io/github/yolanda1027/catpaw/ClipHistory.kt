@@ -29,7 +29,7 @@ class ClipHistory(private val file: File) {
         }
     }
 
-    /** 釘選的在前，其他照時間新到舊 */
+    /** 釘選的在前（照使用者排的順序），其他照時間新到舊 */
     fun all(now: Long = System.currentTimeMillis()): List<Item> {
         if (items.removeAll { !it.pinned && now - it.time > EXPIRE_MS }) save()
         return items.filter { it.pinned } + items.filter { !it.pinned }
@@ -40,6 +40,8 @@ class ClipHistory(private val file: File) {
         if (t.isBlank()) return
         val old = items.firstOrNull { it.text == t }
         if (old != null && items.firstOrNull() == old) return
+        // 釘選的再複製一次：留在原本排好的位置
+        if (old?.pinned == true) return
         items.remove(old)
         items.add(0, Item(t, now, old?.pinned ?: false))
         // 太多的話，從最舊的、沒釘選的開始刪
@@ -50,9 +52,43 @@ class ClipHistory(private val file: File) {
     }
 
     fun togglePin(text: String) {
+        val it = items.firstOrNull { it.text == text } ?: return
+        action(if (it.pinned) "unpin" else "pin", text)
+    }
+
+    /**
+     * 長按選單的動作：
+     * - pin 釘選（排到釘選的最後面）
+     * - unpin 取消釘選（放回沒釘選的最前面，不會一下子不見）
+     * - up / down 釘選的往前、往後一格
+     * - remove 刪除
+     */
+    fun action(action: String, text: String, now: Long = System.currentTimeMillis()) {
         val i = items.indexOfFirst { it.text == text }
         if (i < 0) return
-        items[i] = items[i].copy(pinned = !items[i].pinned, time = System.currentTimeMillis())
+        val item = items[i]
+        when (action) {
+            "pin" -> {
+                if (item.pinned) return
+                items.removeAt(i)
+                val lastPinned = items.indexOfLast { it.pinned }
+                items.add(lastPinned + 1, item.copy(pinned = true, time = now))
+            }
+            "unpin" -> {
+                if (!item.pinned) return
+                items.removeAt(i)
+                items.add(0, item.copy(pinned = false, time = now))
+            }
+            "up", "down" -> {
+                if (!item.pinned) return
+                val pinnedIdx = items.indices.filter { items[it].pinned }
+                val k = pinnedIdx.indexOf(i)
+                val other = pinnedIdx.getOrNull(k + if (action == "up") -1 else 1) ?: return
+                items[i] = items[other].also { items[other] = items[i] }
+            }
+            "remove" -> items.removeAt(i)
+            else -> return
+        }
         save()
     }
 

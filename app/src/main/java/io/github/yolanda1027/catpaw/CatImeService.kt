@@ -243,7 +243,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolPageCount = 1
             v.symbolPage = 0
         } else if (page == Page.CLIP) {
-            v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選")
+            v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選、排順序")
             v.symbolTab = 0
             v.symbolPageCount = clipPageCount()
             v.symbolPage = clipPage
@@ -357,6 +357,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     /** 長按最近使用的東西：跳出的選單。直接放開＝第一個（釘選／取消釘選） */
     private fun itemActionsFor(key: Key): List<Pair<String, String>>? {
+        // 剪貼簿：釘選的可以往前、往後排
+        if (page == Page.CLIP && key.act == Act.CLIP && key.text.isNotEmpty()) {
+            val pinned = clips.all().any { it.text == key.text && it.pinned }
+            return if (pinned) listOf("unpin" to "取消釘選", "up" to "往前", "down" to "往後", "remove" to "刪除")
+            else listOf("pin" to "釘選", "remove" to "刪除")
+        }
         val kind = recentKind() ?: return null
         if (key.act != Act.TEXT || key.text.isEmpty()) return null
         return if (key.text in pinned(kind)) listOf("unpin" to "取消", "left" to "往前", "right" to "往後", "remove" to "刪除")
@@ -364,6 +370,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onItemAction(key: Key, action: String) {
+        if (page == Page.CLIP && key.act == Act.CLIP) {
+            clips.action(action, key.text)
+            // 這一頁刪光了：退回上一頁
+            clipPage = clipPage.coerceAtMost(clipPageCount() - 1)
+            refresh()
+            return
+        }
         val kind = recentKind() ?: return
         val max = if (kind == SYM) Symbols.PER_PAGE else Emojis.PER_PAGE
         val recent = if (kind == SYM) recentSymbols() else recentEmoji()
