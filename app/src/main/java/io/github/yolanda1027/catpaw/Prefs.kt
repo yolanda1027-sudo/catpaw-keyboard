@@ -103,7 +103,7 @@ class Prefs(context: Context) {
 
     /**
      * 最下面導覽列（三顆按鈕／手勢條）那一條要不要塗鍵盤的底色。
-     * 預設不塗：讓系統照手機主題畫導覽列，跟其他 App 裡看到的一樣。
+     * 預設不塗：塗系統原本的導覽列顏色，跟其他鍵盤一樣。
      */
     var navBarKeyboardBg: Boolean
         get() = sp.getBoolean("nav_bar_keyboard_bg", false)

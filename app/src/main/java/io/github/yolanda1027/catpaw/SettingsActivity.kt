@@ -599,7 +599,7 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.navBarKeyboardBg = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
-        note("關掉（預設）＝導覽列照手機主題的樣子，跟在其他 App 裡一樣。")
+        note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
     }
 
     private fun pageFont() {

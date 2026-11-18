@@ -41,14 +41,21 @@ class NavBarInsetTest {
 
         // 系統告訴鍵盤：下面有 126px 的導覽列
         kv.dispatchApplyWindowInsets(
-            WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 126)).build(),
+            WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 126))
+                .setInsetsIgnoringVisibility(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 126))
+                .build(),
         )
         assertEquals(126, kv.navInset)
         val bmp = layout(kv)
         assertEquals("鍵盤多出導覽列那一段", h0 + 126, kv.height)
         assertEquals("按鍵位置不變（離鍵盤頂端一樣遠），所以整個往上讓出 126px", bottom0, lowestKeyBottom(kv), 0.5f)
-        // 預設：導覽列那一段不畫，讓系統照手機主題畫導覽列
-        assertEquals("預設導覽列底下是透明的", 0, android.graphics.Color.alpha(bmp.getPixel(kv.width / 2, kv.height - 10)))
+        // 預設：導覽列那一段塗系統原本的導覽列顏色（淺色模式是灰白色，不是系統那層灰遮罩）
+        val nav = s.systemNavBarColor()
+        assertEquals(nav, kv.systemNavColor)
+        assertEquals(255, android.graphics.Color.alpha(nav))
+        org.junit.Assert.assertTrue("淺色模式要是淺的", android.graphics.Color.luminance(nav) > 0.5f)
+        assertEquals("預設導覽列底下是系統導覽列的顏色", nav, bmp.getPixel(kv.width / 2, kv.height - 10))
         assertNotEquals("鍵盤本體照樣有背景", 0, android.graphics.Color.alpha(bmp.getPixel(kv.width / 2, kv.height - 126 - 5)))
         File("build/renders").mkdirs()
         File("build/renders/navbar-inset.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -60,7 +67,15 @@ class NavBarInsetTest {
         assertNotEquals("導覽列底下要有鍵盤背景", 0, android.graphics.Color.alpha(painted.getPixel(kv.width / 2, kv.height - 10)))
         Prefs(kv.context).navBarKeyboardBg = false
 
-        // 導覽列藏起來（例如全螢幕遊戲）：恢復原本高度
+        // 導覽列只是一閃而過地藏起來（還佔著位置）：按鍵不能掉到它後面
+        kv.dispatchApplyWindowInsets(
+            WindowInsets.Builder()
+                .setInsetsIgnoringVisibility(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 126))
+                .setVisible(WindowInsets.Type.navigationBars(), false)
+                .build(),
+        )
+        assertEquals(126, kv.navInset)
+        // 根本沒有導覽列：恢復原本高度
         kv.dispatchApplyWindowInsets(WindowInsets.Builder().build())
         layout(kv)
         assertEquals(h0, kv.height)

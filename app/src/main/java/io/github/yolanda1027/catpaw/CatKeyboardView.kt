@@ -123,8 +123,13 @@ class CatKeyboardView(
         }
     private val kbH get() = height - floatH - navInset
 
-    /** 導覽列那一條塗鍵盤底色（設定裡的開關）；false = 不畫，讓系統照手機主題畫 */
+    /** 導覽列那一條塗鍵盤底色（設定裡的開關）；false = 塗系統原本的導覽列顏色 */
     private var navBarBg = false
+
+    /** 系統原本的導覽列顏色（輸入法服務會設定；0 = 不畫） */
+    var systemNavColor = 0
+        set(v) { field = v; invalidate() }
+    private val navPaint = android.graphics.Paint()
 
     /** 符號鍵盤的分類列（null = 不是符號鍵盤）；裡面的 null 代表「最近使用」的時鐘圖示 */
     var symbolTabs: List<String?>? = null
@@ -368,6 +373,10 @@ class CatKeyboardView(
             theme.drawBackground(c, w, kbH + navInset, topH)
             c.restore()
             theme.resetPaints()
+        } else if (navInset > 0 && android.graphics.Color.alpha(systemNavColor) > 0) {
+            // 預設：塗系統原本的導覽列顏色（跟其他鍵盤一樣）
+            navPaint.color = systemNavColor
+            c.drawRect(0f, kbH, w, kbH + navInset, navPaint)
         }
         drawTopBarBg(c, w)
         keyStyles.keyboardImage?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }

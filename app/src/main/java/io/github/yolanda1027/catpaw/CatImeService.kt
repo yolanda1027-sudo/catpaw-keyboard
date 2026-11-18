@@ -144,19 +144,53 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onCreateInputView(): View {
         val v = CatKeyboardView(this, prefs, haptics)
         v.listener = this
-        // 系統導覽列（手勢條、三顆按鈕）蓋在鍵盤最下面：按鍵往上讓出它的高度
+        // 系統導覽列（手勢條、三顆按鈕）蓋在鍵盤最下面：按鍵往上讓出它的高度。
+        // 用「不管現在有沒有顯示」的高度：導覽列一閃而過地藏起來時，按鍵才不會掉到它後面
         v.setOnApplyWindowInsetsListener { view, insets ->
             (view as CatKeyboardView).navInset =
-                insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
+                insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.navigationBars()).bottom
             insets
         }
+        setupNavBar(v)
         kv = v
         refresh()
         return v
     }
 
+    /**
+     * 導覽列那一條的顏色。Android 15 以後系統不幫鍵盤畫導覽列的底色了，
+     * 只在三顆按鈕底下蓋一層灰灰的半透明遮罩（深色、淺色 App 都一樣醜）。
+     * 這裡把遮罩關掉，改成鍵盤自己塗上系統原本的導覽列顏色，按鈕圖示的深淺也跟著配。
+     */
+    private fun setupNavBar(v: CatKeyboardView) {
+        val color = systemNavBarColor()
+        v.systemNavColor = color
+        val w = window.window ?: return
+        w.isNavigationBarContrastEnforced = false
+        val light = Color.luminance(color) > 0.5f
+        w.insetsController?.setSystemBarsAppearance(
+            if (light) android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS else 0,
+            android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+        )
+    }
+
+    /** 系統（含手機主題）原本給導覽列的顏色；讀不到或怪怪的，就用三星預設的灰白／深色 */
+    internal fun systemNavBarColor(): Int {
+        val night = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val fromTheme = try {
+            val ctx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_DayNight)
+            val a = ctx.obtainStyledAttributes(intArrayOf(android.R.attr.navigationBarColor))
+            try { a.getColor(0, 0) } finally { a.recycle() }
+        } catch (_: Exception) { 0 }
+        // 主題給的要是不透明、而且深淺跟現在的模式對得上才用（有些主題給黑色或透明）
+        val ok = Color.alpha(fromTheme) == 255 && (Color.luminance(fromTheme) > 0.5f) != night
+        return if (ok) fromTheme else if (night) NAV_DARK else NAV_LIGHT
+    }
+
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        kv?.requestApplyInsets() // 換 App 時重新問一次導覽列高度
         resetComposing()
         shift = 0
         page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
@@ -808,6 +842,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     companion object {
+        /** 舊版（系統還會幫鍵盤畫導覽列時）在三星手機上量到的導覽列顏色 */
+        const val NAV_LIGHT = 0xFFF1F1F3.toInt()
+        const val NAV_DARK = 0xFF000000.toInt()
         private const val SYM = "sym"
         /** 表情鍵盤裡「我的貼圖」那一格 */
         private const val MINE = 1
