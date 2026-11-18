@@ -235,7 +235,10 @@ class CropView(
     fun setStretch(st: Float) = set(fill.copy(stretch = st.coerceIn(ImageFill.MIN_STRETCH, ImageFill.MAX_STRETCH)))
 
     /** 剛好塞滿框：拉到跟框一樣的比例，整張圖都看得到 */
-    fun fitFrame() = set(fill.fitFrame(frame, bmp.width, bmp.height))
+    fun fitFrame() = set(fill.fitContent(frame, bmp.width, bmp.height, contentBounds))
+
+    /** 圖片裡有畫東西（不透明）的範圍；整張都不透明就是整張 */
+    private val contentBounds: RectF by lazy { opaqueBounds(bmp) }
 
     /** 原本的樣子（原比例、剛好鋪滿框）在畫面上的寬高：「拉寬 ×1」「拉高 ×1」的基準 */
     private fun baseSize(): Pair<Float, Float> {
@@ -365,4 +368,34 @@ class CropView(
         line.strokeWidth = 2 * dp
         c.drawRoundRect(frame, rad, rad, line)
     }
+}
+
+/**
+ * 圖片裡不透明的範圍（去背 PNG 四周的透明空白不算）。
+ * 圖很大的話跳著看（最多看 400 × 400 個點），夠準又不會卡。
+ */
+fun opaqueBounds(bmp: Bitmap): RectF {
+    val w = bmp.width
+    val h = bmp.height
+    if (!bmp.hasAlpha() || w <= 0 || h <= 0) return RectF(0f, 0f, w.toFloat(), h.toFloat())
+    val step = maxOf(1, maxOf(w, h) / 400)
+    var l = w; var t = h; var r = -1; var b = -1
+    val row = IntArray(w)
+    var y = 0
+    while (y < h) {
+        bmp.getPixels(row, 0, w, 0, y, w, 1)
+        var x = 0
+        while (x < w) {
+            if ((row[x] ushr 24) > 16) {
+                if (x < l) l = x
+                if (x > r) r = x
+                if (y < t) t = y
+                if (y > b) b = y
+            }
+            x += step
+        }
+        y += step
+    }
+    if (r < 0) return RectF(0f, 0f, w.toFloat(), h.toFloat())
+    return RectF(l.toFloat(), t.toFloat(), minOf(w, r + step).toFloat(), minOf(h, b + step).toFloat())
 }

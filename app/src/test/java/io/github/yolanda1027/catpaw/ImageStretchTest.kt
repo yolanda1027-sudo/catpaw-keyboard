@@ -146,4 +146,30 @@ class ImageStretchTest {
         val d = v.fill.destRect(v.frame, v.bmp.width, v.bmp.height)
         assertEquals((1.5f / 2f) * v.bmp.width / v.bmp.height, d.width() / d.height(), 0.01f)
     }
+
+    /**
+     * 使用者回報：去背的羊皮紙按鍵（整張畫布是橫的、羊皮紙在中間、左右透明），
+     * 按「剛好塞滿框」羊皮紙被擠成瘦長的。應該是羊皮紙本身剛好貼齊框。
+     */
+    @Test fun fitFrameUsesVisiblePartOfTransparentPng() {
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        val bmp = Bitmap.createBitmap(1536, 1024, Bitmap.Config.ARGB_8888) // 透明畫布
+        Canvas(bmp).drawRect(318f, 62f, 1218f, 962f, Paint().apply { color = gold }) // 中間 900 × 900 的方塊
+        assertEquals(RectF(318f, 62f, 1218f, 962f).width(), opaqueBounds(bmp).width(), 6f)
+        val v = CropView(ctx, bmp, 92f / 97f, 0.2f, ImageFill("a.png", shape = true, zoom = ImageFill.FIT))
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1400, View.MeasureSpec.EXACTLY))
+        v.layout(0, 0, 1080, 1400)
+        v.fitFrame()
+        val d = v.fill.destRect(v.frame, bmp.width, bmp.height)
+        // 方塊在畫面上的位置
+        val sx = d.width() / bmp.width
+        val sy = d.height() / bmp.height
+        val box = RectF(d.left + 318 * sx, d.top + 62 * sy, d.left + 1218 * sx, d.top + 962 * sy)
+        assertEquals("方塊左邊貼齊框", v.frame.left, box.left, 3f)
+        assertEquals("方塊右邊貼齊框", v.frame.right, box.right, 3f)
+        assertEquals("方塊上面貼齊框", v.frame.top, box.top, 3f)
+        assertEquals("方塊下面貼齊框", v.frame.bottom, box.bottom, 3f)
+        // 方塊幾乎是正方形、框也幾乎是正方形：只會微調一點點，不會變瘦長
+        assertTrue("拉的倍數 ${v.fill.stretch}", v.fill.stretch in 0.9f..1.0f)
+    }
 }

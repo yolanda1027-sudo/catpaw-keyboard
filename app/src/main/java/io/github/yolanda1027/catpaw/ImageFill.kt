@@ -86,6 +86,19 @@ data class ImageFill(
         return copy(stretch = st, zoom = 1f, cx = 0.5f, cy = 0.5f)
     }
 
+    /**
+     * 剛好塞滿框，但只看圖片裡「有畫東西的範圍」[content]（圖片座標）：
+     * 去背 PNG 常常四周留一大片透明，整張塞進框的話，畫的東西會被擠扁、變小。
+     */
+    fun fitContent(frame: RectF, iw: Int, ih: Int, content: RectF): ImageFill {
+        if (iw <= 0 || ih <= 0 || frame.isEmpty || content.isEmpty) return fitFrame(frame, iw, ih)
+        val st = ((frame.width() / frame.height()) / (content.width() / content.height())).coerceIn(MIN_STRETCH, MAX_STRETCH)
+        // 有畫的範圍剛好佔滿框的高 → 換算成 zoom（以整張圖鋪滿框為 1）
+        val scale = frame.height() / content.height()
+        val z = scale / cover(frame, iw * st, ih.toFloat())
+        return copy(stretch = st, zoom = z.coerceIn(FIT, MAX_ZOOM), cx = content.centerX() / iw, cy = content.centerY() / ih)
+    }
+
     companion object {
         const val MAX_ZOOM = 8f
         /** 小於任何按鍵的最小倍率：畫的時候會變成「整張圖剛好放進框裡」 */

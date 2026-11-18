@@ -168,4 +168,51 @@ class PageDesignTest {
         for (p in KeyStyles.PAGES) assertNotNull(p.title, ds.firstOrNull { it.target == Decal.bgFor(p.id) })
         assertEquals(KeyStyles.PAGES.size, ds.map { it.id }.toSet().size)
     }
+
+    /** 總覽：這個主題做了哪些設計，按「改 ›」直接跳到那一頁那一顆 */
+    @Test fun overviewListsDesignsAndJumps() {
+        val p = Prefs(ctx)
+        KeyStyles.save(p, KeyStyles(mapOf(
+            "@zhuyin" to KeyStyle(bgImage = ImageFill("decal_a.png", shape = true), text = Color.DKGRAY),
+            "sym/backspace" to red,
+            "clip/@keyboard" to KeyStyle(bgImage = ImageFill("decal_b.png")),
+        )).withTopBarFor("emo", TopBarStyle(bg = Color.YELLOW)))
+        Decals.save(p, listOf(Decal("d1", "enter", "shape:heart")))
+        val a = studio()
+        val cls = StudioActivity::class.java
+        fun field(n: String) = cls.getDeclaredField(n).apply { isAccessible = true }
+        buttons(a.window.decorView).first { it.text.startsWith("🔍 看有哪些設計") }.performClick()
+        val texts = ArrayList<String>()
+        fun walk(v: View) {
+            if (v is android.widget.TextView && v !is Button) texts.add(v.text.toString())
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(a.window.decorView)
+        for (want in listOf("注音／英文頁", "所有注音鍵", "底圖（照圖片形狀）、文字顏色", "Enter 鍵", "圖案 1 個",
+                "符號頁", "刪除鍵", "剪貼簿頁", "鍵盤背景", "表情符號頁", "上方列")) {
+            assertTrue("總覽裡少了「$want」：$texts", texts.any { it.contains(want) })
+        }
+        shot(a, "studio-overview")
+        // 符號頁的刪除鍵：按「改 ›」→ 跳到符號頁、選好那顆
+        val rows = ArrayList<View>()
+        fun rowsOf(v: View) {
+            if (v is android.widget.LinearLayout && v.childCount == 2 && v.getChildAt(1) is Button && (v.getChildAt(1) as Button).text == "改 ›") rows.add(v)
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) rowsOf(v.getChildAt(i))
+        }
+        rowsOf(a.window.decorView)
+        val symRow = rows.first { r ->
+            val t = ArrayList<String>(); walk(r)
+            ((r as android.view.ViewGroup).getChildAt(0) as android.view.ViewGroup).getChildAt(0).let { (it as android.widget.TextView).text == "刪除鍵" } &&
+                rows.indexOf(r) > rows.indexOfFirst { x -> ((x as android.view.ViewGroup).getChildAt(0) as android.view.ViewGroup).getChildAt(0).let { (it as android.widget.TextView).text == "所有注音鍵" } }
+        }
+        ((symRow as android.view.ViewGroup).getChildAt(1) as Button).performClick()
+        val sel = field("selected").get(a) as Key
+        assertEquals(Act.BACKSPACE, sel.act)
+        assertEquals("sym", sel.page)
+        assertEquals("sym", field("tab").get(a))
+        // 返回：回到總覽
+        StudioActivity::class.java.getDeclaredMethod("back").apply { isAccessible = true }.invoke(a)
+        assertEquals(null, field("selected").get(a))
+        assertTrue(field("overview").getBoolean(a))
+    }
 }

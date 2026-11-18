@@ -332,6 +332,7 @@ class StudioActivity : Activity() {
             animMode != null -> animMode = null // 按鍵動畫 → 回到那顆鍵（或首頁）
             selected != null -> { selected = null; groupScope = false }
             bgSelected || topSelected || quickSelected -> { bgSelected = false; topSelected = false; quickSelected = false }
+            overview -> overview = false
             else -> return false
         }
         refresh()
@@ -570,6 +571,7 @@ class StudioActivity : Activity() {
         if (decalSel?.startsWith(LABEL) == true && sk != null && !bgSelected && !groupScope) { labelPanel(sk, decalSel!!.removePrefix(LABEL)); return }
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
+        if (overview && !topSelected && !quickSelected && !bgSelected && selected == null) { overviewPanel(); return }
         if (topSelected) { topBarPanel(); return }
         if (quickSelected) { quickBarPanel(); return }
         if (bgSelected) { bgPanel(); return }
@@ -583,10 +585,12 @@ class StudioActivity : Activity() {
             button("🔝 這一頁的上方列顏色") { topSelected = true; refresh() }
             if (page.isEmpty()) button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
-            if (styles.keyEntries.isNotEmpty()) {
-                text("目前有 ${styles.keyEntries.size} 組按鍵設定", 14f).setPadding(0, px(20f), 0, 0)
-                clearAllButton()
+            val nAll = overviewCount()
+            if (nAll > 0) {
+                text("這個主題目前有 $nAll 項設計", 14f).setPadding(0, px(20f), 0, 0)
+                button("🔍 看有哪些設計、直接去改 ›") { overview = true; refresh() }
             }
+            if (styles.keyEntries.isNotEmpty()) clearAllButton()
             if (decals.isNotEmpty()) clearDecalsButton()
             section("重來")
             resetButton()
@@ -702,6 +706,134 @@ class StudioActivity : Activity() {
     // ---------- 圖案 ----------
 
     private fun section(s: String) = text(s, 17f, bold = true).setPadding(0, px(22f), 0, px(4f))
+
+    // ---------- 這個主題有哪些設計（總覽） ----------
+
+    /** 正在看總覽（從總覽點「改」進去之後，按返回會回到總覽） */
+    private var overview = false
+
+    /** 一項設計：在哪一頁、名稱、內容摘要、怎麼跳過去改 */
+    private class Item(val page: String, val title: String, val detail: String, val go: () -> Unit)
+
+    private fun overviewItems(): List<Item> {
+        val out = ArrayList<Item>()
+        for (p in KeyStyles.PAGES) {
+            val bgDecals = decals.count { it.target == Decal.bgFor(p.id) }
+            val bgImg = styles.keyboardImageFor(p.id)
+            if (bgImg != null || bgDecals > 0) {
+                val parts = listOfNotNull(bgImg?.let { if (it.isGif) "背景 GIF" else "背景圖片" }, if (bgDecals > 0) "圖案 $bgDecals 個" else null)
+                out.add(Item(p.id, "鍵盤背景", parts.joinToString("、")) { goPage(p.id) { bgSelected = true } })
+            }
+            styles.topBarFor(p.id)?.let { t ->
+                val parts = listOfNotNull(
+                    if (t.bg != null) "底色" else null, if (t.tab != null) "選中那塊" else null,
+                    if (t.text != null || t.textDim != null) "文字顏色" else null, if (t.icon != null) "圖示顏色" else null,
+                    if (t.tabBorder != null) "外框" else null,
+                )
+                out.add(Item(p.id, "上方列", parts.joinToString("、")) { goPage(p.id) { topSelected = true } })
+            }
+            if (p.id.isEmpty()) styles.quick?.let { q ->
+                val parts = listOfNotNull(
+                    if (q.strip != null || q.bg != null) "顏色" else null, if (q.frame != null) "按鈕圖片" else null,
+                    if (q.border != null || q.borderStyle != null) "外框" else null,
+                )
+                out.add(Item(p.id, "快捷符號列", parts.joinToString("、")) { goPage(p.id) { quickSelected = true } })
+            }
+            // 按鍵：整類排前面，再來單顆
+            val keys = styles.keyEntries.filterKeys { KeyStyles.pageOf(it) == p.id }
+                .toList().sortedBy { if (KeyStyles.baseOf(it.first).startsWith("@")) 0 else 1 }
+            for ((id, st) in keys) {
+                val n = decals.count { it.target == id }
+                out.add(Item(p.id, nameOfId(id), describe(st, n)) { goKey(id) })
+            }
+            // 只有貼圖案、沒改樣式的鍵
+            decals.filter { !it.onBackground && KeyStyles.pageOf(it.target) == p.id && it.target !in styles.map }
+                .groupBy { it.target }.forEach { (id, ds) -> out.add(Item(p.id, nameOfId(id), "圖案 ${ds.size} 個") { goKey(id) }) }
+        }
+        return out
+    }
+
+    private fun overviewCount() = overviewItems().size
+
+    /** 代號 → 給人看的名字（「所有注音鍵」「刪除鍵」「「ㄅ」鍵」…） */
+    private fun nameOfId(id: String): String {
+        val base = KeyStyles.baseOf(id)
+        KeyStyles.Group.values().firstOrNull { it.id == base }?.let { return it.title }
+        val key = when {
+            base.startsWith("zy:") -> Key(base.removePrefix("zy:"), Act.ZHUYIN)
+            base.startsWith("t:") -> Key(base.removePrefix("t:"), Act.TEXT)
+            else -> Act.values().firstOrNull { it.name.lowercase() == base }?.let { Key("", it) }
+        } ?: return base
+        return KeyStyles.nameOf(key)
+    }
+
+    /** 這組設定改了哪些地方 */
+    private fun describe(st: KeyStyle, decalCount: Int): String = listOfNotNull(
+        if (st.bg != null) "底色" else null,
+        st.bgImage?.let { f -> when { f.nine -> "底圖（固定邊角）"; f.shape -> "底圖（照圖片形狀）"; f.isGif -> "底圖（GIF）"; else -> "底圖" } },
+        if (st.text != null) "文字顏色" else null,
+        if (st.hideLabel == true) "不顯示文字" else null,
+        if (!st.labels.isNullOrEmpty()) "字的位置、大小" else null,
+        if (st.border != null || st.borderStyle != null || st.borderWidth != null) "外框" else null,
+        if (st.radius != null) "圓角" else null,
+        if (st.effect != null) "按鍵動畫" else null,
+        if (decalCount > 0) "圖案 $decalCount 個" else null,
+    ).joinToString("、").ifEmpty { "自訂" }
+
+    /** 跳到某一頁，再選好要改的東西 */
+    private fun goPage(page: String, pick: () -> Unit) {
+        switchTab(if (page.isEmpty()) "zh" else page)
+        pick()
+        refresh()
+    }
+
+    /** 跳到那一頁、選好那顆鍵（或那一整類） */
+    private fun goKey(id: String) {
+        val page = KeyStyles.pageOf(id)
+        val group = KeyStyles.baseOf(id).startsWith("@")
+        for (t in if (page.isEmpty()) listOf("zh", "en") else listOf(page)) {
+            switchTab(t)
+            val k = kv.rows.flatten().firstOrNull { it.act != Act.GAP && (if (group) KeyStyles.groupIdOf(it) else KeyStyles.idOf(it)) == id }
+            if (k != null) {
+                selected = k
+                groupScope = group
+                refresh()
+                return
+            }
+        }
+        android.widget.Toast.makeText(this, "這一頁現在沒有這顆鍵", android.widget.Toast.LENGTH_SHORT).show()
+        overview = true
+        refresh()
+    }
+
+    private fun overviewPanel() {
+        kv.editHighlight = null
+        text("這個主題做了哪些設計", 18f, bold = true).setPadding(0, px(10f), 0, px(2f))
+        text("按「改 ›」會直接跳到那一頁、選好那一項；改完按返回會回到這裡。", 13f, dim = true)
+        val items = overviewItems()
+        if (items.isEmpty()) text("還沒有任何設計，全部是主題原本的樣子。", 14f).setPadding(0, px(12f), 0, 0)
+        for ((page, list) in items.groupBy { it.page }) {
+            section(KeyStyles.pageTitle(page) + "頁")
+            for (it in list) {
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, px(4f), 0, px(4f))
+                }
+                val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                texts.addView(TextView(this).apply { text = it.title; textSize = 15f })
+                texts.addView(TextView(this).apply { text = it.detail; textSize = 12f; alpha = 0.65f })
+                row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                row.addView(Button(this).apply {
+                    text = "改 ›"
+                    isAllCaps = false
+                    setOnClickListener { _ -> it.go() }
+                })
+                panel.addView(row)
+            }
+        }
+        button("← 回到首頁") { overview = false; refresh() }
+    }
 
     private fun selectDecal(d: Decal) {
         decalSel = d.id
