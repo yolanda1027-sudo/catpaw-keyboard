@@ -19,6 +19,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowAlertDialog
+import org.robolectric.shadows.ShadowLooper
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -251,5 +252,54 @@ class ThemeStoreTest {
         KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
         ThemeStore.migrate(ctx, p)
         assertEquals(Color.RED, KeyStyles.load(p).map["enter"]!!.bg)
+    }
+
+    /** 匯入的主題：改過之後「恢復」是變回匯入時的樣子，不是清成底色主題 */
+    @Test fun restoreToImportedLook() {
+        val p = live()
+        val json = ThemeStore.withTemp(ctx, ThemeStore.factory("magic_yellow")) { t ->
+            val img = Decals.storeBytes(ctx, png(Color.YELLOW))!!
+            Decals.save(t, listOf(Decal("x", Decal.BG, Decal.FILE + img)))
+            KeyStyles.save(t, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+            ThemeIO.export(ctx, t, "赫夫帕夫", ThemeIO.Part.values().toSet())
+        }
+        val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "look")).setup().get()
+        val (id, _) = a.importAsTheme(ThemeIO.parse(json)!!, "赫夫帕夫")
+        assertEquals("import", ThemeStore.originKind(ctx, id))
+        ThemeStore.applyTheme(ctx, p, id)
+        val importedImg = Decals.load(p).single().fileName
+
+        // 在工作室改：Enter 改藍、圖案刪掉，存檔
+        val s = studio()
+        val work = Prefs(ctx, ThemeStore.WORK)
+        KeyStyles.save(work, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.BLUE)))
+        Decals.save(work, emptyList())
+        call(s, "save", null)
+        s.finish()
+        call(s, "onDestroy")
+        assertTrue("圖案刪掉了，但原本的樣子還用得到那張圖，不能被清掉", File(Decals.dir(ctx), importedImg).exists())
+
+        // 再開工作室，按「恢復成匯入時的樣子」
+        val s2 = studio()
+        val btn = buttons(s2.window.decorView).first { it.text == "↺ 恢復成匯入時的樣子" }
+        btn.performClick()
+        ShadowAlertDialog.getLatestAlertDialog().getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        ShadowLooper.idleMainLooper()
+        val w = Prefs(ctx, ThemeStore.WORK)
+        assertEquals("Enter 回到匯入時的紅色", Color.RED, KeyStyles.load(w).map["enter"]!!.bg)
+        assertEquals("圖案回來了", importedImg, Decals.load(w).single().fileName)
+        assertEquals("底色主題不變", "magic_yellow", w.theme)
+        assertEquals("還沒儲存，鍵盤不變", Color.BLUE, KeyStyles.load(live()).map["enter"]!!.bg)
+
+        // 設定的「⋯ → 恢復成匯入時的樣子」：整個變回去
+        ThemeStore.resetToOrigin(ctx, live(), id)
+        assertEquals(Color.RED, KeyStyles.load(live()).map["enter"]!!.bg)
+        assertEquals(1, Decals.load(live()).size)
+    }
+
+    private fun buttons(v: View, out: ArrayList<Button> = ArrayList()): ArrayList<Button> {
+        if (v is Button) out.add(v)
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) buttons(v.getChildAt(i), out)
+        return out
     }
 }

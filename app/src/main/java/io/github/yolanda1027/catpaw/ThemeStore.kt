@@ -110,12 +110,59 @@ object ThemeStore {
 
     fun exists(ctx: Context, id: String) = isBuiltIn(id) || file(ctx, id)?.exists() == true
 
-    /** 存一個主題（內建主題存成跟原廠一樣的話，就把檔案刪掉＝沒改過） */
-    fun write(ctx: Context, id: String, snap: JSONObject, name: String? = null) {
+    /**
+     * 存一個主題（內建主題存成跟原廠一樣的話，就把檔案刪掉＝沒改過）。
+     * 「我的主題」另外記著原本的樣子（[origin]），之後改了還能恢復；重存時原本的樣子不會被蓋掉。
+     */
+    fun write(ctx: Context, id: String, snap: JSONObject, name: String? = null, origin: JSONObject? = null, originKind: String? = null) {
         val f = file(ctx, id) ?: return
         if (isBuiltIn(id) && same(snap, factory(id))) { f.delete(); return }
+        val old = stored(ctx, id)
         val o = JSONObject().put("name", name ?: nameOf(ctx, id)).put("snap", snap)
+        (origin ?: old?.optJSONObject("origin"))?.let { o.put("origin", it) }
+        (originKind ?: old?.optString("originKind")?.takeIf { it.isNotEmpty() })?.let { o.put("originKind", it) }
         f.writeText(o.toString())
+    }
+
+    /** 主題工作室改得到的設定（工作室的「恢復」只動這些） */
+    val STUDIO_KEYS = listOf("key_styles", "decals", "press_effect", "custom_effect")
+
+    /** 「我的主題」原本的樣子（匯入或建立時）；內建主題是原廠的樣子；舊版建立、沒記錄的是 null */
+    fun origin(ctx: Context, id: String): JSONObject? =
+        if (isBuiltIn(id)) factory(id) else stored(ctx, id)?.optJSONObject("origin")
+
+    /** 原本的樣子是怎麼來的："import" 匯入、"copy" 新增／複製／另存 */
+    fun originKind(ctx: Context, id: String): String? = stored(ctx, id)?.optString("originKind")?.takeIf { it.isNotEmpty() }
+
+    /** 只把某幾個設定換成 from 裡的（from 沒有的就拿掉＝預設） */
+    fun restoreParts(p: Prefs, from: JSONObject, keys: List<String>) {
+        val part = JSONObject()
+        for (k in keys) if (from.has(k)) part.put(k, from.get(k))
+        val e = p.sp.edit()
+        for (k in keys) e.remove(k)
+        for (k in keys) if (part.has(k)) when (val v = part.get(k)) {
+            is Int -> e.putInt(k, v)
+            is String -> e.putString(k, v)
+            is Boolean -> e.putBoolean(k, v)
+        }
+        e.commit()
+    }
+
+    /** 跟原本的樣子比，這幾個設定有沒有改過 */
+    fun differsFromOrigin(current: JSONObject, origin: JSONObject, keys: List<String> = LOOK_KEYS) = keys.any { k ->
+        current.has(k) != origin.has(k) || (current.has(k) && current.get(k).toString() != origin.get(k).toString())
+    }
+
+    /** 「我的主題」整個恢復成原本的樣子（正在用的話鍵盤也跟著換） */
+    fun resetToOrigin(ctx: Context, live: Prefs, id: String) {
+        val o = origin(ctx, id) ?: return
+        if (isBuiltIn(id)) { resetBuiltIn(ctx, live, id); return }
+        if (activeId(live) == id) {
+            applyTo(live, o)
+            live.sp.edit().putLong("stickers_ver", System.currentTimeMillis()).commit()
+        }
+        write(ctx, id, o)
+        cleanupImages(ctx)
     }
 
     /** 把正在用的主題（鍵盤現在的設定）存回它自己的檔案 */
@@ -142,12 +189,15 @@ object ThemeStore {
         return "$b ($n)"
     }
 
-    /** 新增一個「我的主題」，回傳 id */
-    fun create(ctx: Context, live: Prefs, name: String, snap: JSONObject): String {
+    /**
+     * 新增一個「我的主題」，回傳 id。現在的樣子同時記成「原本的樣子」，之後可以恢復。
+     * @param originKind "import" 匯入、"copy" 新增／複製／另存
+     */
+    fun create(ctx: Context, live: Prefs, name: String, snap: JSONObject, originKind: String = "copy"): String {
         var t = System.currentTimeMillis()
         while (file(ctx, "u_$t")?.exists() == true) t++
         val id = "u_$t"
-        write(ctx, id, snap, uniqueName(ctx, live, name))
+        write(ctx, id, snap, uniqueName(ctx, live, name), origin = snap, originKind = originKind)
         return id
     }
 
@@ -251,8 +301,9 @@ object ThemeStore {
         used += imagesOf(Prefs(ctx, LIVE))
         used += imagesOf(Prefs(ctx, WORK))
         dir(ctx).listFiles { f -> f.name.endsWith(".json") }.orEmpty().forEach { f ->
-            val snap = try { JSONObject(f.readText()).optJSONObject("snap") } catch (_: Exception) { null } ?: return@forEach
-            used += withTemp(ctx, snap) { imagesOf(it) }
+            val o = try { JSONObject(f.readText()) } catch (_: Exception) { null } ?: return@forEach
+            // 現在的樣子和原本的樣子（恢復時要用）都算在用
+            for (k in listOf("snap", "origin")) o.optJSONObject(k)?.let { snap -> used += withTemp(ctx, snap) { imagesOf(it) } }
         }
         return used
     }

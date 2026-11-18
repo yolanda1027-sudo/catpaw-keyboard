@@ -510,7 +510,7 @@ class SettingsActivity : Activity() {
             val w = ThemeIO.apply(this, tmp, o)
             ThemeStore.snapshot(tmp) to w
         }
-        return ThemeStore.create(this, prefs, name, snap) to warnings
+        return ThemeStore.create(this, prefs, name, snap, originKind = "import") to warnings
     }
 
     private fun showExportDialog(themeId: String = ThemeStore.activeId(prefs)) {
@@ -702,6 +702,23 @@ class SettingsActivity : Activity() {
                 .setNegativeButton("取消", null)
                 .show()
         })
+        if (!t.builtIn) {
+            val origin = ThemeStore.origin(this, t.id)
+            if (origin != null && ThemeStore.differsFromOrigin(ThemeStore.load(this, prefs, t.id), origin)) {
+                val kind = if (ThemeStore.originKind(this, t.id) == "import") "匯入時" else "建立時"
+                items.add("↩️ 恢復成${kind}的樣子" to {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("「${t.name}」恢復成${kind}的樣子？")
+                        .setMessage("之後改過的地方（按鍵、圖案、背景、配色、字體…）都會變回${kind}的樣子。")
+                        .setPositiveButton("恢復") { _, _ ->
+                            ThemeStore.resetToOrigin(this, prefs, t.id)
+                            showPage("look")
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                })
+            }
+        }
         if (!t.builtIn) items.add("🗑 刪除" to {
             android.app.AlertDialog.Builder(this)
                 .setTitle("刪除「${t.name}」？")

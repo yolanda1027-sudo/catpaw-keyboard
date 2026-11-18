@@ -1236,6 +1236,29 @@ class StudioActivity : Activity() {
 
     /** 恢復主題預設：清掉所有圖案和按鍵的單獨設定（要再確認一次） */
     private fun resetButton() {
+        // 「我的主題」：恢復成匯入（或建立）時的樣子；內建主題、舊版沒記錄的：清成底色主題的樣子
+        val origin = if (ThemeStore.isBuiltIn(themeId)) null else ThemeStore.origin(this, themeId)
+        if (origin != null) {
+            val kind = if (ThemeStore.originKind(this, themeId) == "import") "匯入時" else "建立時"
+            button("↺ 恢復成${kind}的樣子") {
+                commitHistory()
+                if (!ThemeStore.differsFromOrigin(ThemeStore.snapshot(prefs), origin, ThemeStore.STUDIO_KEYS)) {
+                    android.widget.Toast.makeText(this, "目前已經是${kind}的樣子了", android.widget.Toast.LENGTH_SHORT).show()
+                    return@button
+                }
+                val dialog = AlertDialog.Builder(this)
+                    .setTitle("恢復成${kind}的樣子？")
+                    .setMessage("每一頁的按鍵、背景、圖案、上方列、快捷列和按鍵動畫，都會變回「${ThemeStore.nameOf(this, themeId)}」${kind}的樣子。\n\n字體、配色、按鍵高度不變。還沒按「儲存」之前，鍵盤不會跟著變，也可以按上一步救回來。")
+                    .setPositiveButton("恢復") { _, _ -> resetToOrigin(origin, kind) }
+                    .setNegativeButton("取消", null)
+                    .show()
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.parseColor("#E5484D"))
+            }
+            return
+        }
+        if (!ThemeStore.isBuiltIn(themeId)) {
+            text("這個主題是舊版建立的，沒有記下匯入時的樣子，下面的按鈕只能清成底色主題的樣子。重新匯入一次主題檔，之後就能恢復成匯入時的樣子。", 12f, dim = true)
+        }
         button("↺ 恢復主題預設") {
             val nDecals = decals.size
             val nStyles = styles.keyEntries.size
@@ -1263,6 +1286,25 @@ class StudioActivity : Activity() {
             // 會清掉東西的按鈕用紅色，比較不會按錯
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.parseColor("#E5484D"))
         }
+    }
+
+    /** 恢復成匯入／建立時的樣子（只換工作室改得到的部分） */
+    private fun resetToOrigin(origin: org.json.JSONObject, kind: String) {
+        selected = null
+        decalSel = null
+        bgSelected = false
+        topSelected = false
+        quickSelected = false
+        animMode = null
+        groupScope = false
+        ThemeStore.restoreParts(prefs, origin, ThemeStore.STUDIO_KEYS)
+        styles = KeyStyles.load(prefs)
+        decals = Decals.load(prefs)
+        kv.reloadPrefs()
+        kv.setDecalsLive(decals)
+        zoom.invalidate()
+        refresh()
+        android.widget.Toast.makeText(this, "已恢復成${kind}的樣子（記得儲存）", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun resetAll() {
