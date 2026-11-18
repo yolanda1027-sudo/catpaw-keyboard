@@ -72,6 +72,7 @@ class StudioActivity : Activity() {
         live = Prefs(this)
         live.migrate()
         themeId = savedInstanceState?.getString(EXTRA_THEME) ?: intent?.getStringExtra(EXTRA_THEME) ?: ThemeStore.activeId(live)
+        fromSettings = savedInstanceState?.getBoolean(EXTRA_FROM_SETTINGS) ?: intent?.getBooleanExtra(EXTRA_FROM_SETTINGS, false) ?: false
         if (!ThemeStore.exists(this, themeId)) themeId = ThemeStore.activeId(live)
         // 第一次打開：做一份工作副本；畫面重建（例如旋轉）時接著用原本的工作副本
         prefs = if (savedInstanceState == null) ThemeStore.openWork(this, live, themeId) else Prefs(this, ThemeStore.WORK)
@@ -219,6 +220,7 @@ class StudioActivity : Activity() {
         super.onSaveInstanceState(outState)
         outState.putString("tab", tab)
         outState.putString(EXTRA_THEME, themeId)
+        outState.putBoolean(EXTRA_FROM_SETTINGS, fromSettings)
     }
 
     // ---------- 存檔 ----------
@@ -301,7 +303,26 @@ class StudioActivity : Activity() {
      */
     private fun back() {
         if (goUp()) return
-        confirmLeave { finish() }
+        confirmLeave { leave() }
+    }
+
+    /** 從設定的「⋯ → 在主題工作室編輯」進來的：離開時回到設定的外觀頁 */
+    private var fromSettings = false
+
+    /**
+     * 離開工作室。工作室在自己的工作裡（桌面有獨立圖示），直接關掉會回到桌面；
+     * 從設定進來的話，把原本那個設定頁叫回前面（停在外觀頁，主題清單也重新整理）。
+     */
+    private fun leave() {
+        if (fromSettings) {
+            startActivity(
+                android.content.Intent(this, SettingsActivity::class.java).putExtra("page", "look").addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                ),
+            )
+        }
+        finish()
     }
 
     /** 回上一層；已經在首頁就回傳 false */
@@ -320,6 +341,7 @@ class StudioActivity : Activity() {
     /** 已經開著工作室時，從設定按了別的主題的「編輯」 */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        fromSettings = intent.getBooleanExtra(EXTRA_FROM_SETTINGS, false)
         val id = intent.getStringExtra(EXTRA_THEME) ?: return
         if (id == themeId || !ThemeStore.exists(this, id)) return
         confirmLeave {
@@ -1908,6 +1930,8 @@ class StudioActivity : Activity() {
         private const val MENU_SAVE_AS = 4
         /** 要編輯哪個主題（ThemeStore 的 id）；沒給就是正在用的主題 */
         const val EXTRA_THEME = "theme_id"
+        /** true = 從設定打開的，離開時回設定 */
+        const val EXTRA_FROM_SETTINGS = "from_settings"
         private const val REQ_EFFECT_IMAGE = 501
         private const val REQ_FILL = 502
         private const val REQ_QUICK_FRAME = 503

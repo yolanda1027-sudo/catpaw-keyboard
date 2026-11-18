@@ -329,4 +329,21 @@ class ThemeStoreTest {
         back()
         assertTrue(a.isFinishing)
     }
+
+    /** 從設定打開工作室：在首頁按返回回到設定的外觀頁（不是跳回桌面）；從桌面圖示打開的就直接關 */
+    @Test fun backFromStudioReturnsToSettings() {
+        val a = Robolectric.buildActivity(StudioActivity::class.java,
+            Intent().putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true)).setup().get()
+        call(a, "back")
+        assertTrue(a.isFinishing)
+        val next = org.robolectric.Shadows.shadowOf(a).nextStartedActivity
+        assertEquals(SettingsActivity::class.java.name, next.component!!.className)
+        assertEquals("look", next.getStringExtra("page"))
+        assertTrue(next.flags and Intent.FLAG_ACTIVITY_SINGLE_TOP != 0)
+
+        val b = studio()
+        call(b, "back")
+        assertTrue(b.isFinishing)
+        assertEquals("從桌面圖示打開的：不用叫設定出來", null, org.robolectric.Shadows.shadowOf(b).nextStartedActivity)
+    }
 }

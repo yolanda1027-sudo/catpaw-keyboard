@@ -392,7 +392,7 @@ class SettingsActivity : Activity() {
 
         section("自己設計")
         button("🖌️ 打開貓爪主題工作室（點按鍵改樣子）") {
-            startActivity(Intent(this, StudioActivity::class.java))
+            startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true))
         }
     }
 
@@ -675,7 +675,11 @@ class SettingsActivity : Activity() {
         val items = ArrayList<Pair<String, () -> Unit>>()
         items.add("✏️ 在主題工作室編輯" to {
             ThemeStore.syncActive(this, prefs)
-            startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_THEME, t.id))
+            startActivity(
+                Intent(this, StudioActivity::class.java)
+                    .putExtra(StudioActivity.EXTRA_THEME, t.id)
+                    .putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true),
+            )
         })
         items.add("📄 複製一份" to {
             askName("複製主題", t.name + " 的副本") { name ->
@@ -806,7 +810,7 @@ class SettingsActivity : Activity() {
         note("選好之後，在上面的預覽鍵盤按按看。")
         radios(PressEffects.ALL, prefs.pressEffect) { prefs.pressEffect = it }
         note("想自己決定動畫怎麼動、飛出什麼、什麼顏色，或只讓某幾顆鍵用特別的動畫，到主題工作室調：")
-        button("🎨 打開主題工作室") { startActivity(Intent(this, StudioActivity::class.java)) }
+        button("🎨 打開主題工作室") { startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true)) }
     }
 
     private fun pageSticker() {
