@@ -136,12 +136,15 @@ class DecalHandles(private val dp: Float) {
         line.color = BLUE
         line.strokeWidth = 1.8f * dp
         val r = 5.5f * dp
-        c.drawArc(RectF(rx - r, ry - r, rx + r, ry + r), -60f, 280f, false, line)
-        val tipA = Math.toRadians(-60.0)
-        val tx = rx + (r * cos(tipA)).toFloat()
-        val ty = ry + (r * sin(tipA)).toFloat()
-        c.drawLine(tx, ty, tx - 3.5f * dp, ty - 0.5f * dp, line)
-        c.drawLine(tx, ty, tx + 0.5f * dp, ty + 3.5f * dp, line)
+        // 繞大半圈的弧線，尾端一個實心小三角形（順著繞的方向指出去）
+        val startDeg = -40f
+        val sweep = 250f
+        c.drawArc(RectF(rx - r, ry - r, rx + r, ry + r), startDeg, sweep, false, line)
+        val endA = Math.toRadians((startDeg + sweep).toDouble())
+        val ex = rx + (r * cos(endA)).toFloat()
+        val ey = ry + (r * sin(endA)).toFloat()
+        // 順時針前進的方向（畫面座標 y 往下）＝ (-sin, cos)
+        arrowHead(c, ex, ey, -sin(endA).toFloat(), cos(endA).toFloat(), 3.4f * dp)
 
         // 移動把手：圓圈裡一個上下左右的十字箭頭
         val (mx, my) = moveHandle(f)
@@ -151,19 +154,29 @@ class DecalHandles(private val dp: Float) {
         c.rotate(f.rot)
         line.color = BLUE
         line.strokeWidth = 1.8f * dp
-        val arm = 6.5f * dp
-        val head = 2.6f * dp
+        val arm = 4.2f * dp
         c.drawLine(-arm, 0f, arm, 0f, line)
         c.drawLine(0f, -arm, 0f, arm, line)
-        for ((ax, ay) in listOf(arm to 0f, -arm to 0f, 0f to arm, 0f to -arm)) {
-            // 箭頭兩撇：往中心方向退回去、再往兩側
-            val ux = if (ax == 0f) 0f else Math.signum(ax)
-            val uy = if (ay == 0f) 0f else Math.signum(ay)
-            c.drawLine(ax, ay, ax - ux * head - uy * head, ay - uy * head - ux * head, line)
-            c.drawLine(ax, ay, ax - ux * head + uy * head, ay - uy * head + ux * head, line)
-        }
+        // 上下左右四個實心小三角形
+        for ((ux, uy) in listOf(1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)) arrowHead(c, ux * arm, uy * arm, ux, uy, 3f * dp)
         c.restore()
         drawToolbar(c, f, g.tools, viewW, viewH)
+    }
+
+    /** 實心小三角形箭頭：底邊中心在 (x, y)，往 (ux, uy) 方向指，長度 size */
+    private fun arrowHead(c: Canvas, x: Float, y: Float, ux: Float, uy: Float, size: Float) {
+        val len = hypot(ux, uy).coerceAtLeast(0.0001f)
+        val dx = ux / len
+        val dy = uy / len
+        val half = size * 0.75f
+        val p = android.graphics.Path().apply {
+            moveTo(x + dx * size, y + dy * size) // 尖端
+            lineTo(x - dy * half, y + dx * half)
+            lineTo(x + dy * half, y - dx * half)
+            close()
+        }
+        fill.color = BLUE
+        c.drawPath(p, fill)
     }
 
     private fun knob(c: Canvas, x: Float, y: Float, rad: Float) {
