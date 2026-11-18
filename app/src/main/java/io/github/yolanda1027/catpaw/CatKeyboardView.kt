@@ -456,10 +456,16 @@ class CatKeyboardView(
 
     /** 這顆鍵上的字（藏起來的話就沒有） */
     private fun labelElemsOf(kr: KeyRect): List<KbTheme.LabelElem> {
-        if (keyStyles.resolve(kr.key)?.hideLabel == true) return emptyList()
+        val st = keyStyles.resolve(kr.key)
+        if (st?.hideLabel == true) return emptyList()
         theme.fonts = fontSet
-        return theme.labelElems(kr.key, labelFor(kr.key), kr.rect, rowH)
+        // 主題工作室裡刪掉的字：不畫、也選不到
+        return theme.labelElems(kr.key, labelFor(kr.key), kr.rect, rowH).filter { st?.labels?.get(it.id)?.hidden != true }
     }
+
+    /** 這顆鍵上被刪掉的字（"main"、"sub"…），主題工作室的面板顯示「恢復」用 */
+    fun hiddenLabels(key: Key): List<String> =
+        keyStyles.resolve(key)?.labels?.filterValues { it.hidden }?.keys?.toList() ?: emptyList()
 
     /** 這個字現在的顏色：自己設的 > 按鍵的文字顏色 > 主題原本的顏色 */
     private fun labelColor(kr: KeyRect, id: String, st: KeyStyle?): Int {
@@ -481,7 +487,11 @@ class CatKeyboardView(
         c.translate(e.cx + ls.dx * kr.rect.width(), e.cy + ls.dy * kr.rect.height())
         c.rotate(ls.rotation)
         c.scale(ls.scale, ls.scale)
-        theme.drawLabelElem(c, e, labelColor(kr, e.id, st), shiftState, body)
+        // 透明度：乘在顏色本身的透明度上
+        val col = labelColor(kr, e.id, st).let { c0 ->
+            if (ls.alpha >= 1f) c0 else (c0 and 0x00FFFFFF) or ((android.graphics.Color.alpha(c0) * ls.alpha).toInt().coerceIn(0, 255) shl 24)
+        }
+        theme.drawLabelElem(c, e, col, shiftState, body)
         c.restore()
     }
 

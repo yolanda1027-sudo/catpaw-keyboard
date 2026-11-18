@@ -426,6 +426,6 @@ class DecalHandles(private val dp: Float) {
     companion object {
         val BLUE = Color.parseColor("#4F8BFF")
         val DECAL_TOOLS = listOf("copy" to "複製", "flip" to "翻轉", "up" to "上層", "down" to "下層", "delete" to "刪除")
-        val LABEL_TOOLS = listOf("color" to "顏色", "up" to "上層", "down" to "下層", "reset" to "重設")
+        val LABEL_TOOLS = listOf("color" to "顏色", "up" to "上層", "down" to "下層", "reset" to "重設", "delete" to "刪除")
     }
 }

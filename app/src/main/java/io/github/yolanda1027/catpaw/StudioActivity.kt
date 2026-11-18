@@ -454,8 +454,29 @@ class StudioActivity : Activity() {
         val what = if (groupScope) group.title else "這顆鍵"
         button("清除${what}的設定") { update({ null }) }
 
+        // 被刪掉的字：可以恢復
+        if (!groupScope) {
+            val gone = kv.hiddenLabels(key)
+            if (gone.isNotEmpty()) {
+                section("被刪掉的字")
+                for (n in gone) {
+                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    row.addView(TextView(this).apply { text = labelName(key, n); textSize = 15f }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    row.addView(Button(this).apply {
+                        text = "恢復"
+                        isAllCaps = false
+                        setOnClickListener {
+                            val cur = styles.map[KeyStyles.idOf(key)]?.labels?.get(n) ?: LabelStyle()
+                            setLabelStyle(key, n, cur.copy(hidden = false))
+                        }
+                    })
+                    panel.addView(row)
+                }
+            }
+        }
+
         section("這顆鍵上的圖案")
-        if (!groupScope) text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層。", 13f, dim = true)
+        if (!groupScope) text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
         decalList(selId)
 
         section("按鍵動畫")
@@ -824,7 +845,21 @@ class StudioActivity : Activity() {
         android.widget.Toast.makeText(this, "已經複製到 ${targets.size} 顆鍵", android.widget.Toast.LENGTH_SHORT).show()
     }
 
-    /** 編輯框上面的小工具（圖案：複製、翻轉、上下層、刪除；字：顏色、上下層、重設） */
+    /** 刪掉按鍵上的一個字（藏起來；按鍵照樣能打字，面板上可以恢復） */
+    private fun deleteLabel(key: Key, name: String) {
+        val cur = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
+        decalSel = null
+        setLabelStyle(key, name, cur.copy(hidden = true))
+    }
+
+    /** 被刪掉的字叫什麼（面板上顯示用） */
+    private fun labelName(key: Key, name: String) = when {
+        name == "sub" -> "小字「${key.sub ?: ""}」"
+        key.icon != null -> "圖示"
+        else -> "主字「${key.label}」"
+    }
+
+    /** 編輯框上面的小工具（圖案：複製、翻轉、上下層、刪除；字：顏色、上下層、重設、刪除） */
     private fun decalAction(action: String, d: Decal) {
         val key = selected
         if (d.id.startsWith(LABEL)) {
@@ -835,6 +870,7 @@ class StudioActivity : Activity() {
                 "down" -> moveElement(key, d.id, -1)
                 "reset" -> setLabelStyle(key, name, null)
                 "color" -> pickLabelColor(key, name)
+                "delete" -> deleteLabel(key, name)
             }
             return
         }
@@ -863,14 +899,9 @@ class StudioActivity : Activity() {
     private fun labelPanel(key: Key, name: String) {
         kv.editHighlight = null
         val ls = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
-        val what = when {
-            name == "sub" -> "小字「${key.sub ?: ""}」"
-            key.icon != null -> "圖示"
-            else -> "主字「${key.label}」"
-        }
-        text("正在編輯：$what", 18f, bold = true).setPadding(0, px(10f), 0, 0)
+        text("正在編輯：" + labelName(key, name), 18f, bold = true).setPadding(0, px(10f), 0, 0)
         text("貼在：" + KeyStyles.nameOf(key), 14f, dim = true)
-        text("👆 拖中間＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設", 14f).setPadding(0, px(8f), 0, px(4f))
+        text("👆 拖中間或上面的十字＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設、刪除", 14f).setPadding(0, px(8f), 0, px(4f))
 
         // 顏色
         val row = LinearLayout(this).apply {
@@ -898,6 +929,7 @@ class StudioActivity : Activity() {
             val cur = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
             setLabelStyle(key, name, f(cur), rebuild = false)
         }
+        slider("透明度", (ls.alpha * 100).toInt(), 0, 100, { if (it == 0) "0%（完全透明）" else "$it%" }) { v -> live { it.copy(alpha = v / 100f) } }
         slider("大小", (ls.scale * 100).toInt().coerceIn(30, 300), 30, 300, { "$it%" }) { v -> live { it.copy(scale = v / 100f) } }
         val rot = (((ls.rotation % 360) + 540) % 360 - 180).toInt()
         slider("旋轉", rot, -180, 180, { "$it°" }) { v -> live { it.copy(rotation = v.toFloat()) } }
@@ -912,6 +944,7 @@ class StudioActivity : Activity() {
         small("往下一層") { moveElement(key, LABEL + name, -1) }
         small("重設") { setLabelStyle(key, name, null) }
         panel.addView(btns)
+        button("🗑 刪除這個字（按鍵照樣能打字，之後可以恢復）") { deleteLabel(key, name) }
         button("← 回到" + KeyStyles.nameOf(key)) { decalSel = null; refresh() }
     }
 

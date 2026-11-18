@@ -96,8 +96,8 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         hint.textSize = 13 * dp
         val tip = when {
             sel == null -> "點一下字或圖案來選它，或直接拖著走"
-            sel.id.startsWith("label:") -> "拖中間移動・拖四角縮放・拖下面的圓圈旋轉"
-            else -> "拖中間移動・拖角縮放・拖邊只改寬或高・拖圓圈旋轉"
+            sel.id.startsWith("label:") -> "拖中間或上面的十字移動・拖四角縮放・拖下面的圓圈旋轉"
+            else -> "拖中間或十字移動・拖角縮放・拖邊只改寬或高・拖圓圈旋轉"
         }
         c.drawText(tip, width / 2f, height - 14 * dp, hint)
     }

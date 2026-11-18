@@ -15,12 +15,20 @@ data class LabelStyle(
     val scale: Float = 1f,
     val rotation: Float = 0f,
     val color: Int? = null,
+    /** 透明度（1 = 不透明、0 = 完全透明） */
+    val alpha: Float = 1f,
+    /** 刪掉了（不畫、也選不到；在按鍵的面板可以恢復。按鍵照樣能打字） */
+    val hidden: Boolean = false,
 ) {
-    val isEmpty get() = dx == 0f && dy == 0f && scale == 1f && rotation == 0f && color == null
+    val isEmpty get() = dx == 0f && dy == 0f && scale == 1f && rotation == 0f && color == null && alpha == 1f && !hidden
 
     fun toJson(): JSONObject = JSONObject()
         .put("dx", dx.toDouble()).put("dy", dy.toDouble()).put("scale", scale.toDouble()).put("rotation", rotation.toDouble())
-        .apply { color?.let { put("color", String.format("#%08X", it)) } }
+        .apply {
+            color?.let { put("color", String.format("#%08X", it)) }
+            if (alpha != 1f) put("alpha", alpha.toDouble())
+            if (hidden) put("hidden", true)
+        }
 
     companion object {
         fun fromJson(o: JSONObject): LabelStyle = LabelStyle(
@@ -29,6 +37,8 @@ data class LabelStyle(
             scale = o.optDouble("scale", 1.0).toFloat().coerceIn(0.1f, 6f),
             rotation = o.optDouble("rotation", 0.0).toFloat().coerceIn(-720f, 720f),
             color = o.optString("color").takeIf { it.isNotEmpty() }?.let { try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null } },
+            alpha = o.optDouble("alpha", 1.0).toFloat().let { if (it.isNaN()) 1f else it }.coerceIn(0f, 1f),
+            hidden = o.optBoolean("hidden", false),
         )
     }
 }
