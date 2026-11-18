@@ -215,6 +215,8 @@ class SettingsActivity : Activity() {
         ColorDialog.show(this, label, initial, onPick)
 
     companion object {
+        /** 隱私權政策（商店頁填的也是這個網址；HEAD = repo 的預設分支） */
+        const val PRIVACY_URL = "https://github.com/yolanda1027-sudo/catpaw-keyboard/blob/HEAD/docs/privacy-policy.md"
         private const val REQ_STICKER = 100
         private const val REQ_FONT = 200
         private const val REQ_EXPORT = 300
@@ -243,6 +245,7 @@ class SettingsActivity : Activity() {
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
         PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
+        PageInfo("privacy", "🔒 隱私權", "打的字只留在手機裡：存了什麼、怎麼刪", false),
         PageInfo("licenses", "📜 開放原始碼授權", "注音詞庫、繁簡對照表、表情符號、字體的授權", false),
         // 從「外觀」的主題清單跳進來，不列在首頁
         PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true, parent = "look", listed = false),
@@ -348,6 +351,7 @@ class SettingsActivity : Activity() {
             "mystickers" -> pageMyStickers()
             "tips" -> pageTips()
             "licenses" -> pageLicenses()
+            "privacy" -> pagePrivacy()
             else -> pageHome()
         }
         updateStatus()
@@ -1018,6 +1022,23 @@ class SettingsActivity : Activity() {
     })
 
     // ---------- 開放原始碼授權 ----------
+
+    /** 隱私權：App 裡的簡短版，完整版在 docs/privacy-policy.md（商店頁填的也是那個網址） */
+    private fun pagePrivacy() {
+        note("🐾 貓爪鍵盤沒有網路權限，不能連上網路，所以你打的字、設定和圖片都只留在這支手機裡，不會傳給任何人（包括我們）。沒有廣告、沒有追蹤、不用註冊。")
+        note("手機裡會存的東西：\n・選字記憶（你挑過的字）\n・剪貼簿紀錄（最多 20 筆，沒釘選的 1 小時後自動刪掉）\n・最近用過的符號、表情\n・設定、主題，還有你自己選的圖片和字體")
+        note("特別不記的：\n・密碼欄位\n・無痕模式（例如瀏覽器的無痕分頁）\n・標成機密的剪貼簿內容（例如密碼管理 App 複製的）")
+        note("Android 的系統備份可能會把設定、主題和選字記憶備份到你自己的 Google 帳號（我們看不到），剪貼簿紀錄不會備份。解除安裝貓爪鍵盤，所有資料都會一起刪掉。")
+        button("清除學習紀錄…") { showPage("candidate") }
+        button("剪貼簿紀錄開關、清除…") { showPage("clip") }
+        button("看完整的隱私權政策（開啟網頁）") {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(PRIVACY_URL)))
+            } catch (_: Exception) {
+                android.widget.Toast.makeText(this, PRIVACY_URL, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private fun pageLicenses() {
         note("貓爪鍵盤用到下面這些開放原始碼的資料和字體，感謝每一位作者。點「看授權全文」可以看完整的授權條款。")

@@ -21,6 +21,11 @@ class Segment(val text: String, val entry: Entry?)
  * - 只打聲母也行（ㄒㄒ → 謝謝）
  */
 class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
+    /** false = 不記新的選字（無痕模式的輸入框） */
+    var learning: Boolean
+        get() = !user.paused
+        set(v) { user.paused = !v }
+
 
     private val done = ArrayList<Pattern>()
     private val current = StringBuilder()

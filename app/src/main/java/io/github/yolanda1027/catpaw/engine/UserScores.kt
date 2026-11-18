@@ -19,6 +19,12 @@ class UserScores(private val file: File?) {
     private val bonus = HashMap<String, Float>()
     private val phrases = LinkedHashMap<String, Pair<String, String>>() // key → (詞, 讀音)
 
+    /**
+     * 暫停學習：輸入框要求「不要記住打的字」時（例如瀏覽器的無痕模式）打開。
+     * 已經學過的字照樣會用來排選字，只是不再記新的。
+     */
+    var paused = false
+
     init {
         file?.takeIf { it.exists() }?.forEachLine { line ->
             val f = line.split('\t')
@@ -39,6 +45,7 @@ class UserScores(private val file: File?) {
      * @param topScore 同一組讀音裡，目前第一名的分數（已含加分）
      */
     fun pick(e: Entry, topScore: Float) {
+        if (paused) return
         val k = key(e)
         val cur = bonus[k] ?: 0f
         val needed = topScore - e.score + MARGIN
@@ -48,6 +55,7 @@ class UserScores(private val file: File?) {
 
     /** 記住一個自訂詞，回傳 true 代表是新的 */
     fun addPhrase(phrase: String, reading: String): Boolean {
+        if (paused) return false
         val k = "$phrase\t$reading"
         if (phrases.containsKey(k)) return false
         phrases[k] = phrase to reading

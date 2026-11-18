@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 系統備份（備份到使用者自己的 Google 帳號、或換手機時搬資料）要帶走哪些東西。
+  設定、主題、貼圖、學習過的字照常備份；剪貼簿紀錄可能有私人內容，不備份也不搬。
+  （隱私權政策 docs/privacy-policy.md 有寫到這件事，改這裡要一起改）
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="clips.json" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="clips.json" />
+    </device-transfer>
+</data-extraction-rules>

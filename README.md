@@ -27,6 +27,11 @@
 - [x] **其他**：我的貼圖（上傳自己的圖當表情）、剪貼簿（釘選、排順序）、顏文字、字體選擇
 - [ ] **上架 Google Play**：準備中
 
+## 隱私權
+
+貓爪鍵盤沒有網路權限，打的字只留在手機裡。詳見 [隱私權政策](docs/privacy-policy.md)。
+上架用的商店資訊草稿在 [docs/store-listing.md](docs/store-listing.md)。
+
 ## 詞庫來源
 
 注音詞庫來自 [小麥注音 McBopomofo](https://github.com/openvanilla/McBopomofo)（MIT License），

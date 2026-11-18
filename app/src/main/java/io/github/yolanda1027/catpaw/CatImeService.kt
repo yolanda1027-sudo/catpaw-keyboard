@@ -105,7 +105,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             ChineseConvert.ensure(this) // 簡繁對照表也先讀好，切換時才不會卡一下
             main.post {
                 dict = d
-                engine = ZhuyinEngine(d, user)
+                engine = ZhuyinEngine(d, user).also { it.learning = !noLearning }
                 if (pending.isNotEmpty()) {
                     val keys = pending.toString()
                     pending.setLength(0)
@@ -138,7 +138,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     private fun reloadUserScores() {
         val d = dict ?: return
-        engine = ZhuyinEngine(d, UserScores(File(filesDir, "user_scores.txt")))
+        engine = ZhuyinEngine(d, UserScores(File(filesDir, "user_scores.txt"))).also { it.learning = !noLearning }
     }
 
     override fun onCreateInputView(): View {
@@ -159,6 +159,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             else -> Page.MAIN
         }
         chinese = prefs.chinese && !isPassword(info)
+        // 輸入框說「不要記住打的字」（瀏覽器無痕模式等）：這次不學新的選字
+        noLearning = isPassword(info) || (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+        engine?.learning = !noLearning
         captureClipboard() // 鍵盤打開時順便看一下剛剛有沒有複製新東西
         kv?.reloadPrefs()
         refresh()
@@ -192,6 +195,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             refresh()
         }
     }
+
+    /** 目前的輸入框不要學習（密碼欄、無痕模式） */
+    internal var noLearning = false
+        private set
 
     private fun isPassword(info: EditorInfo): Boolean {
         val variation = info.inputType and InputType.TYPE_MASK_VARIATION
@@ -655,7 +662,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     /** 把系統剪貼簿目前的文字記下來（標成機密的不記，例如密碼管理 App 複製的） */
     private fun captureClipboard() {
-        if (!prefs.clipboardHistory) return
+        if (!prefs.clipboardHistory || noLearning) return
         try {
             val cm = getSystemService(ClipboardManager::class.java) ?: return
             val clip = cm.primaryClip ?: return
