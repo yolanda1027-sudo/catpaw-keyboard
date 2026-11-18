@@ -199,9 +199,11 @@ data class QuickBarStyle(
     val borderWidth: Float? = null,
     val borderStyle: String? = null,
     val borderInset: Float? = null,
+    /** 按鈕圖片（九宮格）：有的話按鈕就畫這張，底色、外框、圓角交給圖片 */
+    val frame: NineFrame? = null,
 ) {
     val isEmpty get() = strip == null && bg == null && text == null && border == null && radius == null &&
-        borderWidth == null && borderStyle == null && borderInset == null
+        borderWidth == null && borderStyle == null && borderInset == null && frame == null
     /** 按鈕換成自訂的形狀（改了底色、外框或圓角） */
     val isShaped get() = bg != null || border != null || radius != null || borderWidth != null || borderStyle != null || borderInset != null
 
@@ -218,6 +220,7 @@ data class QuickBarStyle(
         borderWidth?.let { put("borderWidth", it.toDouble()) }
         borderStyle?.let { put("borderStyle", it) }
         borderInset?.let { put("borderInset", it.toDouble()) }
+        frame?.let { put("frame", it.toJson()) }
     }
 
     companion object {
@@ -233,6 +236,7 @@ data class QuickBarStyle(
                 borderWidth = num("borderWidth", 0.5f, 8f),
                 borderStyle = o.optString("borderStyle").takeIf { s -> KeyStyle.BORDER_STYLES.any { it.first == s } },
                 borderInset = num("borderInset", 0f, 12f),
+                frame = NineFrame.fromJson(o.optJSONObject("frame")),
             ).takeIf { !it.isEmpty }
         }
     }
@@ -292,8 +296,8 @@ class KeyStyles(val map: Map<String, KeyStyle> = emptyMap(), val topBar: TopBarS
     /** 真的是按鍵的設定（不算鍵盤背景圖） */
     val keyEntries: Map<String, KeyStyle> get() = map.filterKeys { it != KEYBOARD }
 
-    /** 所有用到的底圖檔名 */
-    val imageFiles: Set<String> get() = map.values.mapNotNull { it.bgImage?.img }.toSet()
+    /** 所有用到的圖檔名（按鍵底圖、鍵盤背景圖、快捷列按鈕圖片） */
+    val imageFiles: Set<String> get() = map.values.mapNotNull { it.bgImage?.img }.toSet() + listOfNotNull(quick?.frame?.img)
 
     companion object {
         val EMPTY = KeyStyles()

@@ -591,6 +591,25 @@ class StudioActivity : Activity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (Eyedropper.onResult(this, requestCode, resultCode, data)) return
+        if (requestCode == REQ_QUICK_FRAME) {
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) return
+            // 九宮格只用靜態圖：GIF 也只留第一格
+            val name = try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val bytes = input.readBytes()
+                    if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes, keepGif = false, maxPx = 1024)
+                }
+            } catch (_: Exception) { null }
+            if (name == null) {
+                android.widget.Toast.makeText(this, "這個檔案讀不出來，換一張圖試試", android.widget.Toast.LENGTH_LONG).show()
+                return
+            }
+            // 上傳完直接調整邊角；換一張的話沿用原本的邊角設定
+            val prev = styles.quick?.frame
+            openNineSlice(NineFrame(name, prev?.sx ?: NineFrame.DEFAULT, prev?.sy ?: NineFrame.DEFAULT))
+            return
+        }
         if (requestCode == REQ_FILL) {
             val target = pendingFill
             pendingFill = null
@@ -1094,39 +1113,90 @@ class StudioActivity : Activity() {
         if (!prefs.quickBar) text("💡 快捷符號列在設定裡是關著的，這裡先顯示出來給你看。要用的話到「設定 → ⌨ 快捷符號列」打開。", 13f, dim = true)
         val cur = styles.quick ?: QuickBarStyle()
         val now = kv.quickBarColors()
+        val hasFrame = cur.frame != null
         colorRow("整列的底色", cur.strip, now.strip!!, allowTransparent = true) { v -> setQuick({ it.copy(strip = v) }) }
-        colorRow("按鈕底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setQuick({ it.copy(bg = v) }) }
-        colorRow("文字顏色", cur.text, now.text!!) { v -> setQuick({ it.copy(text = v) }) }
-        colorRow("外框顏色", cur.border, now.border!!, allowTransparent = true) { v -> setQuick({ it.copy(border = v) }) }
-        borderEditor(
-            style = cur.borderStyle, width = cur.borderWidth, inset = cur.borderInset,
-            customized = cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null,
-            hint = if (cur.border == null && kv.quickBarHasBorder() != true) "💡 快捷列按鈕現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。" else null,
-            onStyle = { s -> setQuick({ it.copy(borderStyle = s) }) },
-            onWidth = { w -> setQuick({ it.copy(borderWidth = w) }, rebuild = false) },
-            onInset = { d -> setQuick({ it.copy(borderInset = d) }, rebuild = false) },
-            onReset = { setQuick({ it.copy(borderStyle = null, borderWidth = null, borderInset = null) }) },
-        )
 
-        val radius = ((cur.radius ?: 0.3f) * 100).toInt()
-        val radiusLabel = text("按鈕圓角：$radius%", 15f)
-        radiusLabel.setPadding(0, px(14f), 0, 0)
-        panel.addView(SeekBar(this).apply {
-            max = 100
-            progress = radius
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    if (!fromUser) return
-                    radiusLabel.text = "按鈕圓角：$p%"
-                    setQuick({ it.copy(radius = p / 100f) }, rebuild = false)
-                }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) { commitHistory() }
-            })
+        // 按鈕圖片（九宮格）
+        val head = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, px(6f), 0, 0) }
+        head.addView(TextView(this).apply { text = "按鈕圖片"; textSize = 15f })
+        head.addView(TextView(this).apply {
+            text = if (hasFrame) "已設定（四個角不變形，按鈕變寬只拉長中間）" else "沒有（可以上傳一張框圖，例如雕花框）"
+            textSize = 12f
+            alpha = 0.65f
         })
-        text("改了按鈕底色、外框或圓角，按鈕會換成自訂的形狀。「整列的底色」透明＝跟原本一樣看得到鍵盤背景。", 12f, dim = true)
+        panel.addView(head)
+        val frameRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun fb(s: String, onClick: () -> Unit) = frameRow.addView(Button(this).apply {
+            text = s
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(3f), px(2f), px(3f)) })
+        fb(if (hasFrame) "📷 換一張" else "📷 上傳圖片") {
+            val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_QUICK_FRAME)
+        }
+        cur.frame?.let { f ->
+            fb("📐 調整邊角") { openNineSlice(f) }
+            fb("拿掉") { setQuick({ it.copy(frame = null) }) }
+        }
+        panel.addView(frameRow)
+
+        colorRow("文字顏色", cur.text, now.text!!) { v -> setQuick({ it.copy(text = v) }) }
+        greyIf(hasFrame) {
+            colorRow("按鈕底色", cur.bg, now.bg!!, allowTransparent = true) { v -> setQuick({ it.copy(bg = v) }) }
+            colorRow("外框顏色", cur.border, now.border!!, allowTransparent = true) { v -> setQuick({ it.copy(border = v) }) }
+            borderEditor(
+                style = cur.borderStyle, width = cur.borderWidth, inset = cur.borderInset,
+                customized = cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null,
+                hint = if (cur.border == null && kv.quickBarHasBorder() != true) "💡 快捷列按鈕現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。" else null,
+                onStyle = { s -> setQuick({ it.copy(borderStyle = s) }) },
+                onWidth = { w -> setQuick({ it.copy(borderWidth = w) }, rebuild = false) },
+                onInset = { d -> setQuick({ it.copy(borderInset = d) }, rebuild = false) },
+                onReset = { setQuick({ it.copy(borderStyle = null, borderWidth = null, borderInset = null) }) },
+            )
+
+            val radius = ((cur.radius ?: 0.3f) * 100).toInt()
+            val radiusLabel = text("按鈕圓角：$radius%", 15f)
+            radiusLabel.setPadding(0, px(14f), 0, 0)
+            panel.addView(SeekBar(this).apply {
+                max = 100
+                progress = radius
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                        if (!fromUser) return
+                        radiusLabel.text = "按鈕圓角：$p%"
+                        setQuick({ it.copy(radius = p / 100f) }, rebuild = false)
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) { commitHistory() }
+                })
+            })
+            text("改了按鈕底色、外框或圓角，按鈕會換成自訂的形狀。「整列的底色」透明＝跟原本一樣看得到鍵盤背景。", 12f, dim = true)
+        }
+        if (hasFrame) text("💡 按鈕底色、外框、圓角是灰的：現在用按鈕圖片，這些都交給圖片。", 12f, dim = true)
         if (styles.quick != null) button("全部改回主題原本的樣子") { setQuick({ null }) }
         button("← 回到選按鍵") { quickSelected = false; refresh() }
+    }
+
+    /** 調整九宮格的邊角（上傳完、按「調整邊角」都會打開） */
+    private fun openNineSlice(f: NineFrame) {
+        val bmp = java.io.File(Decals.dir(this), f.img).takeIf { Decals.safeName(f.img) && it.exists() }
+            ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+        if (bmp == null) {
+            android.widget.Toast.makeText(this, "這張圖讀不出來，換一張試試", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        // 預覽的字：第一個不是箭頭的快捷符號（箭頭太小看不出來）
+        val items = prefs.quickList().map { it.replace("|", "") }
+        val label = items.firstOrNull { it.none { ch -> ch in "⇤⇥◀▶←→" } } ?: items.firstOrNull() ?: "()"
+        val buttonW = kv.width.toFloat() / items.size.coerceAtLeast(1) - 6 * resources.displayMetrics.density
+        NineSliceDialog.show(this, bmp, f, label, kv.quickBarColors().text ?: Color.BLACK, buttonW) { done ->
+            if (done != null) setQuick({ it.copy(frame = done) })
+        }
     }
 
     // ---------- 底圖（按鍵底圖、鍵盤背景圖） ----------
@@ -1425,6 +1495,7 @@ class StudioActivity : Activity() {
         private const val MENU_REDO = 2
         private const val REQ_EFFECT_IMAGE = 501
         private const val REQ_FILL = 502
+        private const val REQ_QUICK_FRAME = 503
         private const val GLOBAL = "global"
         private const val KEY = "key"
     }

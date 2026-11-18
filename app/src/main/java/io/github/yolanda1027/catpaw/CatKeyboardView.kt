@@ -1210,6 +1210,19 @@ class CatKeyboardView(
             val r = quickRect(i)
             val k = Key(quickLabel(item), Act.TEXT, style = Style.FUNC)
             val pressed = i == quickPressed
+            val frame = qs?.frame
+            val frameBmp = frame?.let { fillBitmap(it.img) }
+            if (qs != null && frame != null && frameBmp != null) {
+                // 按鈕圖片（九宮格）：只畫圖片，按下去只有圖片本身變暗
+                val box = theme.styledBox(r)
+                c.saveLayer(box, null)
+                NineFrame.draw(c, frameBmp, frame.sx, frame.sy, box)
+                if (pressed) c.drawRect(box, pressShadeAtop)
+                c.restore()
+                val main = qs.text ?: native?.text ?: theme.text
+                theme.drawKeyContent(c, r, k, k.label, 0, quickH * 1.6f, main, main, null)
+                return@forEachIndexed
+            }
             if (qs == null || native == null) {
                 theme.drawKey(c, r, k, k.label, pressed, 0, quickH * 1.6f)
                 return@forEachIndexed

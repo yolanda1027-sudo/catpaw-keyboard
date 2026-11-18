@@ -232,7 +232,13 @@ object ThemeIO {
                     val n = rename[f.img]
                     if (n != null) st.copy(bgImage = f.copy(img = n)) else { lostImage = true; st.copy(bgImage = null) }
                 } ?: st
-            }.filterValues { !it.isEmpty }, loaded.topBar, loaded.quick))
+            }.filterValues { !it.isEmpty }, loaded.topBar, loaded.quick?.let { q ->
+                // 快捷列按鈕圖片：換成新存的檔名；壞掉就拿掉（其他顏色留著）
+                q.frame?.let { f ->
+                    val n = rename[f.img]
+                    if (n != null) q.copy(frame = f.copy(img = n)) else { lostImage = true; q.copy(frame = null) }
+                } ?: q
+            }))
             if (lostImage) warnings.add("有底圖的圖片壞掉了，那幾顆鍵先用底色")
         }
         o.optJSONObject("decals")?.let {
