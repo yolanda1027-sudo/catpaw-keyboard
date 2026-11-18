@@ -15,9 +15,10 @@ import kotlin.math.sin
 
 /**
  * 像 Canva 那樣編輯圖案：
- * - 選到的東西外面有框、四個角有圓點、四邊中間有拉把、下面有一個旋轉把手、上面有一排小工具
- * - 拖中間＝移動；拖四個角＝等比例放大縮小；拖左右的拉把＝只改寬、上下的拉把＝只改高；
- *   拖旋轉把手＝旋轉；兩隻手指也可以縮放旋轉
+ * - 選到的東西外面有框、四個角有圓點、四邊中間有拉把、下面有一個旋轉把手、
+ *   上面（旋轉把手的對面）有一個移動把手、再上面有一排小工具
+ * - 拖中間或移動把手＝移動（圖案太小、手指會蓋住時用移動把手）；拖四個角＝等比例放大縮小；
+ *   拖左右的拉把＝只改寬、上下的拉把＝只改高；拖旋轉把手＝旋轉；兩隻手指也可以縮放旋轉
  * - 按鍵上的字也用這一套（不能拉伸、小工具不一樣）
  * - 按在別的圖案上拖＝換成拖那一個
  *
@@ -85,6 +86,9 @@ class DecalHandles(private val dp: Float) {
 
     private fun rotHandle(f: Frame) = f.map(0f, f.hh + rotGap)
 
+    /** 移動把手：在旋轉把手的對面（跟著圖案一起轉） */
+    private fun moveHandle(f: Frame) = f.map(0f, -(f.hh + rotGap))
+
     // ---------- 畫 ----------
 
     fun draw(c: Canvas, d: Decal, g: Geo, viewW: Float, viewH: Float) {
@@ -102,10 +106,11 @@ class DecalHandles(private val dp: Float) {
         line.strokeWidth = 2f * dp
         line.pathEffect = DashPathEffect(floatArrayOf(6 * dp, 4 * dp), 0f)
         c.drawRect(box, line)
-        // 旋轉把手的連接線
+        // 旋轉把手、移動把手的連接線
         line.pathEffect = null
         line.strokeWidth = 1.5f * dp
         c.drawLine(0f, f.hh, 0f, f.hh + rotGap - 11 * dp, line)
+        c.drawLine(0f, -f.hh, 0f, -(f.hh + rotGap - 11 * dp), line)
         // 四邊中間的拉把（扁扁的小膠囊，順著邊的方向）
         if (g.stretchable) {
             val lw = 15 * dp
@@ -138,6 +143,26 @@ class DecalHandles(private val dp: Float) {
         c.drawLine(tx, ty, tx - 3.5f * dp, ty - 0.5f * dp, line)
         c.drawLine(tx, ty, tx + 0.5f * dp, ty + 3.5f * dp, line)
 
+        // 移動把手：圓圈裡一個上下左右的十字箭頭
+        val (mx, my) = moveHandle(f)
+        knob(c, mx, my, 12 * dp)
+        c.save()
+        c.translate(mx, my)
+        c.rotate(f.rot)
+        line.color = BLUE
+        line.strokeWidth = 1.8f * dp
+        val arm = 6.5f * dp
+        val head = 2.6f * dp
+        c.drawLine(-arm, 0f, arm, 0f, line)
+        c.drawLine(0f, -arm, 0f, arm, line)
+        for ((ax, ay) in listOf(arm to 0f, -arm to 0f, 0f to arm, 0f to -arm)) {
+            // 箭頭兩撇：往中心方向退回去、再往兩側
+            val ux = if (ax == 0f) 0f else Math.signum(ax)
+            val uy = if (ay == 0f) 0f else Math.signum(ay)
+            c.drawLine(ax, ay, ax - ux * head - uy * head, ay - uy * head - ux * head, line)
+            c.drawLine(ax, ay, ax - ux * head + uy * head, ay - uy * head + ux * head, line)
+        }
+        c.restore()
         drawToolbar(c, f, g.tools, viewW, viewH)
     }
 
@@ -154,7 +179,7 @@ class DecalHandles(private val dp: Float) {
 
     /** 框上面的一排小工具（上面放不下就放到下面） */
     private fun drawToolbar(c: Canvas, f: Frame, tools: List<Pair<String, String>>, viewW: Float, viewH: Float) {
-        val pts = corners(f) + listOf(rotHandle(f))
+        val pts = corners(f) + listOf(rotHandle(f), moveHandle(f))
         val top = pts.minOf { it.second }
         val bottom = pts.maxOf { it.second }
         val bw = 46 * dp
@@ -256,6 +281,8 @@ class DecalHandles(private val dp: Float) {
                     tool = toolRects.firstOrNull { it.second.contains(e.x, e.y) }?.first
                     when {
                         tool != null -> mode = Mode.TOOL
+                        // 移動把手：圖案太小、手指會蓋住整個圖案時用這個拖
+                        moveHandle(f).let { (x, y) -> hypot(e.x - x, e.y - y) < grab } -> mode = Mode.MOVE
                         corners(f).any { (x, y) -> hypot(e.x - x, e.y - y) < grab } -> {
                             mode = Mode.SCALE
                             dist0 = hypot(e.x - f.cx, e.y - f.cy).coerceAtLeast(1f)
