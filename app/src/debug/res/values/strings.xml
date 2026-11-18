@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  測試版（GitHub「最新測試版」那個 APK）用的名字：跟 Google Play 的正式版是兩個不同的 App，
+  可以同時裝在手機上，所以名字和圖示顏色要分得出來。
+-->
+<resources>
+    <string name="app_name">貓爪鍵盤 測試版</string>
+    <string name="ime_name">貓爪鍵盤（測試版）</string>
+    <string name="studio_name">貓爪工作室 測試版</string>
+</resources>

@@ -16,7 +16,7 @@ android {
         // CI 每次建置的編號都會往上加，手機才能直接「更新」而不用先解除安裝
         // 正式版（release.yml）用 CATPAW_VERSION_CODE，每次上傳 Google Play 都要比上一次大
         versionCode = (System.getenv("CATPAW_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
-        versionName = "0.46.0"
+        versionName = "0.47.0"
     }
 
     signingConfigs {
@@ -43,6 +43,10 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
+            // 測試版是另一個 App（io.github.yolanda1027.catpaw.dev）：可以跟 Google Play 的正式版同時安裝。
+            // 名字、圖示顏色在 src/debug/res 裡另外設定。
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
         }
         release {
             isMinifyEnabled = false

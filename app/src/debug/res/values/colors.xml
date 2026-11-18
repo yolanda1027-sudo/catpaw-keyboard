@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 測試版的圖示底色換掉：桌面上一眼看出哪個是測試版 -->
+<resources>
+    <color name="icon_bg">#D6ECFF</color>
+    <color name="studio_bg">#E2DBFF</color>
+</resources>

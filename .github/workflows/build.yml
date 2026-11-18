@@ -41,4 +41,4 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "最新測試版 #${{ github.run_number }}" \
-            --notes "分支：${{ github.ref_name }}　commit：${{ github.sha }}"
+            --notes "測試版（App 名稱：貓爪鍵盤 測試版），可以跟 Google Play 正式版同時安裝。分支：${{ github.ref_name }}　commit：${{ github.sha }}"

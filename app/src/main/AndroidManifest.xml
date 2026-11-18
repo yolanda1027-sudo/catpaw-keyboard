@@ -35,7 +35,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_studio"
             android:label="@string/studio_name"
-            android:taskAffinity="io.github.yolanda1027.catpaw.studio">
+            android:taskAffinity="${applicationId}.studio">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

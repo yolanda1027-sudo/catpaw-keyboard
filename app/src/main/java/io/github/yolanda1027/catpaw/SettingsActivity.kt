@@ -338,7 +338,7 @@ class SettingsActivity : Activity() {
         Ui.fitSystemBars(outer)
         setContentView(outer)
         updateBackCallback()
-        actionBar?.title = info?.title?.substringAfter(' ') ?: "貓爪鍵盤"
+        actionBar?.title = info?.title?.substringAfter(' ') ?: getString(R.string.app_name)
         actionBar?.setDisplayHomeAsUpEnabled(info != null)
         when (id) {
             "haptic" -> pageHaptic()
@@ -362,7 +362,7 @@ class SettingsActivity : Activity() {
 
         section("開始使用")
         status = note("")
-        button("① 到系統設定啟用「貓爪鍵盤」") {
+        button("① 到系統設定啟用「${getString(R.string.ime_name)}」") {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
         }
         button("② 切換成貓爪鍵盤") {
@@ -1002,7 +1002,7 @@ class SettingsActivity : Activity() {
         status.text = when {
             current -> "✅ 貓爪鍵盤使用中！"
             enabled -> "已啟用，再按 ② 切換過去就可以用了"
-            else -> "還沒啟用，先按 ①，在清單裡打開「貓爪鍵盤」"
+            else -> "還沒啟用，先按 ①，在清單裡打開「${getString(R.string.ime_name)}」"
         }
     }
 

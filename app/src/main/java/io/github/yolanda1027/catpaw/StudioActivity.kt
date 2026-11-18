@@ -373,7 +373,7 @@ class StudioActivity : Activity() {
         if (key == null) {
             kv.editHighlight = null
             text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面「中／En」那一列），就可以開始改它的樣子", 16f).setPadding(0, px(12f), 0, px(8f))
-            text("改好會直接套用到鍵盤上。想換整體主題、字體，到「貓爪鍵盤」設定的外觀頁。", 13f, dim = true)
+            text("改好會直接套用到鍵盤上。想換整體主題、字體，到「${getString(R.string.app_name)}」設定的外觀頁。", 13f, dim = true)
             button("🖼️ 鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
             button("🔝 上方列（中／En、選字列）的顏色") { topSelected = true; refresh() }
             button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
