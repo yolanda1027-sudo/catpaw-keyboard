@@ -65,6 +65,18 @@ class EmojiTest {
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    /** ❤️ 那一頁點進去要先看到愛心（Unicode 把愛心放在笑臉類，工具有搬過來） */
+    @Test fun heartsAreInHeartTab() {
+        val hearts = Emojis.groups.first { it.first == "❤️" }.second
+        assertEquals("💌", hearts.first())
+        for (h in listOf("❤️", "🩷", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "💕")) {
+            assertTrue("❤️ 頁沒有 $h", h in hearts.take(30))
+        }
+        val smileys = Emojis.groups.first { it.first == "😀" }.second
+        assertTrue("❤️ 不要在笑臉頁重複", "❤️" !in smileys)
+        assertTrue("有愛心的臉還是在笑臉頁", "🥰" in smileys && "😻" in smileys)
+    }
+
     @Test fun renderBoards() {
         shot(board("classic", 1, 0), "emoji-smileys")
         shot(board("macaron_butter", 3, 1), "emoji-animals")
