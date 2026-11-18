@@ -417,7 +417,7 @@ class SettingsActivity : Activity() {
         val modes = listOf(
             "click" to "清脆",
             "tick" to "輕點（更短更輕）",
-            "custom" to "自訂長度（最像 Google 注音：強度 70、12 毫秒）",
+            "custom" to "自訂長度（推薦：強度 70、12 毫秒）",
             "system" to "跟隨系統設定",
             "off" to "關閉震動",
         )
@@ -549,7 +549,7 @@ class SettingsActivity : Activity() {
     private fun pageTheme() {
         themeGroup = radios(
             listOf(
-                "classic" to "經典深色（Google 注音風）",
+                "classic" to "經典深色",
                 "stitch" to "粉紅縫線",
                 "catpaw" to "貓爪肉球",
             ) + MacaronTheme.PALETTES.map { it.id to it.title } + MagicTheme.PALETTES.map { it.id to it.title } + listOf(
@@ -563,7 +563,7 @@ class SettingsActivity : Activity() {
             setOnClickListener { showPage("color") }
         })
         subTitle("按鍵")
-        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（Google 注音約 45）") { prefs.keyHeightDp = it }
+        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（一般手機鍵盤約 45）") { prefs.keyHeightDp = it }
         slider("長按時間", 200, 700, prefs.longPressMs, " 毫秒") { prefs.longPressMs = it }
         root.addView(Switch(this).apply {
             text = "按下時顯示放大的字"
@@ -749,7 +749,7 @@ class SettingsActivity : Activity() {
 
     private fun pageCandidate() {
         root.addView(Switch(this).apply {
-            text = "注音直接顯示在輸入框裡（關掉＝像 Google 注音，顯示在鍵盤上方，選了字才送出）"
+            text = "注音直接顯示在輸入框裡（關掉＝顯示在鍵盤上方的注音小框框，選了字才送出）"
             isChecked = prefs.inlineComposing
             setOnCheckedChangeListener { _, b -> prefs.inlineComposing = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
@@ -869,7 +869,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageTips() {
-        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・分段選字：選好的字會先留在注音小框框，全部選完才送出；按刪除鍵會先把選好的字退回成注音\n・長按注音鍵會跳出選單（像 Google 注音），手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫\n・符號鍵盤可以左右滑換頁")
+        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・分段選字：選好的字會先留在注音小框框，全部選完才送出；按刪除鍵會先把選好的字退回成注音\n・長按注音鍵會跳出選單，手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫\n・符號鍵盤可以左右滑換頁")
     }
 
     // ---------- 快捷符號列（一個按鈕一行） ----------
