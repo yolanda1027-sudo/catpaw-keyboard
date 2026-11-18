@@ -116,6 +116,7 @@ class KeyStylesTest {
         val p = Prefs(ctx)
         KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = 0xFFFF8FA9.toInt(), radius = 0.6f)))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val f = StudioActivity::class.java.getDeclaredField("kv"); f.isAccessible = true
         val kv = f.get(a) as CatKeyboardView
         render(a.window.decorView.also { it.measure(0, 0) }.let { a.window.decorView }, "studio-empty")
@@ -124,7 +125,7 @@ class KeyStylesTest {
         kv.editPicker!!.invoke(b)
         render(a.window.decorView, "studio-zhuyin")
         // 魔法學院主題：選色器的起點要是羊皮紙的顏色
-        Prefs(ctx).theme = "magic_yellow"
+        Prefs(ctx, ThemeStore.WORK).theme = "magic_yellow"
         kv.reloadPrefs()
         kv.editPicker!!.invoke(b)
         render(a.window.decorView, "studio-magic")

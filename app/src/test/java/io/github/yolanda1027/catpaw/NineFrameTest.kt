@@ -103,6 +103,7 @@ class NineFrameTest {
         p.theme = "magic_yellow"
         p.quickBar = true
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         kv.onQuickBarPicked!!.invoke()
         ShadowLooper.idleMainLooper()
@@ -120,7 +121,7 @@ class NineFrameTest {
         render(d.window!!.decorView, "nine-dialog")
         (find(d.window!!.decorView) { it is Button && it.text == "完成" } as Button).performClick()
         ShadowLooper.idleMainLooper()
-        val q = KeyStyles.load(Prefs(ctx)).quick!!
+        val q = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).quick!!
         assertEquals(0.2f, q.frame!!.sx, 0.001f)
         // 按鈕底色、外框、圓角變灰
         assertNotNull(find(root) { it is TextView && it.text.startsWith("💡 按鈕底色、外框、圓角是灰的") })
@@ -129,8 +130,8 @@ class NineFrameTest {
         // 鍵盤上的樣子
         StudioActivity::class.java.declaredMethods.first { it.name == "setQuick" && it.parameterCount == 2 }.apply { isAccessible = true }
             .invoke(a, { s: QuickBarStyle -> s.copy(text = gold) }, true)
-        val k = CatKeyboardView(ctx, Prefs(ctx), Haptics(ctx))
-        k.quickItems = Prefs(ctx).quickList()
+        val k = CatKeyboardView(ctx, Prefs(ctx, ThemeStore.WORK), Haptics(ctx))
+        k.quickItems = Prefs(ctx, ThemeStore.WORK).quickList()
         k.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         k.layout(0, 0, k.measuredWidth, k.measuredHeight)
         val b = Bitmap.createBitmap(k.measuredWidth, k.measuredHeight, Bitmap.Config.ARGB_8888)
@@ -146,14 +147,14 @@ class NineFrameTest {
         assertTrue("按鈕有金框：$goldPx", goldPx > 50)
 
         // 離開工作室時不會被清掉；主題匯出再匯入也在
-        Decals.cleanup(ctx, Decals.load(Prefs(ctx)))
+        Decals.cleanup(ctx, Decals.load(Prefs(ctx, ThemeStore.WORK)))
         assertTrue(File(Decals.dir(ctx), q.frame.img).exists())
-        val json = ThemeIO.export(ctx, Prefs(ctx), "雕花快捷列", setOf(ThemeIO.Part.KEYS))
-        KeyStyles.save(Prefs(ctx), KeyStyles.EMPTY)
+        val json = ThemeIO.export(ctx, Prefs(ctx, ThemeStore.WORK), "雕花快捷列", setOf(ThemeIO.Part.KEYS))
+        KeyStyles.save(Prefs(ctx, ThemeStore.WORK), KeyStyles.EMPTY)
         Decals.dir(ctx).listFiles()!!.forEach { it.delete() }
-        val warn = ThemeIO.apply(ctx, Prefs(ctx), ThemeIO.parse(json)!!)
+        val warn = ThemeIO.apply(ctx, Prefs(ctx, ThemeStore.WORK), ThemeIO.parse(json)!!)
         assertTrue(warn.toString(), warn.isEmpty())
-        val back = KeyStyles.load(Prefs(ctx)).quick!!.frame!!
+        val back = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).quick!!.frame!!
         assertTrue(File(Decals.dir(ctx), back.img).exists())
         assertEquals(0.38f, back.sy, 0.001f)
     }

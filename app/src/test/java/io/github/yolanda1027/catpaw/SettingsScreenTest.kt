@@ -55,8 +55,8 @@ class SettingsScreenTest {
         (f.get(a) as android.widget.ScrollView).scrollTo(0, 99999)
         shot(a, "settings-look-bottom")
         // 匯出視窗
-        val m = SettingsActivity::class.java.getDeclaredMethod("showExportDialog"); m.isAccessible = true
-        m.invoke(a)
+        val m = SettingsActivity::class.java.getDeclaredMethod("showExportDialog", String::class.java); m.isAccessible = true
+        m.invoke(a, ThemeStore.activeId(Prefs(a)))
         val d = org.robolectric.shadows.ShadowDialog.getLatestDialog()
         val dv = d.window!!.decorView
         dv.measure(View.MeasureSpec.makeMeasureSpec(960, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))

@@ -3,10 +3,22 @@ package io.github.yolanda1027.catpaw
 import android.content.Context
 import android.content.SharedPreferences
 
-/** 所有可以調的設定都在這裡 */
-class Prefs(context: Context) {
-    val sp: SharedPreferences =
-        context.applicationContext.getSharedPreferences("catpaw", Context.MODE_PRIVATE)
+/**
+ * 所有可以調的設定都在這裡。
+ * @param file 存在哪個設定檔：平常是 "catpaw"（鍵盤真的在用的）；
+ *   主題工作室編輯時用自己的工作副本（ThemeStore.WORK），按儲存才寫回主題。
+ */
+class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
+    private val app: Context = context.applicationContext
+    val sp: SharedPreferences = app.getSharedPreferences(file, Context.MODE_PRIVATE)
+
+    /** 功能鍵貼圖：哪個功能鍵用哪張圖（圖檔放在 Decals.dir，跟著主題走） */
+    var funcStickers: Map<String, String>
+        get() = try {
+            val o = org.json.JSONObject(sp.getString("func_stickers", "{}") ?: "{}")
+            o.keys().asSequence().associateWith { o.optString(it) }.filterValues { Decals.safeName(it) }
+        } catch (_: Exception) { emptyMap() }
+        set(v) = sp.edit().putString("func_stickers", org.json.JSONObject(v).toString()).apply()
 
     /** click / tick / custom / system / off */
     var hapticMode: String
@@ -50,6 +62,8 @@ class Prefs(context: Context) {
         if (sp.getInt("layout_version", 1) < 2) {
             sp.edit().putInt("key_height_dp", 45).putInt("layout_version", 2).apply()
         }
+        // 測試（Robolectric）每次都是全新的設定，不用搬；搬家本身另外測（ThemeStoreTest）
+        if (file == ThemeStore.LIVE && android.os.Build.FINGERPRINT != "robolectric") ThemeStore.migrate(app, this)
     }
 
     /** 中文打出來用簡體（選字還是用繁體詞庫，送出前才轉） */

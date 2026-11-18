@@ -38,14 +38,13 @@ class ThemeIOTest {
         p.pressEffect = "spell"
         p.quickBar = true
         p.setQuickEntries(listOf(Prefs.QuickEntry("()", true), Prefs.QuickEntry("⇥", false)))
-        Stickers.file(ctx, StickerSlot.ENTER).writeBytes(png(Color.RED))
+        Stickers.setBytes(ctx, p, StickerSlot.ENTER, png(Color.RED))
 
         val json = ThemeIO.export(ctx, p, "測試主題", ThemeIO.Part.values().toSet())
 
         // 換成別人的手機：全部設定都不一樣
         p.sp.edit().clear().commit()
-        for (s in StickerSlot.values()) Stickers.remove(ctx, s)
-        Stickers.file(ctx, StickerSlot.SPACE).writeBytes(png(Color.BLUE)) // 這張要被清掉
+        Stickers.setBytes(ctx, p, StickerSlot.SPACE, png(Color.BLUE)) // 這張要被換掉
 
         val o = ThemeIO.parse(json)
         assertNotNull(o)
@@ -64,9 +63,9 @@ class ThemeIOTest {
         assertEquals("spell", q.pressEffect)
         assertTrue(q.quickBar)
         assertEquals(listOf(Prefs.QuickEntry("()", true), Prefs.QuickEntry("⇥", false)), q.quickEntries())
-        val enter = BitmapFactory.decodeFile(Stickers.file(ctx, StickerSlot.ENTER).path)
+        val enter = BitmapFactory.decodeFile(Stickers.file(ctx, q, StickerSlot.ENTER)!!.path)
         assertEquals(Color.RED, enter.getPixel(5, 5))
-        assertFalse(Stickers.file(ctx, StickerSlot.SPACE).exists())
+        assertNull(Stickers.file(ctx, q, StickerSlot.SPACE))
     }
 
     @Test fun onlyThemeWhenNothingChecked() {

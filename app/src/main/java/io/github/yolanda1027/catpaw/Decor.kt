@@ -37,22 +37,31 @@ enum class StickerSlot(val id: String, val title: String) {
 }
 
 /**
- * 貼圖存在 App 自己的資料夾裡（縮小過的 PNG），
- * 所以相簿裡的原圖刪掉也沒關係。
+ * 功能鍵貼圖：縮小過的 PNG 存在 Decals.dir（跟圖案、底圖放一起），
+ * 哪個功能鍵用哪張記在設定裡（Prefs.funcStickers），所以會跟著主題換。
+ * 相簿裡的原圖刪掉也沒關係。
  */
 object Stickers {
     private const val MAX_SIZE = 384
 
-    fun file(ctx: Context, slot: StickerSlot) = File(ctx.filesDir, "sticker_${slot.id}.png")
+    /** 這個功能鍵的貼圖檔（沒有貼圖就是 null） */
+    fun file(ctx: Context, prefs: Prefs, slot: StickerSlot): File? =
+        prefs.funcStickers[slot.id]?.let { File(Decals.dir(ctx), it) }?.takeIf { it.exists() }
 
-    fun load(ctx: Context): Map<StickerSlot, Bitmap> =
+    fun load(ctx: Context, prefs: Prefs): Map<StickerSlot, Bitmap> =
         StickerSlot.values().mapNotNull { slot ->
-            val f = file(ctx, slot)
-            if (!f.exists()) null else BitmapFactory.decodeFile(f.path)?.let { slot to it }
+            file(ctx, prefs, slot)?.let { f -> BitmapFactory.decodeFile(f.path)?.let { slot to it } }
         }.toMap()
 
+    /** 存一張圖給這個功能鍵用（PNG 位元組；會縮小） */
+    fun setBytes(ctx: Context, prefs: Prefs, slot: StickerSlot, bytes: ByteArray): Boolean {
+        val name = Decals.storeBytes(ctx, bytes, maxPx = MAX_SIZE) ?: return false
+        prefs.funcStickers = prefs.funcStickers + (slot.id to name)
+        return true
+    }
+
     /** 從相簿選的圖：縮小、存起來。成功回傳縮好的圖 */
-    fun import(ctx: Context, slot: StickerSlot, uri: Uri): Bitmap? = try {
+    fun import(ctx: Context, prefs: Prefs, slot: StickerSlot, uri: Uri): Bitmap? = try {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
@@ -63,15 +72,17 @@ object Stickers {
         raw?.let { b ->
             val s = min(1f, MAX_SIZE.toFloat() / maxOf(b.width, b.height))
             val scaled = if (s < 1f) Bitmap.createScaledBitmap(b, (b.width * s).toInt(), (b.height * s).toInt(), true) else b
-            file(ctx, slot).outputStream().use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            val name = Decals.storeBitmap(ctx, scaled, MAX_SIZE)
+            prefs.funcStickers = prefs.funcStickers + (slot.id to name)
             scaled
         }
     } catch (_: Exception) {
         null
     }
 
-    fun remove(ctx: Context, slot: StickerSlot) {
-        file(ctx, slot).delete()
+    /** 拿掉這個功能鍵的貼圖（圖檔沒有主題在用時，之後會被清掉） */
+    fun remove(prefs: Prefs, slot: StickerSlot) {
+        prefs.funcStickers = prefs.funcStickers - slot.id
     }
 
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)

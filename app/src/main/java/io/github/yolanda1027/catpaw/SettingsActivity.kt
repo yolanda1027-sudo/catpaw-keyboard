@@ -27,7 +27,6 @@ class SettingsActivity : Activity() {
     private var status: TextView? = null
     private lateinit var customMsRow: View
     private var preview: CatKeyboardView? = null
-    private var themeGroup: RadioGroup? = null
     private val stickerThumbs = HashMap<StickerSlot, android.widget.ImageView>()
 
     /** 設定一改，預覽就重畫（要存成欄位，不然會被系統回收掉） */
@@ -79,7 +78,7 @@ class SettingsActivity : Activity() {
             text = "移除"
             isAllCaps = false
             setOnClickListener {
-                Stickers.remove(this@SettingsActivity, slot)
+                Stickers.remove(prefs, slot)
                 refreshThumb(slot)
                 bumpStickers()
             }
@@ -88,8 +87,8 @@ class SettingsActivity : Activity() {
     }
 
     private fun refreshThumb(slot: StickerSlot) {
-        val f = Stickers.file(this, slot)
-        stickerThumbs[slot]?.setImageBitmap(if (f.exists()) android.graphics.BitmapFactory.decodeFile(f.path) else null)
+        val f = Stickers.file(this, prefs, slot)
+        stickerThumbs[slot]?.setImageBitmap(f?.let { android.graphics.BitmapFactory.decodeFile(it.path) })
     }
 
     /** 通知鍵盤重新讀貼圖 */
@@ -151,7 +150,7 @@ class SettingsActivity : Activity() {
         val slot = StickerSlot.values().getOrNull(requestCode - REQ_STICKER) ?: return
         val uri = data?.data
         if (resultCode != RESULT_OK || uri == null) return
-        if (Stickers.import(this, slot, uri) != null) {
+        if (Stickers.import(this, prefs, slot, uri) != null) {
             refreshThumb(slot)
             bumpStickers()
         } else {
@@ -204,11 +203,22 @@ class SettingsActivity : Activity() {
         lateinit var chip: View
     }
 
+    /**
+     * 調了自訂配色：
+     * - 正在用「我的主題」：這個主題的底色改成自訂配色
+     * - 正在用其他內建主題：換到內建的「自訂配色」主題（剛調的顏色帶過去）
+     */
     private fun switchToCustom() {
-        if (prefs.theme != "custom") {
+        if (prefs.theme == "custom") return
+        val active = ThemeStore.activeId(prefs)
+        if (!ThemeStore.isBuiltIn(active)) {
             prefs.theme = "custom"
-            themeGroup?.findViewWithTag<RadioButton>("custom")?.isChecked = true
+            return
         }
+        val keep = listOf(prefs.customBg, prefs.customKey, prefs.customText, prefs.customSub, prefs.customAccent)
+        ThemeStore.applyTheme(this, prefs, "custom")
+        prefs.customBg = keep[0]; prefs.customKey = keep[1]; prefs.customText = keep[2]
+        prefs.customSub = keep[3]; prefs.customAccent = keep[4]
     }
 
     /** 選色器視窗：大色塊＋彩虹條、新舊顏色對照、色碼欄 */
@@ -318,7 +328,6 @@ class SettingsActivity : Activity() {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         preview = null
         status = null
-        themeGroup = null
         if (info?.preview == true) {
             val v = CatKeyboardView(this, prefs, haptics)
             // 預覽裡放幾個選字，才看得到「選字字體」
@@ -493,13 +502,27 @@ class SettingsActivity : Activity() {
         }
     }
 
-    private fun showExportDialog() {
+    /** 主題檔變成一個新的「我的主題」（不動到任何現有的主題），回傳 id 和警告 */
+    internal fun importAsTheme(o: org.json.JSONObject, name: String): Pair<String, List<String>> {
+        ThemeStore.syncActive(this, prefs)
+        val (snap, warnings) = ThemeStore.withTemp(this, ThemeStore.factory(o.optString("theme"))) { tmp ->
+            val w = ThemeIO.apply(this, tmp, o)
+            ThemeStore.snapshot(tmp) to w
+        }
+        return ThemeStore.create(this, prefs, name, snap) to warnings
+    }
+
+    private fun showExportDialog(themeId: String = ThemeStore.activeId(prefs)) {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val p = (20 * dp).toInt()
             setPadding(p, (8 * dp).toInt(), p, 0)
         }
-        val name = EditText(this).apply { hint = "主題名稱，例如：奶油黃貓爪"; isSingleLine = true }
+        val name = EditText(this).apply {
+            hint = "主題名稱，例如：奶油黃貓爪"
+            isSingleLine = true
+            setText(ThemeStore.nameOf(this@SettingsActivity, themeId))
+        }
         box.addView(name)
         box.addView(TextView(this).apply {
             text = "一定會包含主題和配色，另外要放："
@@ -514,7 +537,9 @@ class SettingsActivity : Activity() {
             .setPositiveButton("下一步：選存檔位置") { _, _ ->
                 val parts = checks.filterValues { it.isChecked }.keys
                 val n = name.text.toString().trim().ifEmpty { "我的貓爪鍵盤" }
-                pendingExport = ThemeIO.export(this, prefs, n, parts)
+                ThemeStore.syncActive(this, prefs)
+                pendingExport = if (themeId == ThemeStore.activeId(prefs)) ThemeIO.export(this, prefs, n, parts)
+                else ThemeStore.withTemp(this, ThemeStore.load(this, prefs, themeId)) { ThemeIO.export(this, it, n, parts) }
                 val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "application/json"
@@ -557,28 +582,70 @@ class SettingsActivity : Activity() {
         val (name, parts) = ThemeIO.describe(o)
         android.app.AlertDialog.Builder(this)
             .setTitle("匯入「$name」？")
-            .setMessage("包含：" + parts.joinToString("、") + "\n\n套用後會取代你目前的這些設定。")
-            .setPositiveButton("套用") { _, _ ->
-                val warnings = ThemeIO.apply(this, prefs, o)
-                showPage("look") // 重新整理畫面，讓選項跟著變
-                val msg = if (warnings.isEmpty()) "已套用「$name」🎉" else "已套用「$name」\n\n" + warnings.joinToString("\n")
-                android.app.AlertDialog.Builder(this).setMessage(msg).setPositiveButton("好", null).show()
+            .setMessage("包含：" + parts.joinToString("、") + "\n\n會加進「我的主題」，原本的主題都不會動。")
+            .setPositiveButton("加入") { _, _ ->
+                val (id, warnings) = importAsTheme(o, name)
+                showPage("look")
+                val added = ThemeStore.nameOf(this, id)
+                val msg = "已加入「$added」🎉" + if (warnings.isEmpty()) "" else "\n\n" + warnings.joinToString("\n")
+                android.app.AlertDialog.Builder(this)
+                    .setMessage("$msg\n\n要現在套用到鍵盤嗎？")
+                    .setPositiveButton("套用") { _, _ ->
+                        ThemeStore.applyTheme(this, prefs, id)
+                        showPage("look")
+                    }
+                    .setNegativeButton("先不要", null)
+                    .show()
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
     private fun pageTheme() {
-        themeGroup = radios(
-            listOf(
-                "classic" to "經典深色",
-                "stitch" to "粉紅縫線",
-                "catpaw" to "貓爪肉球",
-            ) + MacaronTheme.PALETTES.map { it.id to it.title } + MagicTheme.PALETTES.map { it.id to it.title } + listOf(
-                "custom" to "自訂配色",
-            ),
-            prefs.theme,
-        ) { prefs.theme = it }
+        note("點一下套用。每個主題各自記得自己的樣子（配色、字體、按鍵高度、按鍵圖片、圖案…），換來換去不會互相影響。按「⋯」可以編輯、複製、匯出。")
+        val active = ThemeStore.activeId(prefs)
+        val all = ThemeStore.list(this, prefs)
+        val radios = ArrayList<RadioButton>()
+        fun row(t: ThemeStore.Info) {
+            val line = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val rb = RadioButton(this).apply {
+                text = t.name + if (t.modified) "（改過）" else ""
+                tag = t.id
+                isChecked = t.id == active
+                setOnClickListener {
+                    if (t.id != ThemeStore.activeId(prefs)) {
+                        ThemeStore.applyTheme(this@SettingsActivity, prefs, t.id)
+                        showPage("look")
+                    }
+                }
+            }
+            radios.add(rb)
+            line.addView(rb, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            line.addView(Button(this).apply {
+                text = "⋯"
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                setOnClickListener { themeMenu(t) }
+            }, LinearLayout.LayoutParams((52 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+            root.addView(line)
+        }
+        all.filter { it.builtIn }.forEach { row(it) }
+        subTitle("我的主題")
+        val mine = all.filter { !it.builtIn }
+        if (mine.isEmpty()) note("還沒有。匯入主題檔、或在「⋯」選「複製一份」就會出現在這裡。")
+        mine.forEach { row(it) }
+        button("＋ 用目前的樣子新增一個主題") {
+            askName("新增主題", ThemeStore.nameOf(this, active) + " 的副本") { name ->
+                ThemeStore.syncActive(this, prefs)
+                val id = ThemeStore.create(this, prefs, name, ThemeStore.load(this, prefs, active))
+                ThemeStore.applyTheme(this, prefs, id)
+                showPage("look")
+            }
+        }
         root.addView(Button(this).apply {
             text = "🖌 調整自訂配色 ›"
             isAllCaps = false
@@ -600,6 +667,75 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
+    }
+
+    /** 主題的「⋯」選單 */
+    private fun themeMenu(t: ThemeStore.Info) {
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        items.add("✏️ 在主題工作室編輯" to {
+            ThemeStore.syncActive(this, prefs)
+            startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_THEME, t.id))
+        })
+        items.add("📄 複製一份" to {
+            askName("複製主題", t.name + " 的副本") { name ->
+                ThemeStore.syncActive(this, prefs)
+                ThemeStore.create(this, prefs, name, ThemeStore.load(this, prefs, t.id))
+                showPage("look")
+            }
+        })
+        items.add("📤 匯出成主題檔" to { showExportDialog(t.id) })
+        if (!t.builtIn) items.add("✍️ 重新命名" to {
+            askName("重新命名", t.name) { name ->
+                ThemeStore.rename(this, prefs, t.id, name)
+                showPage("look")
+            }
+        })
+        if (t.builtIn && t.modified) items.add("↩️ 恢復原廠" to {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("「${t.name}」恢復原廠？")
+                .setMessage("這個主題改過的地方（按鍵圖片、圖案、配色、字體…）會全部清掉。")
+                .setPositiveButton("恢復原廠") { _, _ ->
+                    ThemeStore.resetBuiltIn(this, prefs, t.id)
+                    showPage("look")
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        })
+        if (!t.builtIn) items.add("🗑 刪除" to {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("刪除「${t.name}」？")
+                .setMessage("刪掉就救不回來了。想留著的話，可以先匯出成主題檔。")
+                .setPositiveButton("刪除") { _, _ ->
+                    ThemeStore.delete(this, prefs, t.id)
+                    showPage("look")
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        })
+        android.app.AlertDialog.Builder(this)
+            .setTitle(t.name)
+            .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
+            .show()
+    }
+
+    /** 輸入名字的小視窗 */
+    private fun askName(title: String, initial: String, onOk: (String) -> Unit) {
+        val box = LinearLayout(this).apply {
+            val p = (20 * dp).toInt()
+            setPadding(p, (8 * dp).toInt(), p, 0)
+        }
+        val input = EditText(this).apply {
+            setText(initial)
+            isSingleLine = true
+            selectAll()
+        }
+        box.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("好") { _, _ -> onOk(input.text.toString().trim().ifEmpty { initial }) }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun pageFont() {
@@ -1011,6 +1147,12 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         updateStatus()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // 外觀頁上改的東西（字體、按鍵高度、功能鍵貼圖…）算在正在用的主題裡：存回它的檔案
+        ThemeStore.syncActive(this, prefs)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

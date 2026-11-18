@@ -78,8 +78,9 @@ class MoveHandleTest {
         p.theme = "magic_yellow"
         Decals.save(p, listOf(Decal("d1", Decal.BG, "shape:star", x = 0.45f, y = 0.55f, size = 0.06f, front = true, color = 0xFFF0C23B.toInt())))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
-        kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        kv.onDecalPicked!!.invoke(Decals.load(work_p).first())
         ShadowLooper.idleMainLooper()
         assertNotNull(kv.decalEditId)
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)

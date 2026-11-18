@@ -122,6 +122,7 @@ class KeyBorderStyleTest {
         val p = Prefs(ctx)
         p.theme = "macaron_strawberry"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])
         ShadowLooper.idleMainLooper()
@@ -131,7 +132,7 @@ class KeyBorderStyleTest {
         // 選縫線 → 多一個「縫線離邊距離」
         (find(root) { it is Button && it.text.toString().endsWith("縫線") } as Button).performClick()
         ShadowLooper.idleMainLooper()
-        assertEquals("stitch", KeyStyles.load(Prefs(ctx)).map["zy:ㄅ"]!!.borderStyle)
+        assertEquals("stitch", KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄅ"]!!.borderStyle)
         assertNotNull(find(root) { it is TextView && it.text.startsWith("縫線離邊距離") })
         val shot = Bitmap.createBitmap(1080, 2340, Bitmap.Config.ARGB_8888)
         Ui.spaceButtons(root, 8)

@@ -35,6 +35,7 @@
             android:exported="true"
             android:icon="@mipmap/ic_studio"
             android:label="@string/studio_name"
+            android:launchMode="singleTask"
             android:taskAffinity="${applicationId}.studio">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

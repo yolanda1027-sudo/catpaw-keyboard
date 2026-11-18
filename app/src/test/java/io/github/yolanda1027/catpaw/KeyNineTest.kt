@@ -139,6 +139,7 @@ class KeyNineTest {
         val p = Prefs(ctx)
         p.theme = "magic_yellow"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         val name = Decals.storeBytes(ctx, Decals.toBytes(ornate()), maxPx = Decals.FILL_MAX_PX)!!
         kv.editPicker!!.invoke(Layouts.ZHUYIN[4][3]) // 空白鍵
@@ -161,7 +162,7 @@ class KeyNineTest {
         save(db, "key-nine-dialog")
         (find(v) { it is Button && it.text == "完成" } as Button).performClick()
         ShadowLooper.idleMainLooper()
-        val f = KeyStyles.load(Prefs(ctx)).map["space"]!!.bgImage!!
+        val f = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["space"]!!.bgImage!!
         assertTrue(f.nine)
         assertEquals(0.25f, f.sx, 0.001f)
         // 裁切換成調整邊角；底色、外框、圓角變灰
@@ -175,11 +176,11 @@ class KeyNineTest {
         save(sb, "key-nine-studio")
 
         // 預覽泡泡也套同一個框
-        val k = CatKeyboardView(ctx, Prefs(ctx), Haptics(ctx))
+        val k = CatKeyboardView(ctx, Prefs(ctx, ThemeStore.WORK), Haptics(ctx))
         k.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         k.layout(0, 0, k.measuredWidth, k.measuredHeight)
         val e = Layouts.ZHUYIN[3][4] // ㄖ（套給它看泡泡）
-        KeyStyles.save(Prefs(ctx), KeyStyles(mapOf("zy:ㄖ" to KeyStyle(bgImage = f))))
+        KeyStyles.save(Prefs(ctx, ThemeStore.WORK), KeyStyles(mapOf("zy:ㄖ" to KeyStyle(bgImage = f))))
         k.reloadPrefs()
         k.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         k.layout(0, 0, k.measuredWidth, k.measuredHeight)

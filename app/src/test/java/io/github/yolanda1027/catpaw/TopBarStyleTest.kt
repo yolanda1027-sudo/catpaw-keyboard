@@ -102,6 +102,7 @@ class TopBarStyleTest {
         val p = Prefs(ctx)
         p.theme = "macaron_butter"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         // 點最上面那一列
         kv.onTopBarPicked!!.invoke()
@@ -114,7 +115,7 @@ class TopBarStyleTest {
         val set = StudioActivity::class.java.declaredMethods.first { it.name == "setTopBar" }.apply { isAccessible = true }
         set.invoke(a, { _: TopBarStyle -> style })
         ShadowLooper.idleMainLooper()
-        assertEquals(style, KeyStyles.load(Prefs(ctx)).topBar)
+        assertEquals(style, KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).topBar)
         // 截圖：工作室裡的樣子
         Ui.spaceButtons(root, 8)
         root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
@@ -124,14 +125,14 @@ class TopBarStyleTest {
         save(bmp, "topbar-studio")
 
         // 匯出再匯入：跟著走
-        val json = ThemeIO.export(ctx, Prefs(ctx), "咖啡上方列", setOf(ThemeIO.Part.KEYS))
-        KeyStyles.save(Prefs(ctx), KeyStyles.EMPTY)
-        ThemeIO.apply(ctx, Prefs(ctx), ThemeIO.parse(json)!!)
-        assertEquals(style, KeyStyles.load(Prefs(ctx)).topBar)
+        val json = ThemeIO.export(ctx, Prefs(ctx, ThemeStore.WORK), "咖啡上方列", setOf(ThemeIO.Part.KEYS))
+        KeyStyles.save(Prefs(ctx, ThemeStore.WORK), KeyStyles.EMPTY)
+        ThemeIO.apply(ctx, Prefs(ctx, ThemeStore.WORK), ThemeIO.parse(json)!!)
+        assertEquals(style, KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).topBar)
 
         // 上一步：回到沒改的樣子
         StudioActivity::class.java.getDeclaredMethod("undo").apply { isAccessible = true }.invoke(a)
         ShadowLooper.idleMainLooper()
-        assertNull(KeyStyles.load(Prefs(ctx)).topBar)
+        assertNull(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).topBar)
     }
 }

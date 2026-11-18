@@ -1,0 +1,255 @@
+package io.github.yolanda1027.catpaw
+
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.view.View
+import android.widget.Button
+import android.widget.RadioButton
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowAlertDialog
+import java.io.ByteArrayOutputStream
+import java.io.File
+
+/** 每個主題一個檔案：換主題不殘留、匯入變新主題、工作室要儲存才套用、沒存要問 */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
+class ThemeStoreTest {
+    private val ctx = RuntimeEnvironment.getApplication()
+
+    private fun png(color: Int): ByteArray {
+        val b = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }
+        return ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    }
+
+    private fun live() = Prefs(ctx)
+
+    @Test fun switchingThemesDoesNotLeak() {
+        val p = live()
+        assertEquals("classic", ThemeStore.activeId(p))
+        // 在經典深色上加按鍵樣式、圖案、功能鍵貼圖、字體、高度
+        val img = Decals.storeBytes(ctx, png(Color.RED))!!
+        KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        Decals.save(p, listOf(Decal("d1", Decal.BG, Decal.FILE + img)))
+        Stickers.setBytes(ctx, p, StickerSlot.ENTER, png(Color.BLUE))
+        p.zhFont = "wenkai"
+        p.keyHeightDp = 52
+
+        ThemeStore.applyTheme(ctx, p, "stitch")
+        assertEquals("stitch", p.theme)
+        assertTrue("換到粉紅縫線：按鍵樣式不跟過去", KeyStyles.load(p).map.isEmpty())
+        assertTrue(Decals.load(p).isEmpty())
+        assertTrue(p.funcStickers.isEmpty())
+        assertEquals(45, p.keyHeightDp)
+        org.junit.Assert.assertNotEquals("字體不跟過去", "wenkai", p.zhFont)
+
+        ThemeStore.applyTheme(ctx, p, "classic")
+        assertEquals("換回來：經典深色記得自己的樣子", Color.RED, KeyStyles.load(p).map["enter"]!!.bg)
+        assertEquals(1, Decals.load(p).size)
+        assertNotNull(Stickers.file(ctx, p, StickerSlot.ENTER))
+        assertEquals("wenkai", p.zhFont)
+        assertEquals(52, p.keyHeightDp)
+        assertTrue("圖檔沒被當成沒用的清掉", File(Decals.dir(ctx), img).exists())
+
+        val list = ThemeStore.list(ctx, p)
+        assertTrue(list.first { it.id == "classic" }.modified)
+        assertFalse(list.first { it.id == "stitch" }.modified)
+    }
+
+    @Test fun resetBuiltInAndUserThemes() {
+        val p = live()
+        KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        val copy = ThemeStore.create(ctx, p, "紅色 Enter", ThemeStore.snapshot(p))
+        assertEquals("紅色 Enter", ThemeStore.nameOf(ctx, copy))
+        assertEquals("名字重複會自動加編號", "紅色 Enter (2)", ThemeStore.nameOf(ctx, ThemeStore.create(ctx, p, "紅色 Enter", ThemeStore.snapshot(p))))
+
+        ThemeStore.resetBuiltIn(ctx, p, "classic")
+        assertTrue("經典深色恢復原廠", KeyStyles.load(p).map.isEmpty())
+        assertFalse(ThemeStore.list(ctx, p).first { it.id == "classic" }.modified)
+
+        ThemeStore.applyTheme(ctx, p, copy)
+        assertEquals("複製出來的主題不受影響", Color.RED, KeyStyles.load(p).map["enter"]!!.bg)
+        ThemeStore.rename(ctx, p, copy, "我的紅")
+        assertEquals("我的紅", ThemeStore.nameOf(ctx, copy))
+        ThemeStore.delete(ctx, p, copy)
+        assertEquals("刪掉正在用的主題：換回經典深色", "classic", ThemeStore.activeId(p))
+        assertFalse(ThemeStore.exists(ctx, copy))
+    }
+
+    @Test fun importAddsNewThemeWithoutTouchingOthers() {
+        val p = live()
+        // 現在用的主題有自己的圖
+        val mine = Decals.storeBytes(ctx, png(Color.GREEN))!!
+        Decals.save(p, listOf(Decal("d1", Decal.BG, Decal.FILE + mine)))
+        // 別人的主題檔：換底色、帶一張功能鍵貼圖、一個圖案
+        val other = ThemeStore.withTemp(ctx, ThemeStore.factory("magic_yellow")) { t ->
+            val img = Decals.storeBytes(ctx, png(Color.YELLOW))!!
+            Decals.save(t, listOf(Decal("x", Decal.BG, Decal.FILE + img)))
+            Stickers.setBytes(ctx, t, StickerSlot.ENTER, png(Color.MAGENTA))
+            ThemeIO.export(ctx, t, "赫夫帕夫", ThemeIO.Part.values().toSet())
+        }
+        val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "look")).setup().get()
+        val (id, warnings) = a.importAsTheme(ThemeIO.parse(other)!!, "赫夫帕夫")
+        assertTrue(warnings.toString(), warnings.isEmpty())
+
+        val q = live()
+        assertEquals("匯入不會換掉正在用的主題", "classic", ThemeStore.activeId(q))
+        assertEquals(1, Decals.load(q).size)
+        assertTrue("正在用的主題的圖還在", File(Decals.dir(ctx), mine).exists())
+        assertEquals("赫夫帕夫", ThemeStore.nameOf(ctx, id))
+
+        ThemeStore.applyTheme(ctx, q, id)
+        assertEquals("magic_yellow", q.theme)
+        assertEquals("x", Decals.load(q).single().id)
+        assertNotNull(Stickers.file(ctx, q, StickerSlot.ENTER))
+        assertTrue("匯入的圖還在", File(Decals.dir(ctx), Decals.load(q).single().fileName).exists())
+        // 再換回去：自己的圖也還在
+        ThemeStore.applyTheme(ctx, q, "classic")
+        assertTrue(File(Decals.dir(ctx), mine).exists())
+    }
+
+    /** 主題清單畫面：內建主題、我的主題、⋯ 選單 */
+    @Test fun themeListScreen() {
+        val p = live()
+        KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        ThemeStore.create(ctx, p, "赫夫帕夫", ThemeStore.snapshot(p))
+        val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "look")).setup().get()
+        val radios = ArrayList<RadioButton>()
+        val buttons = ArrayList<Button>()
+        fun walk(v: View) {
+            if (v is RadioButton) radios += v else if (v is Button) buttons += v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(a.window.decorView)
+        assertTrue(radios.any { it.text == "經典深色（改過）" && it.isChecked })
+        assertTrue(radios.any { it.text == "赫夫帕夫" && !it.isChecked })
+        // 點「赫夫帕夫」：套用
+        radios.first { it.text == "赫夫帕夫" }.performClick()
+        assertEquals("赫夫帕夫", ThemeStore.nameOf(ctx, ThemeStore.activeId(Prefs(ctx))))
+        // ⋯ 選單
+        val again = ArrayList<Button>()
+        fun walk2(v: View) {
+            if (v is Button && v !is RadioButton) again += v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk2(v.getChildAt(i))
+        }
+        walk2(a.window.decorView)
+        again.first { it.text == "⋯" }.performClick()
+        assertNotNull(ShadowAlertDialog.getLatestAlertDialog())
+        val root = a.window.decorView
+        root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 1080, 2340)
+        val f = SettingsActivity::class.java.getDeclaredField("scroll").apply { isAccessible = true }
+        (f.get(a) as android.widget.ScrollView).scrollTo(0, 0)
+        val bmp = Bitmap.createBitmap(1080, 2340, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bmp))
+        File("build/renders").mkdirs()
+        File("build/renders/theme-list.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    private fun studio(intent: Intent? = null) =
+        Robolectric.buildActivity(StudioActivity::class.java, intent).setup().get()
+
+    private fun call(a: StudioActivity, name: String, vararg args: Any?) {
+        val m = StudioActivity::class.java.declaredMethods.first { it.name == name && it.parameterCount == args.size }
+        m.isAccessible = true
+        m.invoke(a, *args)
+    }
+
+    @Test fun studioEditsNeedSave() {
+        val a = studio()
+        val work = Prefs(ctx, ThemeStore.WORK)
+        // 在工作室改東西：鍵盤（正在用的設定）不變
+        KeyStyles.save(work, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        assertTrue(ThemeStore.isDirty(work))
+        assertTrue(KeyStyles.load(live()).map.isEmpty())
+        call(a, "updateTitle")
+        assertTrue(a.actionBar!!.title.toString().endsWith("•"))
+        // 儲存：正在用的主題，鍵盤跟著變
+        call(a, "save", null)
+        assertEquals(Color.RED, KeyStyles.load(live()).map["enter"]!!.bg)
+        assertFalse(ThemeStore.isDirty(work))
+        assertFalse(a.actionBar!!.title.toString().endsWith("•"))
+    }
+
+    @Test fun studioEditsOtherThemeAndAsksToApply() {
+        val a = studio(Intent().putExtra(StudioActivity.EXTRA_THEME, "stitch"))
+        val work = Prefs(ctx, ThemeStore.WORK)
+        assertEquals("工作室打開的是粉紅縫線", "stitch", work.theme)
+        assertEquals("classic", live().theme)
+        Decals.save(work, listOf(Decal("d1", Decal.BG, "shape:heart")))
+        call(a, "save", null)
+        // 不是正在用的主題：問要不要套用；鍵盤還沒變
+        val d = ShadowAlertDialog.getLatestAlertDialog()
+        assertTrue(d.isShowing)
+        assertTrue(Decals.load(live()).isEmpty())
+        d.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals("stitch", ThemeStore.activeId(live()))
+        assertEquals(1, Decals.load(live()).size)
+    }
+
+    @Test fun backWithUnsavedChangesAsks() {
+        val a = studio()
+        val work = Prefs(ctx, ThemeStore.WORK)
+        // 沒改：直接離開
+        call(a, "confirmLeave", { a.finish() } as () -> Unit)
+        assertTrue(a.isFinishing)
+
+        val b = studio()
+        KeyStyles.save(work, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        call(b, "confirmLeave", { b.finish() } as () -> Unit)
+        assertFalse("有沒存的修改：先問", b.isFinishing)
+        val d = ShadowAlertDialog.getLatestAlertDialog()
+        assertEquals("「經典深色」還沒儲存", org.robolectric.Shadows.shadowOf(d).title.toString())
+        // 不儲存：離開，鍵盤不變
+        d.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(b.isFinishing)
+        assertTrue(KeyStyles.load(live()).map.isEmpty())
+    }
+
+    @Test fun saveAsCreatesNewTheme() {
+        val a = studio()
+        val work = Prefs(ctx, ThemeStore.WORK)
+        KeyStyles.save(work, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.BLUE)))
+        call(a, "saveAs", null)
+        val d = ShadowAlertDialog.getLatestAlertDialog()
+        d.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val mine = ThemeStore.list(ctx, live()).filter { !it.builtIn }
+        assertEquals(listOf("經典深色 的副本"), mine.map { it.name })
+        assertTrue("經典深色本身沒被改", KeyStyles.load(live()).map.isEmpty())
+        assertEquals(Color.BLUE, ThemeStore.withTemp(ctx, ThemeStore.load(ctx, live(), mine[0].id)) { KeyStyles.load(it).map["enter"]!!.bg })
+    }
+
+    /** 升級：以前全部主題共用的自訂清掉（使用者選的），舊的功能鍵貼圖檔刪掉 */
+    @Test fun migrationClearsOldSharedCustomizations() {
+        val p = live()
+        p.theme = "stitch"
+        KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        Decals.save(p, listOf(Decal("d1", Decal.BG, "shape:heart")))
+        val old = File(ctx.filesDir, "sticker_enter.png").apply { writeBytes(png(Color.RED)) }
+        ThemeStore.migrate(ctx, p)
+        assertEquals("stitch", p.theme)
+        assertEquals("stitch", ThemeStore.activeId(p))
+        assertTrue(KeyStyles.load(p).map.isEmpty())
+        assertTrue(Decals.load(p).isEmpty())
+        assertFalse(old.exists())
+        // 只做一次
+        KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED)))
+        ThemeStore.migrate(ctx, p)
+        assertEquals(Color.RED, KeyStyles.load(p).map["enter"]!!.bg)
+    }
+}

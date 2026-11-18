@@ -136,6 +136,7 @@ class KeyShapeImageTest {
         val p = Prefs(ctx)
         p.theme = "magic_yellow"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         // 工作室打開時會先清掉沒在用的圖檔，所以進來之後才「上傳」
         val name = Decals.storeBytes(ctx, Decals.toBytes(deckled()), maxPx = Decals.FILL_MAX_PX)!!
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
@@ -149,7 +150,7 @@ class KeyShapeImageTest {
         val box = find(root) { it is android.widget.RadioButton && it.text.startsWith("照圖片的形狀") } as android.widget.RadioButton
         box.performClick()
         ShadowLooper.idleMainLooper()
-        val f = KeyStyles.load(Prefs(ctx)).map["@zhuyin"]!!.bgImage!!
+        val f = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["@zhuyin"]!!.bgImage!!
         assertTrue(f.shape)
         assertEquals(ImageFill.FIT, f.zoom)
         Ui.spaceButtons(root, 8)

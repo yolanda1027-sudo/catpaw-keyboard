@@ -47,6 +47,7 @@ class LabelDeleteTest {
         val p = Prefs(ctx)
         p.theme = "magic_yellow"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         kv.editPicker!!.invoke(xKey)
         ShadowLooper.idleMainLooper()
@@ -55,7 +56,7 @@ class LabelDeleteTest {
         val action = StudioActivity::class.java.declaredMethods.first { it.name == "decalAction" }.apply { isAccessible = true }
         action.invoke(a, "delete", Decal("label:sub", "zy:ㄒ", "label:sub"))
         ShadowLooper.idleMainLooper()
-        assertTrue(KeyStyles.load(Prefs(ctx)).map["zy:ㄒ"]!!.labels!!["sub"]!!.hidden)
+        assertTrue(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄒ"]!!.labels!!["sub"]!!.hidden)
         // 放大的按鍵裡選不到它了；主字還在
         assertFalse(kv.keyElements(xKey).any { it.decal.id == "label:sub" })
         assertTrue(kv.keyElements(xKey).any { it.decal.id == "label:main" })
@@ -72,7 +73,7 @@ class LabelDeleteTest {
         (find(root) { it is Button && it.text == "恢復" } as Button).performClick()
         ShadowLooper.idleMainLooper()
         assertTrue(kv.keyElements(xKey).any { it.decal.id == "label:sub" })
-        assertTrue(KeyStyles.load(Prefs(ctx)).map["zy:ㄒ"]?.labels.isNullOrEmpty())
+        assertTrue(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄒ"]?.labels.isNullOrEmpty())
     }
 
     /** 按鍵的字墨水有幾個點（跟底色差很多的點） */

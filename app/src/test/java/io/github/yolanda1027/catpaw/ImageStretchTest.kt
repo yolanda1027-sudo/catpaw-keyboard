@@ -86,6 +86,7 @@ class ImageStretchTest {
         val p = Prefs(ctx)
         p.theme = "magic_yellow"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val root = a.window.decorView
         (find(root) { it is Button && it.text.toString().startsWith("🖼️ 鍵盤背景") } as Button).performClick()
         ShadowLooper.idleMainLooper()
@@ -106,11 +107,11 @@ class ImageStretchTest {
         assertEquals(cv.frame.height(), dr.height(), 1f)
         (find(d.window!!.decorView) { it is Button && it.text == "完成" } as Button).performClick()
         ShadowLooper.idleMainLooper()
-        val saved = KeyStyles.load(Prefs(ctx)).keyboardImage!!
+        val saved = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).keyboardImage!!
         assertTrue("有拉寬：${saved.stretch}", saved.stretch > 1.05f)
 
         // 鍵盤上：背景圖的金框四邊都看得到（左右沒有被裁掉、也沒有空白）
-        val kv = CatKeyboardView(ctx, Prefs(ctx), Haptics(ctx))
+        val kv = CatKeyboardView(ctx, Prefs(ctx, ThemeStore.WORK), Haptics(ctx))
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         val b = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)

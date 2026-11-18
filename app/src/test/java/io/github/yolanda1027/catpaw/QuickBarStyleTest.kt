@@ -80,6 +80,7 @@ class QuickBarStyleTest {
         p.theme = "macaron_butter"
         p.quickBar = false // 設定裡關著也可以改
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         assertTrue(kv.quickItems.isEmpty())
         kv.onQuickBarPicked!!.invoke()
@@ -91,7 +92,7 @@ class QuickBarStyleTest {
         val set = StudioActivity::class.java.declaredMethods.first { it.name == "setQuick" && it.parameterCount == 2 }.apply { isAccessible = true }
         set.invoke(a, { _: QuickBarStyle -> style }, true)
         ShadowLooper.idleMainLooper()
-        assertEquals(style, KeyStyles.load(Prefs(ctx)).quick)
+        assertEquals(style, KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).quick)
         Ui.spaceButtons(root, 8)
         root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, 1080, 2340)
@@ -100,10 +101,10 @@ class QuickBarStyleTest {
         save(bmp, "quickbar-studio")
 
         // 匯出再匯入
-        val json = ThemeIO.export(ctx, Prefs(ctx), "粉紅快捷列", setOf(ThemeIO.Part.KEYS))
-        KeyStyles.save(Prefs(ctx), KeyStyles.EMPTY)
-        ThemeIO.apply(ctx, Prefs(ctx), ThemeIO.parse(json)!!)
-        assertEquals(style, KeyStyles.load(Prefs(ctx)).quick)
+        val json = ThemeIO.export(ctx, Prefs(ctx, ThemeStore.WORK), "粉紅快捷列", setOf(ThemeIO.Part.KEYS))
+        KeyStyles.save(Prefs(ctx, ThemeStore.WORK), KeyStyles.EMPTY)
+        ThemeIO.apply(ctx, Prefs(ctx, ThemeStore.WORK), ThemeIO.parse(json)!!)
+        assertEquals(style, KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).quick)
 
         // 離開這頁：快捷列關著的話就收起來
         StudioActivity::class.java.getDeclaredField("quickSelected").apply { isAccessible = true }.setBoolean(a, false)
@@ -113,7 +114,7 @@ class QuickBarStyleTest {
         // 上一步
         StudioActivity::class.java.getDeclaredMethod("undo").apply { isAccessible = true }.invoke(a)
         ShadowLooper.idleMainLooper()
-        assertNull(KeyStyles.load(Prefs(ctx)).quick)
+        assertNull(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).quick)
     }
 
     @Test fun stitchBorderOnQuickBar() {
@@ -151,8 +152,9 @@ class QuickBarStyleTest {
 
         // 工作室：快捷列頁有外框樣式，選縫線多一個離邊距離
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val skv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
-        KeyStyles.save(Prefs(ctx), KeyStyles.EMPTY)
+        KeyStyles.save(Prefs(ctx, ThemeStore.WORK), KeyStyles.EMPTY)
         StudioActivity::class.java.getDeclaredField("styles").apply { isAccessible = true }.set(a, KeyStyles.EMPTY)
         skv.onQuickBarPicked!!.invoke()
         ShadowLooper.idleMainLooper()
@@ -161,7 +163,7 @@ class QuickBarStyleTest {
         assertNull(find(root) { it is TextView && it.text.startsWith("縫線離邊距離") })
         (find(root) { it is Button && it.text.toString().endsWith("縫線") } as Button).performClick()
         ShadowLooper.idleMainLooper()
-        assertEquals("stitch", KeyStyles.load(Prefs(ctx)).quick!!.borderStyle)
+        assertEquals("stitch", KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).quick!!.borderStyle)
         assertNotNull(find(root) { it is TextView && it.text.startsWith("縫線離邊距離") })
     }
 }

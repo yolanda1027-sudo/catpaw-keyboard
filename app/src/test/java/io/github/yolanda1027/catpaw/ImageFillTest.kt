@@ -127,6 +127,7 @@ class ImageFillTest {
         val p = Prefs(ctx)
         p.theme = "macaron_butter"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         val root = a.window.decorView
 
@@ -138,7 +139,7 @@ class ImageFillTest {
         ShadowLooper.idleMainLooper()
         button(root, "📷 上傳圖片").performClick()
         var req = shadowOf(a).nextStartedActivityForResult
-        shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(photoFile("p.png"))))
+        shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(photoFile("work_p.png"))))
         ShadowLooper.idleMainLooper()
         // 上傳完直接進裁切畫面
         var crop = ShadowDialog.getLatestDialog() as Dialog
@@ -149,7 +150,7 @@ class ImageFillTest {
         render(crop.window!!.decorView, "fill-crop-key-zoomed")
         button(crop.window!!.decorView, "完成").performClick()
         ShadowLooper.idleMainLooper()
-        val zy = KeyStyles.load(Prefs(ctx)).map["@zhuyin"]!!.bgImage!!
+        val zy = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["@zhuyin"]!!.bgImage!!
         assertEquals(cv.fill, zy)
         assertTrue(zy.zoom > 1.5f)
         // 存的圖夠大，放大才不會糊
@@ -172,18 +173,18 @@ class ImageFillTest {
         render(crop.window!!.decorView, "fill-crop-bg")
         button(crop.window!!.decorView, "完成").performClick()
         ShadowLooper.idleMainLooper()
-        val bg = KeyStyles.load(Prefs(ctx)).keyboardImage!!
+        val bg = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).keyboardImage!!
         assertTrue(bg.isGif)
         assertArrayEquals(gif, File(Decals.dir(ctx), bg.img).readBytes()) // GIF 照原檔（會動）
         render(root, "fill-studio-bg")
 
         // 離開工作室時，底圖不會被當成沒用的圖刪掉
-        Decals.cleanup(ctx, Decals.load(Prefs(ctx)))
+        Decals.cleanup(ctx, Decals.load(Prefs(ctx, ThemeStore.WORK)))
         assertTrue(File(Decals.dir(ctx), zy.img).exists())
         assertTrue(File(Decals.dir(ctx), bg.img).exists())
 
         // 鍵盤本身
-        val k = CatKeyboardView(ctx, Prefs(ctx), Haptics(ctx))
+        val k = CatKeyboardView(ctx, Prefs(ctx, ThemeStore.WORK), Haptics(ctx))
         k.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         k.layout(0, 0, k.measuredWidth, k.measuredHeight)
         val bmp = Bitmap.createBitmap(k.measuredWidth, k.measuredHeight, Bitmap.Config.ARGB_8888)
@@ -196,7 +197,7 @@ class ImageFillTest {
 
         // 照片當鍵盤背景（按鍵維持主題原本的樣子）：給人看的截圖
         run {
-            val pp = Prefs(ctx)
+            val pp = Prefs(ctx, ThemeStore.WORK)
             val photoName = Decals.storeBytes(ctx, photoFile("bg.png").readBytes(), maxPx = Decals.FILL_MAX_PX)!!
             val saved = KeyStyles.load(pp)
             KeyStyles.save(pp, KeyStyles(mapOf(KeyStyles.KEYBOARD to KeyStyle(bgImage = ImageFill(photoName, zoom = 1.2f, cy = 0.55f)))))
@@ -210,12 +211,12 @@ class ImageFillTest {
         }
 
         // ③ 匯出再匯入：底圖跟著走
-        val json = ThemeIO.export(ctx, Prefs(ctx), "照片鍵盤", ThemeIO.Part.values().toSet())
-        KeyStyles.save(Prefs(ctx), KeyStyles.EMPTY)
+        val json = ThemeIO.export(ctx, Prefs(ctx, ThemeStore.WORK), "照片鍵盤", ThemeIO.Part.values().toSet())
+        KeyStyles.save(Prefs(ctx, ThemeStore.WORK), KeyStyles.EMPTY)
         Decals.dir(ctx).listFiles()!!.forEach { it.delete() }
-        val warn = ThemeIO.apply(ctx, Prefs(ctx), ThemeIO.parse(json)!!)
+        val warn = ThemeIO.apply(ctx, Prefs(ctx, ThemeStore.WORK), ThemeIO.parse(json)!!)
         assertTrue(warn.toString(), warn.isEmpty())
-        val ks = KeyStyles.load(Prefs(ctx))
+        val ks = KeyStyles.load(Prefs(ctx, ThemeStore.WORK))
         assertArrayEquals(gif, File(Decals.dir(ctx), ks.keyboardImage!!.img).readBytes())
         assertNotNull(File(Decals.dir(ctx), ks.map["@zhuyin"]!!.bgImage!!.img).takeIf { it.exists() })
         assertEquals(zy.zoom, ks.map["@zhuyin"]!!.bgImage!!.zoom, 0.0001f)

@@ -73,6 +73,7 @@ class StudioElementsTest {
         p.theme = "magic_yellow"
         Decals.save(p, listOf(Decal("d1", "zy:ㄒ", "shape:heart", x = 0.5f, y = 0.32f, size = 0.45f, color = 0xFFFF6FA3.toInt())))
         val s = Studio(Robolectric.buildActivity(StudioActivity::class.java).setup().get())
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         s.kv.editPicker!!.invoke(xKey)
         ShadowLooper.idleMainLooper()
 
@@ -95,7 +96,7 @@ class StudioElementsTest {
         s.zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, sx + box.width() / 4 to sy + box.height() / 8))
         s.zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, sx + box.width() / 4 to sy + box.height() / 8))
         ShadowLooper.idleMainLooper()
-        val ls = KeyStyles.load(Prefs(ctx)).map["zy:ㄒ"]!!.labels!!["sub"]!!
+        val ls = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄒ"]!!.labels!!["sub"]!!
         assertEquals(0.25f, ls.dx, 0.01f)
         assertEquals(0.125f, ls.dy, 0.01f)
 
@@ -108,7 +109,7 @@ class StudioElementsTest {
         render(s.a.window.decorView, "elements-reordered")
 
         // 鍵盤本身也照這樣畫
-        val kv = CatKeyboardView(ctx, Prefs(ctx), Haptics(ctx))
+        val kv = CatKeyboardView(ctx, Prefs(ctx, ThemeStore.WORK), Haptics(ctx))
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         val bmp = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)
@@ -117,17 +118,18 @@ class StudioElementsTest {
 
         // 重設：小字回到原本的位置和顏色
         s.call("setLabelStyle", xKey, "sub", null, true)
-        assertTrue(KeyStyles.load(Prefs(ctx)).map["zy:ㄒ"]?.labels.isNullOrEmpty())
+        assertTrue(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄒ"]?.labels.isNullOrEmpty())
     }
 
     @Test fun sideHandlesStretchOnlyOneDirection() {
         val p = Prefs(ctx)
         Decals.save(p, listOf(Decal("d1", "zy:ㄒ", "shape:cat", x = 0.5f, y = 0.5f, size = 0.4f)))
         val s = Studio(Robolectric.buildActivity(StudioActivity::class.java).setup().get())
-        s.kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
+        s.kv.onDecalPicked!!.invoke(Decals.load(work_p).first())
         ShadowLooper.idleMainLooper()
         val box = s.box()
-        fun now() = Decals.load(Prefs(ctx)).first()
+        fun now() = Decals.load(Prefs(ctx, ThemeStore.WORK)).first()
         fun size(d: Decal) = Decals.sizeOf(d, box.height(), null)
         val (w0, h0) = size(now())
         val pad = 5 * 2.625f

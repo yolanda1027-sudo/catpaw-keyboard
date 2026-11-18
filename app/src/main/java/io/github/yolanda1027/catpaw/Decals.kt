@@ -220,9 +220,8 @@ object Decals {
 
     /** 刪掉沒有任何圖案、按鍵動畫在用的圖檔 */
     fun cleanup(ctx: Context, list: List<Decal>) {
-        val used = list.filter { !it.isShape }.map { it.fileName }.toMutableSet()
-        used += effectFiles(Prefs(ctx))
-        dir(ctx).listFiles()?.forEach { if (it.name !in used) it.delete() }
+        // 每個主題都有自己的圖：要看全部主題（還有工作室的工作副本）都沒在用才刪
+        ThemeStore.cleanupImages(ctx, list.filter { !it.isShape }.map { it.fileName })
     }
 
     /** 按鍵動畫用到的圖檔（全部按鍵共用的、單顆鍵自己的） */

@@ -88,8 +88,9 @@ class ShapeStyleTest {
         p.theme = "classic"
         Decals.save(p, listOf(Decal("r", "zy:ㄅ", "shape:roundrect", size = 0.86f).withStyle(ShapeStyle(pink, Color.WHITE, 0.05f, "stitch"))))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
-        kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        kv.onDecalPicked!!.invoke(Decals.load(work_p).first())
         ShadowLooper.idleMainLooper()
         val v = a.window.decorView
         Ui.spaceButtons(v, 8)
@@ -108,12 +109,13 @@ class ShapeStyleTest {
         Decals.save(p, listOf(Decal("r1", "zy:ㄅ", "shape:roundrect", size = 0.86f).withStyle(ShapeStyle(pink, Color.WHITE, 0.045f, "stitch"))))
         KeyStyles.save(p, KeyStyles.EMPTY.with("zy:ㄅ", KeyStyle(order = listOf("r1", "label:main", "label:sub"))))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val cls = StudioActivity::class.java
         val kv = cls.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
-        kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        kv.onDecalPicked!!.invoke(Decals.load(work_p).first())
         ShadowLooper.idleMainLooper()
         val copy = cls.getDeclaredMethod("copyToGroup", Decal::class.java, Key::class.java, KeyStyles.Group::class.java).apply { isAccessible = true }
-        fun now() = Decals.load(Prefs(ctx))
+        fun now() = Decals.load(Prefs(ctx, ThemeStore.WORK))
         val zhuyinKeys = Layouts.ZHUYIN.flatten().count { it.act == Act.ZHUYIN }
 
         copy.invoke(a, now().first { it.id == "r1" }, b, KeyStyles.Group.ZHUYIN)
@@ -124,8 +126,8 @@ class ShapeStyleTest {
         assertEquals("label:main", kv.elementOrder(x)[1])
 
         // 改原本那個的顏色，再按一次：更新，不會變兩倍
-        Decals.save(Prefs(ctx), now().map { if (it.id == "r1") it.withStyle(it.shapeStyle().copy(fill = 0xFFB9E4C9.toInt())) else it })
-        cls.getDeclaredField("decals").apply { isAccessible = true }.set(a, Decals.load(Prefs(ctx)))
+        Decals.save(Prefs(ctx, ThemeStore.WORK), now().map { if (it.id == "r1") it.withStyle(it.shapeStyle().copy(fill = 0xFFB9E4C9.toInt())) else it })
+        cls.getDeclaredField("decals").apply { isAccessible = true }.set(a, Decals.load(Prefs(ctx, ThemeStore.WORK)))
         copy.invoke(a, now().first { it.id == "r1" }, b, KeyStyles.Group.ZHUYIN)
         ShadowLooper.idleMainLooper()
         assertEquals(zhuyinKeys, now().size)

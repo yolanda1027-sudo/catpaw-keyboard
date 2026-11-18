@@ -22,7 +22,12 @@ import android.widget.TextView
  * 改了就馬上存起來，鍵盤也會跟著變（不用另外按套用）。
  */
 class StudioActivity : Activity() {
+    /** 工作副本（ThemeStore.WORK）：在這裡改，按儲存才寫回主題 */
     private lateinit var prefs: Prefs
+    /** 鍵盤真正在用的設定 */
+    private lateinit var live: Prefs
+    /** 正在編輯的主題 */
+    private var themeId = "classic"
     private lateinit var kv: CatKeyboardView
     private lateinit var panel: LinearLayout
     private lateinit var tabZhuyin: Button
@@ -59,11 +64,16 @@ class StudioActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Ui.autoSpaceButtons(this)
-        prefs = Prefs(this)
+        live = Prefs(this)
+        live.migrate()
+        themeId = savedInstanceState?.getString(EXTRA_THEME) ?: intent?.getStringExtra(EXTRA_THEME) ?: ThemeStore.activeId(live)
+        if (!ThemeStore.exists(this, themeId)) themeId = ThemeStore.activeId(live)
+        // 第一次打開：做一份工作副本；畫面重建（例如旋轉）時接著用原本的工作副本
+        prefs = if (savedInstanceState == null) ThemeStore.openWork(this, live, themeId) else Prefs(this, ThemeStore.WORK)
         styles = KeyStyles.load(prefs)
         decals = Decals.load(prefs)
         english = savedInstanceState?.getBoolean("english") ?: false
-        actionBar?.title = "貓爪主題工作室"
+        updateTitle()
 
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
@@ -184,6 +194,11 @@ class StudioActivity : Activity() {
         outer.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         Ui.fitSystemBars(outer)
         setContentView(outer)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback as android.window.OnBackInvokedCallback,
+            )
+        }
         // 上次離開時沒清掉的圖檔（例如 App 被系統關掉）先清一清；之後要等離開工作室才清，「上一步」才救得回刪掉的圖
         Decals.cleanup(this, decals)
         committed = snapshot()
@@ -193,6 +208,94 @@ class StudioActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean("english", english)
+        outState.putString(EXTRA_THEME, themeId)
+    }
+
+    // ---------- 存檔 ----------
+
+    /** 標題：正在編輯哪個主題；有沒存的修改加個「•」 */
+    private fun updateTitle() {
+        val dirty = ::prefs.isInitialized && ThemeStore.isDirty(prefs)
+        actionBar?.title = "✏️ " + ThemeStore.nameOf(this, themeId) + if (dirty) " •" else ""
+    }
+
+    private fun save(then: (() -> Unit)? = null) {
+        commitHistory()
+        ThemeStore.saveWork(this, live, themeId, prefs)
+        android.widget.Toast.makeText(this, "已儲存「${ThemeStore.nameOf(this, themeId)}」", android.widget.Toast.LENGTH_SHORT).show()
+        updateTitle()
+        askApply(then)
+    }
+
+    private fun saveAs(then: (() -> Unit)? = null) {
+        commitHistory()
+        val box = LinearLayout(this).apply { setPadding(px(20f), px(8f), px(20f), 0) }
+        val input = android.widget.EditText(this).apply {
+            setText(ThemeStore.nameOf(this@StudioActivity, themeId) + " 的副本")
+            isSingleLine = true
+            selectAll()
+        }
+        box.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        android.app.AlertDialog.Builder(this)
+            .setTitle("另存新檔")
+            .setView(box)
+            .setPositiveButton("存成新主題") { _, _ ->
+                themeId = ThemeStore.create(this, live, input.text.toString(), ThemeStore.snapshot(prefs))
+                ThemeStore.markSaved(prefs)
+                android.widget.Toast.makeText(this, "已存成「${ThemeStore.nameOf(this, themeId)}」", android.widget.Toast.LENGTH_SHORT).show()
+                updateTitle()
+                askApply(then)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 存好的不是正在用的主題：問要不要套到鍵盤上 */
+    private fun askApply(then: (() -> Unit)?) {
+        if (themeId == ThemeStore.activeId(live)) { then?.invoke(); return }
+        android.app.AlertDialog.Builder(this)
+            .setMessage("要把「${ThemeStore.nameOf(this, themeId)}」套用到鍵盤嗎？")
+            .setPositiveButton("套用") { _, _ ->
+                ThemeStore.applyTheme(this, live, themeId)
+                then?.invoke()
+            }
+            .setNegativeButton("先不要") { _, _ -> then?.invoke() }
+            .setOnCancelListener { then?.invoke() }
+            .show()
+    }
+
+    /** 有沒存的修改時先問：儲存／不儲存／取消 */
+    private fun confirmLeave(onLeave: () -> Unit) {
+        commitHistory()
+        if (!ThemeStore.isDirty(prefs)) { onLeave(); return }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("「${ThemeStore.nameOf(this, themeId)}」還沒儲存")
+            .setMessage("剛剛改的東西要存起來嗎？")
+            .setPositiveButton("儲存") { _, _ -> save(onLeave) }
+            .setNeutralButton("不儲存") { _, _ -> onLeave() }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 返回鍵：Android 13 以後用 OnBackInvokedCallback（targetSdk 36 收不到 onBackPressed） */
+    private val backCallback: Any? =
+        if (android.os.Build.VERSION.SDK_INT >= 33) android.window.OnBackInvokedCallback { confirmLeave { finish() } } else null
+
+    @Deprecated("Android 12 的返回鍵處理；13 以後走 backCallback")
+    override fun onBackPressed() {
+        confirmLeave { finish() }
+    }
+
+    /** 已經開著工作室時，從設定按了別的主題的「編輯」 */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        val id = intent.getStringExtra(EXTRA_THEME) ?: return
+        if (id == themeId || !ThemeStore.exists(this, id)) return
+        confirmLeave {
+            themeId = id
+            prefs = ThemeStore.openWork(this, live, id)
+            recreate()
+        }
     }
 
     private fun tabButton(s: String, onClick: () -> Unit) = Button(this).apply {
@@ -286,6 +389,7 @@ class StudioActivity : Activity() {
         redoStack.clear()
         committed = now
         invalidateOptionsMenu()
+        updateTitle()
     }
 
     private fun undo() {
@@ -315,6 +419,7 @@ class StudioActivity : Activity() {
         kv.setDecalsLive(decals)
         zoom.invalidate()
         invalidateOptionsMenu()
+        updateTitle()
         refresh()
     }
 
@@ -327,6 +432,8 @@ class StudioActivity : Activity() {
             setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
             isEnabled = redoStack.isNotEmpty()
         }
+        menu.add(0, MENU_SAVE, 2, "儲存").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+        menu.add(0, MENU_SAVE_AS, 3, "另存新檔").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
         return true
     }
 
@@ -334,14 +441,17 @@ class StudioActivity : Activity() {
         when (item.itemId) {
             MENU_UNDO -> undo()
             MENU_REDO -> redo()
+            MENU_SAVE -> save()
+            MENU_SAVE_AS -> saveAs()
             else -> return super.onOptionsItemSelected(item)
         }
         return true
     }
 
     override fun onDestroy() {
-        // 離開工作室才清掉沒在用的圖檔（在工作室裡刪掉的圖，按上一步還救得回來）
-        if (isFinishing) Decals.cleanup(this, Decals.load(prefs))
+        // 離開工作室：丟掉工作副本，清掉沒有任何主題在用的圖檔
+        //（在工作室裡刪掉的圖，按上一步還救得回來，所以等到這時候才清）
+        if (isFinishing) ThemeStore.closeWork(this)
         super.onDestroy()
     }
 
@@ -1589,6 +1699,10 @@ class StudioActivity : Activity() {
         private const val MAX_UNDO = 3
         private const val MENU_UNDO = 1
         private const val MENU_REDO = 2
+        private const val MENU_SAVE = 3
+        private const val MENU_SAVE_AS = 4
+        /** 要編輯哪個主題（ThemeStore 的 id）；沒給就是正在用的主題 */
+        const val EXTRA_THEME = "theme_id"
         private const val REQ_EFFECT_IMAGE = 501
         private const val REQ_FILL = 502
         private const val REQ_QUICK_FRAME = 503

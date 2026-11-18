@@ -104,6 +104,7 @@ class TabBorderTest {
         val p = Prefs(ctx)
         p.theme = "magic_yellow"
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         kv.onTopBarPicked!!.invoke()
         ShadowLooper.idleMainLooper()
@@ -112,11 +113,11 @@ class TabBorderTest {
         assertNotNull(find(root) { it is TextView && it.text == "外框樣式" })
         (find(root) { it is Button && it.text.toString().endsWith("縫線") } as Button).performClick()
         ShadowLooper.idleMainLooper()
-        assertEquals("stitch", KeyStyles.load(Prefs(ctx)).topBar!!.tabBorderStyle)
+        assertEquals("stitch", KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).topBar!!.tabBorderStyle)
         assertNotNull(find(root) { it is TextView && it.text.startsWith("縫線離邊距離") })
         // 上一步：回到沒改的樣子
         StudioActivity::class.java.getDeclaredMethod("undo").apply { isAccessible = true }.invoke(a)
         ShadowLooper.idleMainLooper()
-        assertEquals(null, KeyStyles.load(Prefs(ctx)).topBar)
+        assertEquals(null, KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).topBar)
     }
 }

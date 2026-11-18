@@ -1,0 +1,284 @@
+package io.github.yolanda1027.catpaw
+
+import android.content.Context
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * 主題庫：每個主題一個檔案（files/themes/<id>.json）。
+ *
+ * - 內建主題（經典深色、粉紅縫線…）：沒改過就沒有檔案（＝原廠的樣子）；改過才存一份，可以「恢復原廠」。
+ * - 我的主題：自己新增、匯入、另存的，id 是 "u_數字"。
+ *
+ * 一個主題 = 下面 [LOOK_KEYS] 這些設定的一份快照（底色主題、配色、字體、按鍵高度、按鍵動畫、
+ * 按鍵樣式、圖案、功能鍵貼圖）。圖片本身放在 Decals.dir，主題裡只記檔名。
+ *
+ * 「正在用的主題」的內容就是鍵盤真正在用的設定（Prefs "catpaw"）；
+ * 換主題前會先把它存回自己的檔案，再把新主題的快照套上去，所以主題之間不會互相殘留。
+ * 主題工作室用另一份工作副本（[WORK]）編輯，按儲存才寫回主題。
+ */
+object ThemeStore {
+    /** 鍵盤真正在用的設定檔 */
+    const val LIVE = "catpaw"
+    /** 主題工作室的工作副本 */
+    const val WORK = "studio_work"
+    /** 算圖檔、匯出、匯入時臨時用的 */
+    private const val TMP = "theme_tmp"
+
+    /** 屬於「主題」的設定（換主題時一起換） */
+    val LOOK_KEYS = listOf(
+        "theme", "c_bg", "c_key", "c_text", "c_sub", "c_accent",
+        "key_height_dp", "font_zh", "font_zhuyin", "font_en", "cand_font", "key_font",
+        "press_effect", "custom_effect", "key_styles", "decals", "func_stickers",
+    )
+
+    data class Info(val id: String, val name: String, val builtIn: Boolean, val modified: Boolean)
+
+    val BUILT_IN: List<Pair<String, String>>
+        get() = listOf("classic" to "經典深色", "stitch" to "粉紅縫線", "catpaw" to "貓爪肉球") +
+            MacaronTheme.PALETTES.map { it.id to it.title } + MagicTheme.PALETTES.map { it.id to it.title } +
+            listOf("custom" to "自訂配色")
+
+    fun isBuiltIn(id: String) = BUILT_IN.any { it.first == id }
+
+    private fun dir(ctx: Context) = File(ctx.filesDir, "themes").apply { mkdirs() }
+    private fun safeId(id: String) = id.matches(Regex("[a-z0-9_]{1,40}"))
+    private fun file(ctx: Context, id: String): File? = if (safeId(id)) File(dir(ctx), "$id.json") else null
+
+    // ---------- 快照 ----------
+
+    /** 把這份設定裡屬於主題的部分拿出來 */
+    fun snapshot(p: Prefs): JSONObject {
+        val all = p.sp.all
+        val o = JSONObject()
+        for (k in LOOK_KEYS) all[k]?.let { o.put(k, it) }
+        return o
+    }
+
+    /** 把快照套到這份設定上（屬於主題的設定全部換掉，其他設定不動） */
+    fun applyTo(p: Prefs, snap: JSONObject) {
+        val e = p.sp.edit()
+        for (k in LOOK_KEYS) e.remove(k)
+        for (k in LOOK_KEYS) {
+            if (!snap.has(k)) continue
+            when (val v = snap.get(k)) {
+                is Int -> e.putInt(k, v)
+                is Long -> e.putInt(k, v.toInt())
+                is Boolean -> e.putBoolean(k, v)
+                is Number -> e.putFloat(k, v.toFloat())
+                is String -> e.putString(k, v)
+            }
+        }
+        e.commit()
+    }
+
+    /** 原廠的樣子：只有底色主題 */
+    fun factory(id: String): JSONObject = JSONObject().put("theme", if (isBuiltIn(id)) id else "classic")
+
+    /** 兩份快照一不一樣（照 LOOK_KEYS 一個一個比） */
+    fun same(a: JSONObject, b: JSONObject) = LOOK_KEYS.all { k ->
+        a.has(k) == b.has(k) && (!a.has(k) || a.get(k).toString() == b.get(k).toString())
+    }
+
+    // ---------- 主題清單 ----------
+
+    fun activeId(live: Prefs): String = live.sp.getString("active_theme", null) ?: live.theme
+
+    private fun stored(ctx: Context, id: String): JSONObject? = try {
+        file(ctx, id)?.takeIf { it.exists() }?.readText()?.let { JSONObject(it) }
+    } catch (_: Exception) { null }
+
+    /** 這個主題的內容（正在用的主題＝鍵盤現在的設定） */
+    fun load(ctx: Context, live: Prefs, id: String): JSONObject =
+        if (id == activeId(live)) snapshot(live) else stored(ctx, id)?.optJSONObject("snap") ?: factory(id)
+
+    fun nameOf(ctx: Context, id: String): String =
+        BUILT_IN.firstOrNull { it.first == id }?.second ?: stored(ctx, id)?.optString("name")?.takeIf { it.isNotBlank() } ?: "我的主題"
+
+    fun list(ctx: Context, live: Prefs): List<Info> {
+        val active = activeId(live)
+        val builtIn = BUILT_IN.map { (id, name) ->
+            val modified = if (id == active) !same(snapshot(live), factory(id)) else file(ctx, id)?.exists() == true
+            Info(id, name, true, modified)
+        }
+        val mine = dir(ctx).listFiles { f -> f.name.startsWith("u_") && f.name.endsWith(".json") }.orEmpty()
+            .map { it.name.removeSuffix(".json") }
+            .sortedBy { it.removePrefix("u_").toLongOrNull() ?: 0L }
+            .map { Info(it, nameOf(ctx, it), false, false) }
+        return builtIn + mine
+    }
+
+    fun exists(ctx: Context, id: String) = isBuiltIn(id) || file(ctx, id)?.exists() == true
+
+    /** 存一個主題（內建主題存成跟原廠一樣的話，就把檔案刪掉＝沒改過） */
+    fun write(ctx: Context, id: String, snap: JSONObject, name: String? = null) {
+        val f = file(ctx, id) ?: return
+        if (isBuiltIn(id) && same(snap, factory(id))) { f.delete(); return }
+        val o = JSONObject().put("name", name ?: nameOf(ctx, id)).put("snap", snap)
+        f.writeText(o.toString())
+    }
+
+    /** 把正在用的主題（鍵盤現在的設定）存回它自己的檔案 */
+    fun syncActive(ctx: Context, live: Prefs) {
+        val id = activeId(live)
+        if (exists(ctx, id)) write(ctx, id, snapshot(live))
+    }
+
+    /** 換主題：先把現在的存回去，再套上新的 */
+    fun applyTheme(ctx: Context, live: Prefs, id: String) {
+        syncActive(ctx, live)
+        val snap = stored(ctx, id)?.optJSONObject("snap") ?: factory(id)
+        applyTo(live, snap)
+        live.sp.edit().putString("active_theme", id).putLong("stickers_ver", System.currentTimeMillis()).commit()
+    }
+
+    /** 名字重複的話後面加 (2)、(3)… */
+    fun uniqueName(ctx: Context, live: Prefs, base: String): String {
+        val names = list(ctx, live).map { it.name }.toSet()
+        val b = base.trim().ifEmpty { "我的主題" }.take(30)
+        if (b !in names) return b
+        var n = 2
+        while ("$b ($n)" in names) n++
+        return "$b ($n)"
+    }
+
+    /** 新增一個「我的主題」，回傳 id */
+    fun create(ctx: Context, live: Prefs, name: String, snap: JSONObject): String {
+        var t = System.currentTimeMillis()
+        while (file(ctx, "u_$t")?.exists() == true) t++
+        val id = "u_$t"
+        write(ctx, id, snap, uniqueName(ctx, live, name))
+        return id
+    }
+
+    fun rename(ctx: Context, live: Prefs, id: String, name: String) {
+        if (isBuiltIn(id)) return
+        val snap = load(ctx, live, id)
+        write(ctx, id, snap, uniqueName(ctx, live, name).takeIf { name.trim() != nameOf(ctx, id) } ?: name.trim())
+    }
+
+    /** 刪掉「我的主題」（正在用的話先換回經典深色） */
+    fun delete(ctx: Context, live: Prefs, id: String) {
+        if (isBuiltIn(id)) return
+        if (activeId(live) == id) {
+            live.sp.edit().putString("active_theme", "classic").commit()
+            applyTo(live, stored(ctx, "classic")?.optJSONObject("snap") ?: factory("classic"))
+        }
+        file(ctx, id)?.delete()
+        cleanupImages(ctx)
+    }
+
+    /** 內建主題恢復原廠 */
+    fun resetBuiltIn(ctx: Context, live: Prefs, id: String) {
+        if (!isBuiltIn(id)) return
+        file(ctx, id)?.delete()
+        if (activeId(live) == id) {
+            applyTo(live, factory(id))
+            live.sp.edit().putLong("stickers_ver", System.currentTimeMillis()).commit()
+        }
+        cleanupImages(ctx)
+    }
+
+    /** 在一份臨時設定上做事（例如匯出某個不是正在用的主題、算它用到哪些圖） */
+    fun <T> withTemp(ctx: Context, snap: JSONObject, block: (Prefs) -> T): T {
+        val p = Prefs(ctx, TMP)
+        p.sp.edit().clear().commit()
+        applyTo(p, snap)
+        return block(p)
+    }
+
+    // ---------- 主題工作室 ----------
+
+    /** 開工作室：工作副本＝鍵盤現在的所有設定，再換上要編輯的主題 */
+    fun openWork(ctx: Context, live: Prefs, id: String): Prefs {
+        syncActive(ctx, live)
+        val work = Prefs(ctx, WORK)
+        val e = work.sp.edit().clear()
+        for ((k, v) in live.sp.all) when (v) {
+            is Int -> e.putInt(k, v)
+            is Long -> e.putLong(k, v)
+            is Boolean -> e.putBoolean(k, v)
+            is Float -> e.putFloat(k, v)
+            is String -> e.putString(k, v)
+            is Set<*> -> e.putStringSet(k, v.filterIsInstance<String>().toSet())
+        }
+        e.commit()
+        applyTo(work, load(ctx, live, id))
+        markSaved(work)
+        return work
+    }
+
+    /** 記下「存過檔的樣子」，用來判斷有沒有沒存的修改 */
+    fun markSaved(work: Prefs) {
+        work.sp.edit().putString("studio_saved", snapshot(work).toString()).commit()
+    }
+
+    fun isDirty(work: Prefs): Boolean {
+        val saved = work.sp.getString("studio_saved", null)?.let { JSONObject(it) } ?: return false
+        return !same(saved, snapshot(work))
+    }
+
+    /** 工作室按儲存：寫回主題；正在用的主題就直接套到鍵盤上 */
+    fun saveWork(ctx: Context, live: Prefs, id: String, work: Prefs) {
+        val snap = snapshot(work)
+        if (id == activeId(live)) {
+            applyTo(live, snap)
+            live.sp.edit().putLong("stickers_ver", System.currentTimeMillis()).commit()
+        }
+        write(ctx, id, snap)
+        markSaved(work)
+    }
+
+    fun closeWork(ctx: Context) {
+        Prefs(ctx, WORK).sp.edit().clear().commit()
+        cleanupImages(ctx)
+    }
+
+    // ---------- 圖檔 ----------
+
+    /** 這份設定用到的圖檔 */
+    fun imagesOf(p: Prefs): Set<String> {
+        val out = HashSet<String>()
+        Decals.load(p).filter { !it.isShape }.forEach { out.add(it.fileName) }
+        out += Decals.effectFiles(p)
+        out += p.funcStickers.values
+        return out
+    }
+
+    /** 所有主題（加上鍵盤現在的設定、工作室的工作副本）用到的圖檔 */
+    fun allUsedImages(ctx: Context): Set<String> {
+        val used = HashSet<String>()
+        used += imagesOf(Prefs(ctx, LIVE))
+        used += imagesOf(Prefs(ctx, WORK))
+        dir(ctx).listFiles { f -> f.name.endsWith(".json") }.orEmpty().forEach { f ->
+            val snap = try { JSONObject(f.readText()).optJSONObject("snap") } catch (_: Exception) { null } ?: return@forEach
+            used += withTemp(ctx, snap) { imagesOf(it) }
+        }
+        return used
+    }
+
+    /** 刪掉沒有任何主題在用的圖檔 */
+    fun cleanupImages(ctx: Context, extra: Collection<String> = emptyList()) {
+        val used = allUsedImages(ctx) + extra
+        Decals.dir(ctx).listFiles()?.forEach { if (it.name !in used) it.delete() }
+    }
+
+    // ---------- 第一次升到「每個主題一個檔案」 ----------
+
+    /**
+     * 以前所有自訂（按鍵樣式、圖案、功能鍵貼圖…）是全部主題共用一份；
+     * 照使用者的選擇：這些清掉，內建主題回到原廠的樣子（之後再自己匯入主題檔）。
+     */
+    fun migrate(ctx: Context, live: Prefs) {
+        if (live.sp.getInt("theme_store", 0) >= 1) return
+        val base = live.theme
+        val e = live.sp.edit()
+        for (k in LOOK_KEYS) if (k != "theme") e.remove(k)
+        e.putString("active_theme", if (isBuiltIn(base)) base else "classic")
+        e.putInt("theme_store", 1)
+        e.commit()
+        // 舊版的功能鍵貼圖（files/sticker_enter.png 這種）
+        for (slot in StickerSlot.values()) File(ctx.filesDir, "sticker_${slot.id}.png").delete()
+        cleanupImages(ctx)
+    }
+}

@@ -116,6 +116,7 @@ class CustomEffectTest {
         p.pressEffect = "custom"
         p.customEffect = CustomEffect("fountain", "shape:star", 0xFFF5C542.toInt(), count = 9)
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val f = StudioActivity::class.java.getDeclaredField("kv"); f.isAccessible = true
         val kv = f.get(a) as CatKeyboardView
         val mode = StudioActivity::class.java.getDeclaredField("animMode"); mode.isAccessible = true
@@ -132,7 +133,7 @@ class CustomEffectTest {
             .invoke(a, KeyEffect("custom", CustomEffect("burst", "shape:heart", 0xFFFF4F8B.toInt(), count = 8, size = 8f)))
         ShadowSystemClock.advanceBy(Duration.ofMillis(200))
         shot(a, "studio-anim-key")
-        assertEquals("burst", KeyStyles.load(Prefs(ctx)).map["enter"]?.effect?.custom?.motion)
+        assertEquals("burst", KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["enter"]?.effect?.custom?.motion)
     }
 
     private fun shot(a: StudioActivity, name: String) {

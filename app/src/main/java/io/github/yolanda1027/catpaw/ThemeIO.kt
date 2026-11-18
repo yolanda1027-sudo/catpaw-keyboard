@@ -86,8 +86,8 @@ object ThemeIO {
         if (Part.STICKERS in parts) {
             val st = JSONObject()
             for (slot in StickerSlot.values()) {
-                val f = Stickers.file(ctx, slot)
-                if (f.exists()) st.put(slot.id, Base64.encodeToString(f.readBytes(), Base64.NO_WRAP))
+                val f = Stickers.file(ctx, prefs, slot) ?: continue
+                st.put(slot.id, Base64.encodeToString(f.readBytes(), Base64.NO_WRAP))
             }
             if (st.length() > 0) o.put("stickers", st)
         }
@@ -180,7 +180,7 @@ object ThemeIO {
 
         o.optJSONObject("stickers")?.let { st ->
             // 主題有帶貼圖：先清掉原本的，再換成檔案裡的
-            for (slot in StickerSlot.values()) Stickers.remove(ctx, slot)
+            for (slot in StickerSlot.values()) Stickers.remove(prefs, slot)
             for (slot in StickerSlot.values()) {
                 val b64 = st.optString(slot.id)
                 if (b64.isEmpty()) continue
@@ -193,7 +193,7 @@ object ThemeIO {
                     val fixed = if (s < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * s).toInt(), (bmp.height * s).toInt(), true) else bmp
                     val out = ByteArrayOutputStream()
                     fixed.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    Stickers.file(ctx, slot).writeBytes(out.toByteArray())
+                    Stickers.setBytes(ctx, prefs, slot, out.toByteArray())
                 } catch (_: Exception) {
                     warnings.add("${slot.title}的貼圖讀不出來，略過")
                 }
@@ -248,7 +248,6 @@ object ThemeIO {
         o.optJSONObject("decals")?.let {
             val (list, broken) = Decals.importJson(ctx, it)
             Decals.save(prefs, list)
-            Decals.cleanup(ctx, list)
             if (broken > 0) warnings.add("有 $broken 個圖案的圖片壞掉了，略過")
         }
         return warnings

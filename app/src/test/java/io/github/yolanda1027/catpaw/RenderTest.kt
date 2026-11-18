@@ -173,13 +173,13 @@ class RenderTest {
             StickerSlot.BACKSPACE to fakeSticker(purple, "×"),
             StickerSlot.SYMBOL to fakeSticker(purple, "#"),
             StickerSlot.EMOJI to fakeSticker(pink, "^^"),
-        )) Stickers.file(ctx, slot).outputStream().use { img.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        )) Stickers.setBytes(ctx, prefs, slot, java.io.ByteArrayOutputStream().also { img.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray())
         for (t in listOf("classic", "stitch")) {
             prefs.theme = t
             renderView(CatKeyboardView(ctx, prefs, Haptics(ctx)), "$t-stickers")
         }
 
-        for (slot in StickerSlot.values()) Stickers.remove(ctx, slot) // 動畫截圖不要有貼圖
+        for (slot in StickerSlot.values()) Stickers.remove(prefs, slot) // 動畫截圖不要有貼圖
         // C. 按鍵動畫：按下 ㄍ，過 180 毫秒的樣子
         for (fx in listOf("paw", "heart", "star", "hearts", "sparkle", "flower", "butterfly", "ripple", "bubble", "snow", "note", "spell")) {
             prefs.pressEffect = fx
@@ -198,7 +198,7 @@ class RenderTest {
             org.robolectric.shadows.ShadowLooper.idleMainLooper(if (fx == "ripple") 280L else 220L, java.util.concurrent.TimeUnit.MILLISECONDS)
             renderView(v, "effect-$fx")
         }
-        for (slot in StickerSlot.values()) Stickers.remove(ctx, slot)
+        for (slot in StickerSlot.values()) Stickers.remove(prefs, slot)
         prefs.pressEffect = "none"
     }
 

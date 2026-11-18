@@ -86,7 +86,7 @@ class CatKeyboardView(
 
     private val dp = resources.displayMetrics.density
     private var theme: KbTheme = Themes.byName(prefs.theme, dp, prefs)
-    private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context)
+    private var stickers: Map<StickerSlot, android.graphics.Bitmap> = Stickers.load(context, prefs)
     private var keyStyles = KeyStyles.load(prefs)
     private var decals: List<Decal> = Decals.load(prefs)
     private var decalBitmaps: Map<String, android.graphics.Bitmap> = Decals.bitmaps(context, decals)
@@ -299,7 +299,7 @@ class CatKeyboardView(
 
     fun reloadPrefs() {
         theme = Themes.byName(prefs.theme, dp, prefs)
-        stickers = Stickers.load(context)
+        stickers = Stickers.load(context, prefs)
         keyStyles = KeyStyles.load(prefs)
         globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
         effectBitmaps.clear()

@@ -131,12 +131,13 @@ class DecalsTest {
         val p = Prefs(ctx)
         Decals.save(p, listOf(Decal("k1", "zy:ㄅ", "shape:cat", x = 0.5f, y = 0.5f, size = 0.4f)))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         val zoom = StudioActivity::class.java.getDeclaredField("zoom").apply { isAccessible = true }.get(a) as KeyZoomView
-        kv.onDecalPicked!!.invoke(Decals.load(p).first())
+        kv.onDecalPicked!!.invoke(Decals.load(work_p).first())
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         render(a.window.decorView, "studio-handles")
-        fun now() = Decals.load(Prefs(ctx)).first { it.id == "k1" }
+        fun now() = Decals.load(Prefs(ctx, ThemeStore.WORK)).first { it.id == "k1" }
         fun drag(from: Pair<Float, Float>, to: Pair<Float, Float>) {
             zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, from))
             zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, to))
@@ -171,9 +172,9 @@ class DecalsTest {
         assertTrue(now().flip)
         render(a.window.decorView, "studio-handles-flip")
         tap("copy")
-        assertEquals(2, Decals.load(Prefs(ctx)).size)
+        assertEquals(2, Decals.load(Prefs(ctx, ThemeStore.WORK)).size)
         tap("delete") // 刪掉的是複製出來、現在選到的那個
-        assertEquals(listOf("k1"), Decals.load(Prefs(ctx)).map { it.id })
+        assertEquals(listOf("k1"), Decals.load(Prefs(ctx, ThemeStore.WORK)).map { it.id })
     }
 
     @Test fun tapSelectsDecalOrKey() {
@@ -223,29 +224,30 @@ class DecalsTest {
         p.theme = "magic_yellow"
         Decals.save(p, sampleDecals())
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val f = StudioActivity::class.java.getDeclaredField("kv"); f.isAccessible = true
         val kv = f.get(a) as CatKeyboardView
         kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])
         render(a.window.decorView, "studio-key-decals")
-        kv.onDecalPicked!!.invoke(Decals.load(p).first { it.id == "k1" })
+        kv.onDecalPicked!!.invoke(Decals.load(work_p).first { it.id == "k1" })
         render(a.window.decorView, "studio-decal")
 
         // 放大的按鍵上拖曳圖案：往右拖 1/4 個按鍵寬
         val zf = StudioActivity::class.java.getDeclaredField("zoom"); zf.isAccessible = true
         val zoom = zf.get(a) as KeyZoomView
         val box = KeyZoomView::class.java.getDeclaredMethod("keyBox").apply { isAccessible = true }.invoke(zoom) as android.graphics.RectF
-        val before = Decals.load(p).first { it.id == "k1" }
+        val before = Decals.load(work_p).first { it.id == "k1" }
         val sx = box.left + before.x * box.width()
         val sy = box.top + before.y * box.height()
         zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, sx to sy))
         zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, sx + box.width() / 4 to sy))
         zoom.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, sx + box.width() / 4 to sy))
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
-        assertEquals(before.x + 0.25f, Decals.load(Prefs(ctx)).first { it.id == "k1" }.x, 0.01f)
+        assertEquals(before.x + 0.25f, Decals.load(Prefs(ctx, ThemeStore.WORK)).first { it.id == "k1" }.x, 0.01f)
         render(a.window.decorView, "studio-zoom-moved")
 
         // 點另一個圖案（Enter 鍵上的愛心）：放大畫面換成 Enter
-        kv.onDecalPicked!!.invoke(Decals.load(p).first { it.id == "k2" })
+        kv.onDecalPicked!!.invoke(Decals.load(work_p).first { it.id == "k2" })
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         render(a.window.decorView, "studio-zoom-enter")
         // 鍵盤背景的面板（按鈕要分開，不能黏在一起）
@@ -265,20 +267,26 @@ class DecalsTest {
         Decals.save(p, sampleDecals())
         KeyStyles.save(p, KeyStyles.EMPTY.with("enter", KeyStyle(bg = Color.RED, effect = KeyEffect("snow"))))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         render(a.window.decorView, "studio-home-reset")
         val btn = findButton(a.window.decorView, "↺ 恢復主題預設")!!
         btn.performClick()
         val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
         assertTrue(dialog.isShowing)
         // 還沒按確認：什麼都沒清
-        assertEquals(sampleDecals().size, Decals.load(Prefs(ctx)).size)
+        assertEquals(sampleDecals().size, Decals.load(Prefs(ctx, ThemeStore.WORK)).size)
         dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
-        assertTrue(Decals.load(Prefs(ctx)).isEmpty())
-        assertTrue(KeyStyles.load(Prefs(ctx)).map.isEmpty())
-        assertEquals("spell", Prefs(ctx).pressEffect)
+        assertTrue(Decals.load(Prefs(ctx, ThemeStore.WORK)).isEmpty())
+        assertTrue(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map.isEmpty())
+        assertEquals("spell", Prefs(ctx, ThemeStore.WORK).pressEffect)
         // 圖檔要等離開工作室才清（在工作室裡還能按上一步救回來）
         assertTrue(Decals.dir(ctx).listFiles()!!.isNotEmpty())
+        // 還沒儲存：鍵盤（主題）照舊，圖案還在
+        assertEquals(sampleDecals().size, Decals.load(Prefs(ctx)).size)
+        // 儲存：寫回正在用的主題，鍵盤也跟著清掉
+        StudioActivity::class.java.getDeclaredMethod("save", Function0::class.java).apply { isAccessible = true }.invoke(a, null)
+        assertTrue(Decals.load(Prefs(ctx)).isEmpty())
         a.finish()
         StudioActivity::class.java.getDeclaredMethod("onDestroy").apply { isAccessible = true }.invoke(a)
         assertTrue(Decals.dir(ctx).listFiles()!!.isEmpty())
@@ -290,11 +298,12 @@ class DecalsTest {
         val img = Decals.storeBytes(ctx, photo())!!
         Decals.save(p, listOf(Decal("k1", "zy:ㄅ", Decal.FILE + img, size = 0.4f)))
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val work_p = Prefs(ctx, ThemeStore.WORK) // 工作室改的是工作副本
         val cls = StudioActivity::class.java
         val action = cls.getDeclaredMethod("decalAction", String::class.java, Decal::class.java).apply { isAccessible = true }
         val undo = cls.getDeclaredMethod("undo").apply { isAccessible = true }
         val redo = cls.getDeclaredMethod("redo").apply { isAccessible = true }
-        fun now() = Decals.load(Prefs(ctx))
+        fun now() = Decals.load(Prefs(ctx, ThemeStore.WORK))
         fun k1() = now().first { it.id == "k1" }
         fun step(name: String) { action.invoke(a, name, k1()); org.robolectric.shadows.ShadowLooper.idleMainLooper() }
 
