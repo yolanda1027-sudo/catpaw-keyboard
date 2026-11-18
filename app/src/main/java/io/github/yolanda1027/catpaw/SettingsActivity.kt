@@ -251,7 +251,8 @@ class SettingsActivity : Activity() {
     private fun parentOf(id: String) = pages.firstOrNull { it.id == id }?.parent ?: "home"
     private var scroll: ScrollView? = null
 
-    private var page = "home"
+    internal var page = "home"
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -268,7 +269,34 @@ class SettingsActivity : Activity() {
         outState.putString("page", page) // 換字體會重新整理畫面，要記得停在哪一頁
     }
 
-    @Deprecated("Activity 的返回鍵處理")
+    /**
+     * 返回鍵：在子頁面按返回，回上一層；在首頁按返回才離開。
+     *
+     * Android 13 以後用 OnBackInvokedCallback（Android 16 起 targetSdk 36 的 App
+     * 不會再收到 onBackPressed）。只在子頁面註冊，首頁不註冊，
+     * 系統才會播「縮回桌面」的預測返回動畫。Android 12 還是走 onBackPressed。
+     */
+    private val backCallback: Any? =
+        if (android.os.Build.VERSION.SDK_INT >= 33) android.window.OnBackInvokedCallback { showPage(parentOf(page)) } else null
+    internal var backRegistered = false
+        private set
+
+    private fun updateBackCallback() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val cb = backCallback as android.window.OnBackInvokedCallback
+        val want = page != "home"
+        if (want == backRegistered) return
+        if (want) onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
+        else onBackInvokedDispatcher.unregisterOnBackInvokedCallback(cb)
+        backRegistered = want
+    }
+
+    /** 測試用：模擬按一下返回 */
+    internal fun pressBack() {
+        if (backRegistered) (backCallback as android.window.OnBackInvokedCallback).onBackInvoked() else finish()
+    }
+
+    @Deprecated("Android 12 的返回鍵處理；13 以後走 backCallback")
     override fun onBackPressed() {
         if (page != "home") showPage(parentOf(page))
         else @Suppress("DEPRECATION") super.onBackPressed()
@@ -304,7 +332,9 @@ class SettingsActivity : Activity() {
         val sv = ScrollView(this).apply { addView(root) }
         scroll = sv
         outer.addView(sv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        Ui.fitSystemBars(outer)
         setContentView(outer)
+        updateBackCallback()
         actionBar?.title = info?.title?.substringAfter(' ') ?: "貓爪鍵盤"
         actionBar?.setDisplayHomeAsUpEnabled(info != null)
         when (id) {

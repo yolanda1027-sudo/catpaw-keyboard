@@ -5,15 +5,15 @@ plugins {
 
 android {
     namespace = "io.github.yolanda1027.catpaw"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.yolanda1027.catpaw"
         minSdk = 31
-        targetSdk = 34
+        targetSdk = 36
         // CI 每次建置的編號都會往上加，手機才能直接「更新」而不用先解除安裝
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
-        versionName = "0.44.1"
+        versionName = "0.45.0"
     }
 
     signingConfigs {

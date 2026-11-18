@@ -182,6 +182,7 @@ class StudioActivity : Activity() {
             setPadding(px(20f), px(8f), px(20f), px(48f))
         }
         outer.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        Ui.fitSystemBars(outer)
         setContentView(outer)
         // 上次離開時沒清掉的圖檔（例如 App 被系統關掉）先清一清；之後要等離開工作室才清，「上一步」才救得回刪掉的圖
         Decals.cleanup(this, decals)

@@ -161,6 +161,7 @@ object ImageCrop {
         btn("完成") { result = view.fill; d.dismiss() }
         root.addView(btns)
 
+        Ui.fitSystemBars(root)
         d.setContentView(root)
         d.setOnDismissListener { done(result) }
         d.show()

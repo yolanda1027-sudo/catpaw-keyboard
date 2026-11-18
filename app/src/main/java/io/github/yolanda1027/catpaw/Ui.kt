@@ -22,6 +22,37 @@ object Ui {
         })
     }
 
+    /**
+     * Android 15 以後（targetSdk ≥ 35）畫面一律「滿版」：App 會畫到狀態列、導覽列（手勢條）、
+     * 瀏海和鍵盤底下。這裡讓這個 view 自動往內縮，內容不會被它們蓋住。
+     *
+     * 用的是「系統傳給這個 view 的」距離：上面有標題列的話，系統已經把標題列算進去了，
+     * 這裡收到的上方距離就是 0，不會多空一截。原本設好的 padding 會保留，再加上去。
+     */
+    fun fitSystemBars(v: View) {
+        val l = v.paddingLeft
+        val t = v.paddingTop
+        val r = v.paddingRight
+        val b = v.paddingBottom
+        v.setOnApplyWindowInsetsListener { view, insets ->
+            val i = insets.getInsets(
+                android.view.WindowInsets.Type.systemBars() or
+                    android.view.WindowInsets.Type.displayCutout() or
+                    android.view.WindowInsets.Type.ime(),
+            )
+            view.setPadding(l + i.left, t + i.top, r + i.right, b + i.bottom)
+            android.view.WindowInsets.CONSUMED
+        }
+        if (v.isAttachedToWindow) v.requestApplyInsets()
+        else v.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {
+                view.removeOnAttachStateChangeListener(this)
+                view.requestApplyInsets()
+            }
+            override fun onViewDetachedFromWindow(view: View) {}
+        })
+    }
+
     /** @return 有沒有改到東西（改了就先不畫，等重新排版） */
     fun spaceButtons(v: View, gap: Int): Boolean {
         var changed = false

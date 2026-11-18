@@ -146,6 +146,7 @@ object Eyedropper {
         view.onColor = { update(it) }
         update(view.color)
 
+        Ui.fitSystemBars(root)
         d.setContentView(root)
         d.setOnDismissListener { done(result) }
         d.show()
