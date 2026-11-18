@@ -108,7 +108,20 @@ class CatKeyboardView(
      * 這塊不會擋到後面的 App，點下去也會穿過去（見 CatImeService.onComputeInsets）。
      */
     val floatH = 34 * dp
-    private val kbH get() = height - floatH
+    /**
+     * 最下面系統導覽列（手勢條或三顆按鈕）的高度。
+     * Android 15 以後（targetSdk ≥ 35）鍵盤也是「滿版」，系統不會再自動讓位，要自己把按鍵往上移；
+     * 這一段只畫背景，不放按鍵。只有真的當輸入法時才會設（設定頁、工作室的預覽是 0）。
+     */
+    var navInset = 0
+        set(v) {
+            if (field != v) {
+                field = v
+                requestLayout()
+                invalidate()
+            }
+        }
+    private val kbH get() = height - floatH - navInset
 
     /** 符號鍵盤的分類列（null = 不是符號鍵盤）；裡面的 null 代表「最近使用」的時鐘圖示 */
     var symbolTabs: List<String?>? = null
@@ -298,7 +311,7 @@ class CatKeyboardView(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val h = (floatH + topH + quickH + padTop + keyAreaH + padBottom).toInt()
+        val h = (floatH + topH + quickH + padTop + keyAreaH + padBottom).toInt() + navInset
         setMeasuredDimension(w, h)
     }
 
@@ -344,6 +357,14 @@ class CatKeyboardView(
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.resetPaints() // 上一張畫面留下的透明度、遮罩清掉（不然背景有時候會整片透明）
         theme.drawBackground(c, w, kbH, topH)
+        if (navInset > 0) {
+            // 導覽列底下：背景延伸下去，不要露出後面的 App
+            c.save()
+            c.clipRect(0f, kbH, w, kbH + navInset)
+            theme.drawBackground(c, w, kbH + navInset, topH)
+            c.restore()
+            theme.resetPaints()
+        }
         drawTopBarBg(c, w)
         keyStyles.keyboardImage?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
         drawBgDecals(c, front = false)

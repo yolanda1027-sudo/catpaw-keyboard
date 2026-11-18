@@ -144,6 +144,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onCreateInputView(): View {
         val v = CatKeyboardView(this, prefs, haptics)
         v.listener = this
+        // 系統導覽列（手勢條、三顆按鈕）蓋在鍵盤最下面：按鍵往上讓出它的高度
+        v.setOnApplyWindowInsetsListener { view, insets ->
+            (view as CatKeyboardView).navInset =
+                insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
+            insets
+        }
         kv = v
         refresh()
         return v
