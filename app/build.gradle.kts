@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val uploadKeystore: File? = System.getenv("CATPAW_UPLOAD_KEYSTORE")?.let { file(it) }?.takeIf { it.isFile }
+
 android {
     namespace = "io.github.yolanda1027.catpaw"
     compileSdk = 36
@@ -12,7 +14,8 @@ android {
         minSdk = 31
         targetSdk = 36
         // CI 每次建置的編號都會往上加，手機才能直接「更新」而不用先解除安裝
-        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        // 正式版（release.yml）用 CATPAW_VERSION_CODE，每次上傳 Google Play 都要比上一次大
+        versionCode = (System.getenv("CATPAW_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
         versionName = "0.45.0"
     }
 
@@ -24,6 +27,17 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // 正式版：上傳 Google Play 用的「上傳金鑰」。金鑰不放進 repo，從環境變數讀：
+        //   CATPAW_UPLOAD_KEYSTORE = .p12 檔的路徑
+        //   CATPAW_UPLOAD_PASSWORD = 密碼（金鑰庫和金鑰共用同一組）
+        // GitHub Actions 的 release.yml 會從 repo 的 Secrets 拿出來放好。
+        if (uploadKeystore != null) create("upload") {
+            storeFile = uploadKeystore
+            storeType = "pkcs12"
+            storePassword = System.getenv("CATPAW_UPLOAD_PASSWORD")
+            keyAlias = "upload"
+            keyPassword = System.getenv("CATPAW_UPLOAD_PASSWORD")
+        }
     }
 
     buildTypes {
@@ -32,7 +46,9 @@ android {
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            // 沒有上傳金鑰就不簽（建出來的檔案 Google Play 不收，見下面的檢查）。
+            // 絕對不要用公開的測試簽章簽正式版。
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
 
@@ -53,6 +69,14 @@ val copyLicenses = tasks.register<Copy>("copyLicenses") {
 }
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets"))
 tasks.named("preBuild") { dependsOn(copyLicenses) }
+
+// 打正式版（bundleRelease／assembleRelease）卻沒有上傳金鑰：直接停下來說清楚，不要產出沒簽章的檔案
+gradle.taskGraph.whenReady {
+    val wantsRelease = allTasks.any { it.path == ":app:bundleRelease" || it.path == ":app:assembleRelease" }
+    if (wantsRelease && (uploadKeystore == null || System.getenv("CATPAW_UPLOAD_PASSWORD").isNullOrEmpty())) {
+        throw GradleException("正式版需要上傳金鑰：請設定 CATPAW_UPLOAD_KEYSTORE（.p12 路徑）和 CATPAW_UPLOAD_PASSWORD")
+    }
+}
 
 android {
     testOptions {

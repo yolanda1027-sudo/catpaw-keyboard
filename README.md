@@ -64,4 +64,8 @@
 - 本機建置：`./gradlew assembleDebug`
 - 注音引擎測試：`./gradlew testDebugUnitTest --tests '*ZhuyinEngineTest*'`
 - 畫面截圖測試：`./gradlew testDebugUnitTest`，用 Robolectric 把鍵盤畫成 PNG，存到 `app/build/renders/`
+- 正式版（上傳 Google Play）：到 Actions →「Build release (Google Play)」→ Run workflow，
+  建好的 `.aab` 會放在一個草稿 Release（只有 repo 擁有者看得到）。
+  需要先在 Settings → Secrets and variables → Actions 放好 `CATPAW_UPLOAD_KEYSTORE_B64`（上傳金鑰 .p12 的 base64）和 `CATPAW_UPLOAD_PASSWORD`。
+  上傳金鑰不放進 repo；本機打包時設定環境變數 `CATPAW_UPLOAD_KEYSTORE`（.p12 路徑）和 `CATPAW_UPLOAD_PASSWORD`，再跑 `./gradlew bundleRelease`
 - `keystore/catpaw-debug.jks` 是測試用的簽章，讓每次建置出來的 APK 簽章都一樣，手機才能直接覆蓋更新。這個簽章是公開的，請只安裝從這個 repo 的 Releases 下載的 APK。

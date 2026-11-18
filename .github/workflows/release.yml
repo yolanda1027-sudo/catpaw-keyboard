@@ -1,0 +1,71 @@
+name: Build release (Google Play)
+
+# 正式版：手動按「Run workflow」才會跑（Actions → Build release → Run workflow）。
+# 需要先在 repo 的 Settings → Secrets and variables → Actions 放好兩個 Secret：
+#   CATPAW_UPLOAD_KEYSTORE_B64  上傳金鑰（.p12 檔轉成 base64 的文字）
+#   CATPAW_UPLOAD_PASSWORD      上傳金鑰的密碼
+# 建好的 AAB（上傳 Google Play 用）和 APK 會放在一個「草稿」Release，只有 repo 擁有者看得到。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Restore upload key
+        env:
+          KEYSTORE_B64: ${{ secrets.CATPAW_UPLOAD_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::還沒設定 Secret CATPAW_UPLOAD_KEYSTORE_B64（上傳金鑰）"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/upload.p12"
+
+      - name: Build signed AAB and APK
+        env:
+          CATPAW_UPLOAD_KEYSTORE: ${{ runner.temp }}/upload.p12
+          CATPAW_UPLOAD_PASSWORD: ${{ secrets.CATPAW_UPLOAD_PASSWORD }}
+          # 每次上傳 Google Play 的版本編號都要比上一次大；這個流程每跑一次就 +1
+          CATPAW_VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Remove upload key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.p12"
+
+      - name: Collect files
+        id: files
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          cp app/build/outputs/bundle/release/app-release.aab "catpaw-keyboard-$VERSION.aab"
+          cp app/build/outputs/apk/release/app-release.apk "catpaw-keyboard-$VERSION.apk"
+
+      # 草稿 Release：不公開、不會出現在 Releases 頁給別人看，手機上登入 GitHub 就能下載
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=${{ steps.files.outputs.version }}
+          gh release create "v$V-${{ github.run_number }}" \
+            "catpaw-keyboard-$V.aab" "catpaw-keyboard-$V.apk" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "正式版 v$V（版本編號 ${{ github.run_number }}）" \
+            --notes "上傳 Google Play 用 .aab。.apk 是同一份的安裝檔，簽章跟測試版不同，不能直接覆蓋測試版。"
