@@ -302,4 +302,31 @@ class ThemeStoreTest {
         if (v is android.view.ViewGroup) for (i in 0 until v.childCount) buttons(v.getChildAt(i), out)
         return out
     }
+
+    /** 工作室裡按返回：先回上一層，在首頁才離開 */
+    @Test fun backGoesUpOneLevel() {
+        val a = studio()
+        val cls = StudioActivity::class.java
+        fun field(n: String) = cls.getDeclaredField(n).apply { isAccessible = true }
+        fun back() = call(a, "back")
+        // 鍵盤背景 → 首頁
+        field("bgSelected").setBoolean(a, true)
+        call(a, "refresh")
+        back()
+        assertFalse(field("bgSelected").getBoolean(a))
+        assertFalse(a.isFinishing)
+        // 按鍵上的圖案 → 那顆鍵 → 首頁
+        val kv = field("kv").get(a) as CatKeyboardView
+        kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])
+        field("decalSel").set(a, "label:main")
+        back()
+        assertEquals(null, field("decalSel").get(a))
+        assertNotNull("還在那顆鍵", field("selected").get(a))
+        back()
+        assertEquals(null, field("selected").get(a))
+        assertFalse(a.isFinishing)
+        // 首頁：離開
+        back()
+        assertTrue(a.isFinishing)
+    }
 }

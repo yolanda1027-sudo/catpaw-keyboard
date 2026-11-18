@@ -289,11 +289,32 @@ class StudioActivity : Activity() {
 
     /** 返回鍵：Android 13 以後用 OnBackInvokedCallback（targetSdk 36 收不到 onBackPressed） */
     private val backCallback: Any? =
-        if (android.os.Build.VERSION.SDK_INT >= 33) android.window.OnBackInvokedCallback { confirmLeave { finish() } } else null
+        if (android.os.Build.VERSION.SDK_INT >= 33) android.window.OnBackInvokedCallback { back() } else null
 
     @Deprecated("Android 12 的返回鍵處理；13 以後走 backCallback")
     override fun onBackPressed() {
+        back()
+    }
+
+    /**
+     * 返回鍵：先回上一層（圖案 → 按鍵／背景 → 工作室首頁），在首頁才離開工作室（沒存會先問）。
+     */
+    private fun back() {
+        if (goUp()) return
         confirmLeave { finish() }
+    }
+
+    /** 回上一層；已經在首頁就回傳 false */
+    private fun goUp(): Boolean {
+        when {
+            decalSel != null -> decalSel = null // 圖案、按鍵上的字 → 回到那顆鍵（或鍵盤背景）
+            animMode != null -> animMode = null // 按鍵動畫 → 回到那顆鍵（或首頁）
+            selected != null -> { selected = null; groupScope = false }
+            bgSelected || topSelected || quickSelected -> { bgSelected = false; topSelected = false; quickSelected = false }
+            else -> return false
+        }
+        refresh()
+        return true
     }
 
     /** 已經開著工作室時，從設定按了別的主題的「編輯」 */
