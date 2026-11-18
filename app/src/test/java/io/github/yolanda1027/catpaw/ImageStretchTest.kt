@@ -124,4 +124,26 @@ class ImageStretchTest {
         assertTrue("左邊有金框", (0..30).any { isGold(b.getPixel(it, midY)) })
         assertTrue("右邊有金框", (1049..1079).any { isGold(b.getPixel(it, midY)) })
     }
+
+    /** 裁切畫面：拉寬、拉高分開兩條，可以只拉一邊，也可以兩邊都拉 */
+    @Test fun widthAndHeightSeparately() {
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        val v = CropView(ctx, framedPicture(), 1080f / 738f, 0f, ImageFill("a.png"))
+        v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1400, View.MeasureSpec.EXACTLY))
+        v.layout(0, 0, 1080, 1400)
+        val (w0, h0) = v.sizeRel()
+        assertEquals(1f, w0, 0.01f)
+        assertEquals(1f, h0, 0.01f)
+        // 只拉寬：高度不變
+        v.setSizeRel(1.5f, 1f)
+        assertEquals(1.5f, v.sizeRel().first, 0.01f)
+        assertEquals(1f, v.sizeRel().second, 0.01f)
+        // 再拉高：寬度維持 1.5，兩邊都變大
+        v.setSizeRel(1.5f, 2f)
+        assertEquals(1.5f, v.sizeRel().first, 0.01f)
+        assertEquals(2f, v.sizeRel().second, 0.01f)
+        // 畫面上看到的寬高比也真的變了
+        val d = v.fill.destRect(v.frame, v.bmp.width, v.bmp.height)
+        assertEquals((1.5f / 2f) * v.bmp.width / v.bmp.height, d.width() / d.height(), 0.01f)
+    }
 }

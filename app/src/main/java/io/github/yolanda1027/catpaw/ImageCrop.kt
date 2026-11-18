@@ -28,6 +28,9 @@ import kotlin.math.exp
  * 一根手指拖＝移動圖片，兩根手指捏＝放大縮小，下面的滑桿也可以縮放。
  */
 object ImageCrop {
+    /** 拉寬、拉高最多到原本的幾倍（往左最小到幾分之一） */
+    private const val REL_MAX = 4f
+
     /**
      * @param aspect 框的寬 ÷ 高
      * @param corner 框的圓角（框短邊的幾分之幾，0 = 直角、0.5 = 膠囊）
@@ -62,10 +65,14 @@ object ImageCrop {
             gravity = Gravity.CENTER_VERTICAL
             setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
         }
-        zoomRow.addView(label("－", 20f))
+        // 左右兩邊的符號固定一樣寬：三條拉桿才會上下對齊
+        val iconW = (36 * dp).toInt()
+        fun icon(row: LinearLayout, s: String, size: Float) =
+            row.addView(label(s, size).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(iconW, ViewGroup.LayoutParams.WRAP_CONTENT))
+        icon(zoomRow, "－", 20f)
         val bar = SeekBar(a).apply { max = 1000 }
         zoomRow.addView(bar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        zoomRow.addView(label("＋", 20f))
+        icon(zoomRow, "＋", 20f)
         root.addView(zoomRow)
         fun barOf(z: Float): Int {
             val lo = ln(view.minZoom)
@@ -74,39 +81,51 @@ object ImageCrop {
         }
         var syncing = false
 
-        // 拉寬／拉高（對數刻度：中間＝原比例，往右變寬、往左變高，最多 4 倍）
-        val stretchLabel = label("", 13f, 0.85f).apply { gravity = Gravity.START; setPadding((22 * dp).toInt(), (4 * dp).toInt(), 0, 0) }
-        root.addView(stretchLabel)
-        val stretchRow = LinearLayout(a).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
+        // 拉寬、拉高分開調（對數刻度：中間＝原本的大小，往右變寬／變高，往左變窄／變矮）
+        val lnMax = ln(REL_MAX)
+        fun relBar(p: Int) = exp((p / 500f - 1f) * lnMax).let { if (kotlin.math.abs(it - 1f) < 0.03f) 1f else it }
+        fun barRel(v: Float) = (((ln(v) / lnMax) + 1f) * 500).toInt().coerceIn(0, 1000)
+        fun relText(name: String, v: Float) = if (kotlin.math.abs(v - 1f) < 0.02f) "$name：原本" else "$name：×%.2f".format(v)
+        fun relRow(icon: String): Pair<TextView, SeekBar> {
+            val lbl = label("", 13f, 0.85f).apply { gravity = Gravity.START; setPadding((22 * dp).toInt(), (4 * dp).toInt(), 0, 0) }
+            root.addView(lbl)
+            val row = LinearLayout(a).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
+            }
+            icon(row, icon, 18f)
+            val sb = SeekBar(a).apply { max = 1000 }
+            row.addView(sb, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            icon(row, "", 18f) // 右邊空一格，跟上面「＋」那條一樣長
+            root.addView(row)
+            return lbl to sb
         }
-        stretchRow.addView(label("↕", 18f))
-        val sbar = SeekBar(a).apply { max = 1000 }
-        stretchRow.addView(sbar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        stretchRow.addView(label("↔", 18f))
-        root.addView(stretchRow)
-        val lnMax = ln(ImageFill.MAX_STRETCH)
-        fun sbarOf(st: Float) = (((ln(st) / lnMax) + 1f) * 500).toInt().coerceIn(0, 1000)
-        fun stretchText(st: Float) = when {
-            kotlin.math.abs(st - 1f) < 0.02f -> "拉寬／拉高：原比例"
-            st > 1f -> "拉寬／拉高：寬 ×%.2f".format(st)
-            else -> "拉寬／拉高：高 ×%.2f".format(1f / st)
-        }
+        val (wLabel, wBar) = relRow("↔")
+        val (hLabel, hBar) = relRow("↕")
         fun sync(f: ImageFill) {
             syncing = true
             bar.progress = barOf(f.zoom)
-            sbar.progress = sbarOf(f.stretch)
-            stretchLabel.text = stretchText(f.stretch)
+            val (w, h) = view.sizeRel()
+            wBar.progress = barRel(w)
+            hBar.progress = barRel(h)
+            wLabel.text = relText("拉寬", w)
+            hLabel.text = relText("拉高", h)
             syncing = false
         }
-        sbar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        // 拉一條的時候另一條不動（高度維持、只改寬度；反過來也一樣）
+        wBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (syncing || !fromUser) return
-                var st = exp((p / 500f - 1f) * lnMax)
-                if (kotlin.math.abs(st - 1f) < 0.03f) st = 1f // 中間附近吸到原比例
-                view.setStretch(st)
+                view.setSizeRel(relBar(p), view.sizeRel().second)
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        hBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (syncing || !fromUser) return
+                view.setSizeRel(view.sizeRel().first, relBar(p))
             }
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
@@ -217,6 +236,35 @@ class CropView(
 
     /** 剛好塞滿框：拉到跟框一樣的比例，整張圖都看得到 */
     fun fitFrame() = set(fill.fitFrame(frame, bmp.width, bmp.height))
+
+    /** 原本的樣子（原比例、剛好鋪滿框）在畫面上的寬高：「拉寬 ×1」「拉高 ×1」的基準 */
+    private fun baseSize(): Pair<Float, Float> {
+        val c = ImageFill.cover(frame, bmp.width, bmp.height)
+        return bmp.width * c to bmp.height * c
+    }
+
+    /** 現在畫面上的寬、高是原本的幾倍 */
+    fun sizeRel(): Pair<Float, Float> {
+        if (frame.isEmpty) return 1f to 1f
+        val d = fill.destRect(frame, bmp.width, bmp.height)
+        val (bw, bh) = baseSize()
+        return d.width() / bw to d.height() / bh
+    }
+
+    /**
+     * 寬、高各自調：畫面上的寬度＝原本的 w 倍、高度＝原本的 h 倍。
+     * （換算成 ImageFill 的比例 stretch 和大小 zoom；超出範圍會被拉回來）
+     */
+    fun setSizeRel(w: Float, h: Float) {
+        if (frame.isEmpty) return
+        val (bw, bh) = baseSize()
+        val targetW = bw * w
+        val targetH = bh * h
+        val st = ((targetW / targetH) / (bmp.width.toFloat() / bmp.height)).coerceIn(ImageFill.MIN_STRETCH, ImageFill.MAX_STRETCH)
+        val c = ImageFill.cover(frame, bmp.width * st, bmp.height.toFloat())
+        val z = targetH / (bmp.height * c)
+        set(fill.copy(stretch = st, zoom = z))
+    }
 
     private val checker = Paint()
 

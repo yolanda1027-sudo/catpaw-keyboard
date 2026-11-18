@@ -147,7 +147,7 @@ class KeyNineTest {
         StudioActivity::class.java.declaredMethods.first { it.name == "setFill" }.apply { isAccessible = true }.invoke(a, "space", ImageFill(name))
         ShadowLooper.idleMainLooper()
         val root = a.window.decorView
-        (find(root) { it is RadioButton && it.text.startsWith("九宮格") } as RadioButton).performClick()
+        (find(root) { it is RadioButton && it.text.startsWith("固定邊角") } as RadioButton).performClick()
         ShadowLooper.idleMainLooper()
         // 切到九宮格：直接打開調整邊角，預覽用這顆鍵的大小
         val d = ShadowDialog.getLatestDialog() as Dialog
@@ -167,7 +167,7 @@ class KeyNineTest {
         assertEquals(0.25f, f.sx, 0.001f)
         // 裁切換成調整邊角；底色、外框、圓角變灰
         assertNotNull(find(root) { it is Button && it.text == "📐 調整邊角" })
-        assertNotNull(find(root) { it is TextView && it.text.toString().contains("現在用「九宮格」") })
+        assertNotNull(find(root) { it is TextView && it.text.toString().contains("現在用「固定邊角」") })
         Ui.spaceButtons(root, 8)
         root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, 1080, 2340)

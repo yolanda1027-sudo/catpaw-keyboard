@@ -650,7 +650,7 @@ class StudioActivity : Activity() {
             })
             text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
         }
-        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「" + (if (eff.bgImage?.nine == true) "九宮格" else "照圖片的形狀") + "」，這些都交給圖片。", 12f, dim = true)
+        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「" + (if (eff.bgImage?.nine == true) "固定邊角" else "照圖片的形狀") + "」，這些都交給圖片。", 12f, dim = true)
 
         panel.addView(CheckBox(this).apply {
             text = "不顯示文字（只留底色和外框）"
@@ -1647,7 +1647,7 @@ class StudioActivity : Activity() {
             val modes = listOf(
                 "鋪滿裁切（可以放大縮小、選要露出哪一塊）",
                 "照圖片的形狀（去背 PNG 透明的地方就是按鍵外面）",
-                "九宮格（四個角不變形，按鍵變寬只拉長中間）",
+                "固定邊角（四個角不變形，按鍵變寬只拉長中間）",
             )
             val current = when { fill.nine -> 2; fill.shape -> 1; else -> 0 }
             val rg = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
