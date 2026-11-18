@@ -31,7 +31,11 @@ object ThemeIO {
     const val FORMAT = "catpaw-keyboard-theme"
     const val VERSION = 1
     /** 匯入時最多讀多大的檔案 */
-    const val MAX_BYTES = 10 * 1024 * 1024
+    /**
+     * 匯入的檔案最大多大。主題裡有 GIF、按鍵圖片時檔案會很大（圖片轉成文字還會再大三分之一），
+     * 以前 10 MB 太小，自己匯出的主題都匯不回來。
+     */
+    const val MAX_BYTES = 60 * 1024 * 1024
 
     enum class Part(val title: String) {
         FONTS("字體"),

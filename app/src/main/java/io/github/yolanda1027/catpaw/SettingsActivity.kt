@@ -127,8 +127,9 @@ class SettingsActivity : Activity() {
             pendingExport = null
             if (resultCode != RESULT_OK || uri == null || content == null) return
             try {
-                contentResolver.openOutputStream(uri, "wt")?.use { it.write(content.toByteArray(Charsets.UTF_8)) }
-                android.widget.Toast.makeText(this, "主題已匯出，可以把檔案傳給別人了", android.widget.Toast.LENGTH_LONG).show()
+                val bytes = content.toByteArray(Charsets.UTF_8)
+                contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                android.widget.Toast.makeText(this, "主題已匯出（${mb(bytes.size.toLong())}），可以把檔案傳給別人了", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 android.widget.Toast.makeText(this, "存檔失敗：${e.message}", android.widget.Toast.LENGTH_LONG).show()
             }
@@ -477,6 +478,8 @@ class SettingsActivity : Activity() {
     /** 匯出時先把內容準備好，等使用者選好存檔位置再寫進去 */
     private var pendingExport: String? = null
 
+    private fun mb(bytes: Long) = String.format("%.1f MB", bytes / 1024.0 / 1024.0)
+
     private fun pageShare() {
         note("把現在的鍵盤外觀存成一個主題檔（.json），傳給家人朋友，對方匯入就能套用一模一樣的樣子。自己上傳的字體不會放進檔案。")
         button("📤 匯出目前的主題") { showExportDialog() }
@@ -525,15 +528,30 @@ class SettingsActivity : Activity() {
     }
 
     private fun handleImport(uri: android.net.Uri) {
+        fun fail(msg: String) = android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
+        val size = try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L
+            } ?: -1L
+        } catch (_: Exception) { -1L }
+        if (size > ThemeIO.MAX_BYTES) {
+            return fail("主題檔太大（${mb(size)}），最多 ${mb(ThemeIO.MAX_BYTES.toLong())}。匯出時可以少勾一些圖片再試試")
+        }
         val text = try {
             contentResolver.openInputStream(uri)?.use { input ->
                 val bytes = input.readBytes()
-                if (bytes.size > ThemeIO.MAX_BYTES) null else String(bytes, Charsets.UTF_8)
+                if (bytes.size > ThemeIO.MAX_BYTES) "" else String(bytes, Charsets.UTF_8)
             }
-        } catch (_: Exception) { null }
-        val o = text?.let { ThemeIO.parse(it) }
+        } catch (_: OutOfMemoryError) {
+            return fail("主題檔太大，手機記憶體不夠讀進來。匯出時可以少勾一些圖片再試試")
+        } catch (e: Exception) {
+            return fail("讀不到這個檔案：${e.message ?: e.javaClass.simpleName}")
+        }
+        if (text == null) return fail("讀不到這個檔案")
+        if (text.isEmpty()) return fail("主題檔太大，最多 ${mb(ThemeIO.MAX_BYTES.toLong())}。匯出時可以少勾一些圖片再試試")
+        val o = ThemeIO.parse(text)
         if (o == null) {
-            android.widget.Toast.makeText(this, "這不是貓爪鍵盤的主題檔", android.widget.Toast.LENGTH_LONG).show()
+            fail("這不是貓爪鍵盤的主題檔")
             return
         }
         val (name, parts) = ThemeIO.describe(o)
