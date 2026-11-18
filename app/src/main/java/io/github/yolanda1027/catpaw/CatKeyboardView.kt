@@ -1467,12 +1467,14 @@ class CatKeyboardView(
         drawTab(c, RectF(selLeft, 0f, selLeft + tabW, topH))
         val zhColor = if (isChinese) topText else topDim
         theme.drawText(c, "中", tabW / 2, topH / 2, topH * 0.52f, zhColor)
-        // 「中」右下角的小三角形（跟原版一樣）
-        val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = zhColor }
-        val tx = tabW / 2 + topH * 0.33f
-        val ty = topH / 2 + topH * 0.24f
-        val ts = topH * 0.1f
-        c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
+        // 「中」右下角的小三角形：只有選注音（中文）的時候才有
+        if (isChinese) {
+            val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = zhColor }
+            val tx = tabW / 2 + topH * 0.33f
+            val ty = topH / 2 + topH * 0.24f
+            val ts = topH * 0.1f
+            c.drawPath(Path().apply { moveTo(tx + ts, ty - ts); lineTo(tx + ts, ty + ts * 0.3f); lineTo(tx - ts * 0.3f, ty + ts * 0.3f); close() }, fill)
+        }
         theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) topDim else topText)
 
         // 剪貼簿按鈕（在 ▽ 左邊）
