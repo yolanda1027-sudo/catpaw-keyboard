@@ -25,7 +25,7 @@
 ### 我們特別不記的東西
 
 - **密碼欄位**：不學習、不記錄你打的內容（也會自動切到英文）。
-- **無痕模式**：輸入框要求「不要記住打的字」時（例如瀏覽器的無痕分頁），本 App 不學新的選字，也不記剪貼簿。
+- **無痕模式**：輸入框要求「不要記住打的字」時（例如瀏覽器的無痕分頁），本 App 不學新的選字；在這種輸入框打開鍵盤時，剪貼簿裡的內容也不會被記下來（之後換到別的 App 也不會補記）。
 - **標記為機密的剪貼簿內容**：例如密碼管理 App 複製的密碼（Android 13 以上），不會存進剪貼簿紀錄。
 
 ## 權限
@@ -95,7 +95,7 @@ Uninstalling the App deletes all of the above.
 **Not recorded:**
 
 - Password fields.
-- Fields that request no personalized learning, such as incognito browser tabs. The App does not learn new words or record the clipboard there.
+- Fields that request no personalized learning, such as incognito browser tabs. The App does not learn new words there, and clipboard content seen while such a field is focused is not recorded, even later in other apps.
 - Clipboard content marked as sensitive (Android 13+).
 
 **Permissions:** Vibrate only, used for key haptics. Images, fonts and theme files are opened through the Android system file picker, so the App can only read the file you pick.

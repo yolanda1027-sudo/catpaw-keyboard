@@ -49,6 +49,23 @@ class PrivacyTest {
         assertFalse(s.noLearning)
     }
 
+    @Test fun clipCopiedInIncognitoIsNotRecordedLater() {
+        File(ctx.filesDir, "clips.json").delete()
+        val s = Robolectric.buildService(CatImeService::class.java).create().get()
+        s.onCreateInputView()
+        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+        fun start(options: Int) = s.onStartInputView(EditorInfo().apply { inputType = InputType.TYPE_CLASS_TEXT; imeOptions = options }, false)
+        fun texts() = (CatImeService::class.java.getDeclaredField("clips").apply { isAccessible = true }.get(s) as ClipHistory).all().map { it.text }
+        start(EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("", "無痕裡複製的")) // 鍵盤開在無痕分頁時複製
+        assertFalse(texts().contains("無痕裡複製的"))
+        start(0) // 換到一般輸入框：剪貼簿裡還是那段字，也不補記
+        assertFalse("無痕時看到的不補記", texts().contains("無痕裡複製的"))
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("", "一般複製的"))
+        start(0)
+        assertTrue(texts().contains("一般複製的"))
+    }
+
     @Test fun clipboardHistoryIsExcludedFromBackup() {
         val xml = File("src/main/res/xml/data_extraction_rules.xml").readText()
         assertEquals(2, Regex("""<exclude domain="file" path="clips.json" />""").findAll(xml).count())

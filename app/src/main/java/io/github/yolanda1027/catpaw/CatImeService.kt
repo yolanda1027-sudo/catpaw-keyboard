@@ -660,9 +660,15 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     private fun clipPageCount() =
         ((clips.all().size + Layouts.CLIPS_PER_PAGE - 1) / Layouts.CLIPS_PER_PAGE).coerceAtLeast(1)
 
+    /**
+     * 在無痕模式／密碼欄裡看到的剪貼簿內容：記住它，之後回到一般輸入框也不補記
+     * （複製的東西會一直留在系統剪貼簿，不擋的話換個 App 打開鍵盤就被記進去了）
+     */
+    private var skipClip: String? = null
+
     /** 把系統剪貼簿目前的文字記下來（標成機密的不記，例如密碼管理 App 複製的） */
     private fun captureClipboard() {
-        if (!prefs.clipboardHistory || noLearning) return
+        if (!prefs.clipboardHistory) return
         try {
             val cm = getSystemService(ClipboardManager::class.java) ?: return
             val clip = cm.primaryClip ?: return
@@ -674,6 +680,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             // 圖片（例如自己的貼圖複製到剪貼簿）不記：記下來只會是一串看不懂的網址
             if (clip.getItemAt(0).uri != null && clip.getItemAt(0).text == null) return
             val text = clip.getItemAt(0).coerceToText(this)?.toString() ?: return
+            if (noLearning) { skipClip = text; return }
+            if (text == skipClip) return
             clips.add(text)
             if (page == Page.CLIP) refresh()
         } catch (_: Exception) {
