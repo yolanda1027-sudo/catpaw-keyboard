@@ -28,9 +28,29 @@ object MyStickers {
 
     fun safeName(n: String) = Decals.safeName(n)
 
-    /** 全部（新的在前面） */
-    fun list(ctx: Context): List<String> =
-        dir(ctx).listFiles()?.filter { it.isFile && safeName(it.name) }?.sortedByDescending { it.name }?.map { it.name } ?: emptyList()
+    /** 使用者自己排的順序（一行一個檔名；檔名不會是 .txt，所以不會被當成貼圖） */
+    private fun orderFile(ctx: Context) = File(dir(ctx), "order.txt")
+
+    /**
+     * 全部，照使用者排的順序；還沒排過的（新上傳的）放最前面、新的在前。
+     */
+    fun list(ctx: Context): List<String> {
+        val files = dir(ctx).listFiles()?.filter { it.isFile && safeName(it.name) }?.map { it.name }?.toSet() ?: return emptyList()
+        val order = try { orderFile(ctx).takeIf { it.exists() }?.readLines()?.map { it.trim() }?.filter { it in files } } catch (_: Exception) { null } ?: emptyList()
+        val fresh = files.filter { it !in order }.sortedDescending()
+        return fresh + order.distinct()
+    }
+
+    /** 往前（dir = -1）或往後（+1）一格；移不動就回傳 false */
+    fun move(ctx: Context, name: String, dir: Int): Boolean {
+        val l = list(ctx).toMutableList()
+        val i = l.indexOf(name)
+        val j = i + dir
+        if (i < 0 || j !in l.indices) return false
+        l[i] = l[j].also { l[j] = l[i] }
+        try { orderFile(ctx).writeText(l.joinToString("\n")) } catch (_: Exception) { return false }
+        return true
+    }
 
     fun file(ctx: Context, name: String): File? = File(dir(ctx), name).takeIf { safeName(name) && it.exists() }
 
@@ -65,6 +85,9 @@ object MyStickers {
     }
 
     private val cache = HashMap<String, Bitmap?>()
+
+    /** 長按放大用的大圖（原檔大小，PNG 最大 512；GIF 是第一格，會動的另外處理） */
+    fun fullBitmap(ctx: Context, name: String): Bitmap? = file(ctx, name)?.let { BitmapFactory.decodeFile(it.path) }
 
     /** 鍵盤上顯示用的小圖（GIF 是第一格） */
     fun bitmap(ctx: Context, name: String): Bitmap? = cache.getOrPut(name) {

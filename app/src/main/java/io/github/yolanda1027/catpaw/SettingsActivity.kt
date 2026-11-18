@@ -758,6 +758,7 @@ class SettingsActivity : Activity() {
         })
         note("上傳的圖片會放在表情鍵盤的「🖼️」分類，點一下就送出去（GIF 動圖也可以）。關掉的話分類列就不會有它，上傳過的圖片會留著，之後再打開就回來了。")
         note("聊天 App 支援的話，圖片會直接放進去；不支援的話會先幫你複製好，長按輸入框選「貼上」就行。")
+        note("在鍵盤上長按貼圖可以看放大版（放開就關掉，不會送出）。下面每張圖的 ◀ ▶ 可以調整排列順序，新上傳的會排在最前面。")
         button("＋ 上傳圖片（可以一次選好幾張）") {
             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -784,6 +785,27 @@ class SettingsActivity : Activity() {
                 background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 12 * dp; setColor(0x14888888) }
                 setPadding((6 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt())
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (76 * dp).toInt()))
+            // 往前、往後（排列順序）
+            val arrows = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            fun arrow(label: String, dir: Int, enabled: Boolean) = arrows.addView(Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 13f
+                minWidth = 0
+                minimumWidth = 0
+                isEnabled = enabled
+                alpha = if (enabled) 1f else 0.35f
+                contentDescription = if (dir < 0) "往前" else "往後"
+                setOnClickListener {
+                    if (MyStickers.move(this@SettingsActivity, name, dir)) {
+                        prefs.sp.edit().putLong("my_stickers_ver", System.currentTimeMillis()).apply()
+                        showPage("mystickers")
+                    }
+                }
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            arrow("◀", -1, i > 0)
+            arrow("▶", +1, i < names.size - 1)
+            cell.addView(arrows, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             cell.addView(Button(this).apply {
                 text = "刪除"
                 isAllCaps = false

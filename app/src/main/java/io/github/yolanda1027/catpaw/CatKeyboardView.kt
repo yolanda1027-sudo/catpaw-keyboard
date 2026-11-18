@@ -141,6 +141,12 @@ class CatKeyboardView(
         val kr = pressed ?: return@Runnable
         longFired = true
         haptics.perform(this, prefs)
+        if (kr.key.act == Act.STICKER) {
+            // 我的貼圖：長按顯示放大版，放開就關掉（不會送出）
+            showStickerZoom(kr.key.text)
+            invalidate()
+            return@Runnable
+        }
         val opts = popupOptionsFor(kr.key)
             ?: itemActions?.invoke(kr.key)?.let { acts -> PopupOptions(acts.map { it.second }, 0, 0, actions = acts.map { it.first }) }
         if (opts != null) {
@@ -689,6 +695,66 @@ class CatKeyboardView(
         val r = keyRects.firstOrNull { it.key == key }?.rect ?: return null
         val box = theme.styledBox(r)
         return box to theme.styledRadius(box, st ?: KeyStyle())
+    }
+
+    // ---------- 我的貼圖：長按放大 ----------
+
+    /** 長按中的貼圖（放大顯示） */
+    var stickerZoom: String? = null
+        private set
+    private var stickerZoomBmp: android.graphics.Bitmap? = null
+    private var stickerZoomAnim: android.graphics.drawable.Drawable? = null
+
+    private fun showStickerZoom(name: String) {
+        stickerZoom = name
+        stickerZoomBmp = MyStickers.fullBitmap(context, name)
+        stickerZoomAnim = null
+        // GIF：放大的也會動
+        if (name.endsWith(".gif")) try {
+            MyStickers.file(context, name)?.let { f ->
+                val d = android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(f))
+                if (d is android.graphics.drawable.AnimatedImageDrawable) {
+                    d.repeatCount = android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE
+                    d.callback = animCallback
+                    d.start()
+                    stickerZoomAnim = d
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun hideStickerZoom() {
+        (stickerZoomAnim as? android.graphics.drawable.AnimatedImageDrawable)?.let { it.stop(); it.callback = null }
+        stickerZoomAnim = null
+        stickerZoomBmp = null
+        stickerZoom = null
+    }
+
+    private val zoomPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+
+    /** 整個鍵盤暗下來，中間一張白卡片放大圖；下面一行小字 */
+    private fun drawStickerZoom(c: Canvas, w: Float) {
+        val iw = stickerZoomAnim?.intrinsicWidth?.takeIf { it > 0 } ?: stickerZoomBmp?.width ?: return
+        val ih = stickerZoomAnim?.intrinsicHeight?.takeIf { it > 0 } ?: stickerZoomBmp?.height ?: return
+        zoomPaint.color = 0x99000000.toInt()
+        c.drawRect(0f, 0f, w, kbH, zoomPaint)
+        val pad = 14 * dp
+        val capH = 26 * dp
+        val maxW = w * 0.78f
+        val maxH = kbH * 0.9f - capH
+        val s = min((maxW - pad * 2) / iw, (maxH - pad * 2) / ih)
+        val cw = iw * s + pad * 2
+        val ch = ih * s + pad * 2 + capH
+        val card = RectF((w - cw) / 2, (kbH - ch) / 2, (w + cw) / 2, (kbH + ch) / 2)
+        zoomPaint.color = 0x40000000
+        c.drawRoundRect(RectF(card.left, card.top + 4 * dp, card.right, card.bottom + 4 * dp), 20 * dp, 20 * dp, zoomPaint)
+        zoomPaint.color = android.graphics.Color.WHITE
+        c.drawRoundRect(card, 20 * dp, 20 * dp, zoomPaint)
+        val img = RectF(card.left + pad, card.top + pad, card.right - pad, card.top + pad + ih * s)
+        val anim = stickerZoomAnim
+        if (anim != null) Decals.drawAnim(c, anim, img, 255)
+        else stickerZoomBmp?.let { c.drawBitmap(it, null, img, zoomPaint) }
+        theme.drawText(c, "放開手指就關掉（不會送出）", card.centerX(), card.bottom - capH / 2 - 2 * dp, 12 * dp, 0xFF8A8590.toInt())
     }
 
     // ---------- 我的貼圖（表情鍵盤的 🖼️） ----------
@@ -1395,6 +1461,7 @@ class CatKeyboardView(
     }
 
     private fun drawPreview(c: Canvas, w: Float) {
+        if (stickerZoom != null) { drawStickerZoom(c, w); return }
         if (popup != null) { drawPopup(c); return }
         val kr = pressed ?: return
         if (!prefs.preview) return
@@ -1669,6 +1736,7 @@ class CatKeyboardView(
         pressedPointer = -1
         previewLabel = null
         popup = null
+        hideStickerZoom()
         invalidate()
         if (cancel || kr == null) return
         when {
