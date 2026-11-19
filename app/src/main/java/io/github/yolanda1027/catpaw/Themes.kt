@@ -457,42 +457,107 @@ abstract class KbTheme(protected val dp: Float) {
     }
 }
 
-/** 照你截圖量出來的 Google 注音深色版 */
-class ClassicTheme(dp: Float) : KbTheme(dp) {
-    override val bg = Color.parseColor("#273238")
-    override val topBar = Color.parseColor("#22272B")
-    override val tabSelected = Color.parseColor("#273238")
-    override val text = Color.parseColor("#D3D7DA")
-    override val textDim = Color.parseColor("#A8ADB0")
-    override val previewBg = Color.parseColor("#455A64")
+/** 經典深色的配色和造型（試做中：先畫幾種給使用者挑） */
+data class ClassicLook(
+    val bg: String, val top: String, val key: String?, val func: String?, val outline: String?,
+    val text: String, val dim: String, val accent: String, val catEnter: Boolean, val pill: Boolean,
+)
+
+/** 經典深色 */
+class ClassicTheme(dp: Float, private val look: ClassicLook? = null) : KbTheme(dp) {
+    private fun c(s: String) = Color.parseColor(s)
+    override val bg = c(look?.bg ?: "#273238")
+    override val topBar = c(look?.top ?: "#22272B")
+    override val tabSelected = look?.key?.let { c(it) } ?: look?.outline?.let { c(it) } ?: c("#273238")
+    override val text = c(look?.text ?: "#D3D7DA")
+    override val textDim = c(look?.dim ?: "#A8ADB0")
+    override val previewBg = look?.key?.let { c(it) } ?: c("#455A64")
     override val previewText = Color.WHITE
-    private val keyPressed = Color.parseColor("#3B464C")
-    private val enterColor = Color.parseColor("#80CBC4")
-    private val enterPressed = Color.parseColor("#5FA9A2")
-    override val backspaceCutout get() = bg
+    override val popupSelBg = c(look?.accent ?: "#80CBC4")
+    override val popupSelText = CustomTheme.contrastOn(c(look?.accent ?: "#80CBC4"))
+    private val keyPressed = look?.key?.let { pressedOf(c(it)) } ?: c("#3B464C")
+    private val enterColor = c(look?.accent ?: "#80CBC4")
+    private val enterPressed = pressedOf(enterColor)
+    override val backspaceCutout get() = look?.func?.let { c(it) } ?: bg
+
+    override fun drawTabHighlight(c: Canvas, r: RectF) {
+        if (look?.pill != true) return super.drawTabHighlight(c, r)
+        val box = RectF(r.left + 10 * dp, r.top + 7 * dp, r.right - 10 * dp, r.bottom - 7 * dp)
+        if (look.key != null) {
+            fill.color = c(look.key)
+            c.drawRoundRect(box, box.height() / 2, box.height() / 2, fill)
+        } else {
+            stroke.color = c(look.outline!!)
+            stroke.strokeWidth = 1.4f * dp
+            stroke.pathEffect = null
+            c.drawRoundRect(box, box.height() / 2, box.height() / 2, stroke)
+        }
+    }
+
+    /** 新造型的按鍵底：圓角方塊（有底色的填滿，線框版只畫外框） */
+    private fun cap(c: Canvas, r: RectF, color: String?, pressed: Boolean) {
+        val l = look ?: return
+        val box = RectF(r.left + 3 * dp, r.top + 4.5f * dp, r.right - 3 * dp, r.bottom - 4.5f * dp)
+        val rad = 8 * dp
+        if (color != null) {
+            fill.shader = null
+            fill.color = if (pressed) pressedOf(c(color)) else c(color)
+            c.drawRoundRect(box, rad, rad, fill)
+        } else if (l.outline != null) {
+            if (pressed) {
+                fill.shader = null
+                fill.color = c(l.outline)
+                c.drawRoundRect(box, rad, rad, fill)
+            }
+            stroke.color = c(l.outline)
+            stroke.strokeWidth = 1.2f * dp
+            stroke.pathEffect = null
+            c.drawRoundRect(box, rad, rad, stroke)
+        }
+    }
 
     override fun drawKey(c: Canvas, r: RectF, key: Key, label: String, pressed: Boolean, shift: Int, rowH: Float) {
         if (key.style == Style.CLIP) { drawClipItem(c, r, label, pressed, rowH); return }
+        val l = look
         when (key.style) {
             Style.CHAR -> {
-                if (pressed) pressedBox(c, r)
+                if (l != null) cap(c, r, l.key, pressed) else if (pressed) pressedBox(c, r)
                 drawLabels(c, key, label, r.centerX(), r.centerY(), rowH, text, textDim, maxW = r.width() * 0.9f)
             }
             Style.FUNC -> {
-                if (pressed) pressedBox(c, r)
+                if (l != null) cap(c, r, l.func, pressed) else if (pressed) pressedBox(c, r)
                 drawFuncContent(c, key, label, r, shift, rowH, text)
             }
             Style.SPACE -> {
-                fill.color = if (pressed) Color.parseColor("#4A575E") else keyPressed
-                val box = RectF(r.left + 10 * dp, r.centerY() - 14 * dp, r.right - 10 * dp, r.centerY() + 14 * dp)
-                c.drawRoundRect(box, 4 * dp, 4 * dp, fill)
+                if (l != null) {
+                    cap(c, r, l.key, pressed)
+                } else {
+                    fill.color = if (pressed) Color.parseColor("#4A575E") else keyPressed
+                    val box = RectF(r.left + 10 * dp, r.centerY() - 14 * dp, r.right - 10 * dp, r.centerY() + 14 * dp)
+                    c.drawRoundRect(box, 4 * dp, 4 * dp, fill)
+                }
                 drawText(c, label, r.centerX(), r.centerY(), rowH * 0.22f, textDim)
             }
             Style.CLIP -> Unit
             Style.ENTER -> {
                 fill.color = if (pressed) enterPressed else enterColor
-                c.drawCircle(r.centerX(), r.centerY(), 17.5f * dp, fill)
-                key.icon?.let { drawIcon(c, it, r.centerX(), r.centerY(), rowH * 0.4f, bg) }
+                val ink = CustomTheme.contrastOn(enterColor)
+                if (l?.catEnter == true) {
+                    // 圓圓的貓頭＋兩個小耳朵
+                    val cx = r.centerX()
+                    val cy = r.centerY() + rowH * 0.05f
+                    val rad = min(r.width(), r.height()) * 0.32f
+                    c.drawPath(catEars(cx, cy, rad), fill)
+                    c.drawCircle(cx, cy, rad, fill)
+                    key.icon?.let { drawIcon(c, it, cx, cy, rowH * 0.34f, ink) }
+                } else if (l != null) {
+                    val box = RectF(r.left + 3 * dp, r.top + 4.5f * dp, r.right - 3 * dp, r.bottom - 4.5f * dp)
+                    c.drawRoundRect(box, 8 * dp, 8 * dp, fill)
+                    key.icon?.let { drawIcon(c, it, r.centerX(), r.centerY(), rowH * 0.4f, ink) }
+                } else {
+                    c.drawCircle(r.centerX(), r.centerY(), 17.5f * dp, fill)
+                    key.icon?.let { drawIcon(c, it, r.centerX(), r.centerY(), rowH * 0.4f, bg) }
+                }
             }
         }
     }
@@ -500,6 +565,15 @@ class ClassicTheme(dp: Float) : KbTheme(dp) {
     private fun pressedBox(c: Canvas, r: RectF) {
         fill.color = keyPressed
         c.drawRoundRect(RectF(r.left + 2 * dp, r.top + 2 * dp, r.right - 2 * dp, r.bottom - 2 * dp), 6 * dp, 6 * dp, fill)
+    }
+
+    companion object {
+        /** 試做的三種：夜貓粉、可可奶茶、午夜藍線框 */
+        val MOCKS = mapOf(
+            "classic_a" to ClassicLook("#23262E", "#1C1F25", "#30343E", "#292C34", null, "#ECE8EF", "#9C98A6", "#F3A6BC", catEnter = true, pill = true),
+            "classic_b" to ClassicLook("#2A2320", "#221C19", "#3A302B", "#312824", null, "#F3E7DC", "#B6A595", "#E7B07B", catEnter = true, pill = true),
+            "classic_c" to ClassicLook("#1F2430", "#1A1F29", null, null, "#3B4456", "#DCE3EE", "#8C97A8", "#9DB8F5", catEnter = false, pill = true),
+        )
     }
 }
 
@@ -1233,6 +1307,7 @@ object Themes {
         "custom" -> if (prefs != null) CustomTheme(
             dp, prefs.customBg, prefs.customKey, prefs.customText, prefs.customSub, prefs.customAccent,
         ) else ClassicTheme(dp)
+        in ClassicTheme.MOCKS.keys -> ClassicTheme(dp, ClassicTheme.MOCKS.getValue(name))
         else -> ClassicTheme(dp)
     }
 }
