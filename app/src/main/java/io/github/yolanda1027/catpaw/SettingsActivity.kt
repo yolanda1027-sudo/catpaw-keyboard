@@ -485,6 +485,8 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
+        slider("鍵盤最下面多留空間", 0, 40, prefs.bottomPadDp, " dp") { prefs.bottomPadDp = it }
+        note("把手勢提示條關掉之後，如果左下的「切換輸入法」、右下的「收起鍵盤」按鈕蓋到按鍵，把這個調高一點（大約 20～30）。一般不用動。")
     }
 
     // ---------- 主題匯入／匯出 ----------

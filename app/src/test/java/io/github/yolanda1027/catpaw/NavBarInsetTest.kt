@@ -80,4 +80,31 @@ class NavBarInsetTest {
         layout(kv)
         assertEquals(h0, kv.height)
     }
+
+    /** 手勢提示條關掉時：系統在鍵盤底下畫「切換輸入法」「收起鍵盤」，回報成可以點的區域 */
+    @Test fun leavesRoomForImeButtonsWhenGestureHintHidden() {
+        val s = Robolectric.buildService(CatImeService::class.java).create().get()
+        val kv = s.onCreateInputView() as CatKeyboardView
+        Prefs(kv.context).bottomPadDp = 0
+        // 導覽列 0（手勢提示條關掉），但下面有 84px 可以點的系統按鈕
+        kv.dispatchApplyWindowInsets(
+            WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, 84))
+                .build(),
+        )
+        assertEquals("讓出系統按鈕的高度", 84, kv.navInset)
+        // 手勢提示條開著：導覽列 42、沒有可以點的按鈕 → 跟以前一樣讓 42
+        kv.dispatchApplyWindowInsets(
+            WindowInsets.Builder()
+                .setInsetsIgnoringVisibility(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 42))
+                .build(),
+        )
+        assertEquals(42, kv.navInset)
+        // 設定裡手動多留 20dp
+        Prefs(kv.context).bottomPadDp = 20
+        val density = kv.context.resources.displayMetrics.density
+        kv.dispatchApplyWindowInsets(WindowInsets.Builder().build())
+        assertEquals((20 * density).toInt(), kv.navInset)
+        Prefs(kv.context).bottomPadDp = 0
+    }
 }

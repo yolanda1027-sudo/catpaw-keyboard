@@ -157,6 +157,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 enUser = EnglishUser(File(filesDir, EN_USER_FILE)).also { it.paused = noLearning }
             }
             "en_suggest" -> updateEnglish()
+            "bottom_pad_dp" -> kv?.requestApplyInsets() // 設定裡調了「鍵盤最下面多留空間」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
                 File(filesDir, "clips.json").delete()
                 clips = ClipHistory(File(filesDir, "clips.json"))
@@ -180,14 +181,28 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         // 系統導覽列（手勢條、三顆按鈕）蓋在鍵盤最下面：按鍵往上讓出它的高度。
         // 用「不管現在有沒有顯示」的高度：導覽列一閃而過地藏起來時，按鍵才不會掉到它後面
         v.setOnApplyWindowInsetsListener { view, insets ->
-            (view as CatKeyboardView).navInset =
-                insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.navigationBars()).bottom
+            (view as CatKeyboardView).navInset = bottomInset(insets)
             insets
         }
         setupNavBar(v)
         kv = v
         refresh()
         return v
+    }
+
+    /**
+     * 鍵盤最下面要讓出多高：
+     * - 導覽列（三顆按鈕、手勢條），用「不管現在有沒有顯示」的高度，閃一下藏起來時按鍵才不會掉到後面
+     * - 系統畫在鍵盤底下、可以點的按鈕（手勢提示條關掉時的「切換輸入法」「收起鍵盤」）
+     * 取比較高的那個，再加上設定裡手動多留的空間。
+     */
+    internal fun bottomInset(insets: android.view.WindowInsets): Int {
+        val nav = insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.navigationBars()).bottom
+        val tap = maxOf(
+            insets.getInsets(android.view.WindowInsets.Type.tappableElement()).bottom,
+            insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.tappableElement()).bottom,
+        )
+        return maxOf(nav, tap) + (prefs.bottomPadDp * resources.displayMetrics.density).toInt()
     }
 
     /**

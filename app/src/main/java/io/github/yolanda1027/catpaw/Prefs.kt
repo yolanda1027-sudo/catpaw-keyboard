@@ -136,6 +136,14 @@ class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
         get() = sp.getBoolean("nav_bar_keyboard_bg", false)
         set(v) = sp.edit().putBoolean("nav_bar_keyboard_bg", v).apply()
 
+    /**
+     * 鍵盤最下面多留的空間（dp）。有些手機把手勢提示條關掉後，系統還是會在鍵盤底下畫
+     * 「切換輸入法」「收起鍵盤」兩顆按鈕，卻沒告訴鍵盤要讓位：這時手動調高。
+     */
+    var bottomPadDp: Int
+        get() = sp.getInt("bottom_pad_dp", 0)
+        set(v) = sp.edit().putInt("bottom_pad_dp", v).apply()
+
     /** 記錄剪貼簿（點鍵盤上方的剪貼簿按鈕可以看到、貼上） */
     var clipboardHistory: Boolean
         get() = sp.getBoolean("clipboard_history", true)
