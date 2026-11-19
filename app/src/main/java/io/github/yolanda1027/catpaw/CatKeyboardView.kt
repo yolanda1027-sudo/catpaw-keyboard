@@ -1140,7 +1140,7 @@ class CatKeyboardView(
         fun dist(a: Int, b: Int) = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
             kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
             kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
-        var border = text // 沒有底框的主題（像經典版）：外框就先用字的顏色
+        var border = text // 沒有底框的主題：外框就先用字的顏色
         var edgeFound = false
         for (x in 0 until w / 2) {
             if (dist(body.getPixel(x, h / 2), base) > 60) {

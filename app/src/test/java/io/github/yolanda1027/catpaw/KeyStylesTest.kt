@@ -101,8 +101,8 @@ class KeyStylesTest {
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         val c = kv.sampleColors(b)!!
-        assertEquals(Color.parseColor("#273238"), c.bg)
-        assertEquals(Color.parseColor("#D3D7DA"), c.text)
+        assertEquals("按鍵的圓角底", Color.parseColor("#30343E"), c.bg)
+        assertEquals(Color.parseColor("#ECE8EF"), c.text)
         // 自訂過的顏色，量到的就是自訂的顏色
         KeyStyles.save(p, KeyStyles.EMPTY.with("@zhuyin", KeyStyle(bg = 0xFFFFE08A.toInt(), text = 0xFF6B4F2A.toInt())))
         kv.reloadPrefs()

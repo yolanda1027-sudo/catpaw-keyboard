@@ -78,7 +78,7 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         c.drawColor(bg or (0xFF shl 24))
         val k = key ?: return
         val box = keyBox() ?: return
-        // 按鍵的範圍：淡淡的虛線（經典版這種沒有底框的主題才看得出鍵有多大）
+        // 按鍵的範圍：淡淡的虛線（沒有底框的主題才看得出鍵有多大）
         val light = isLight(bg)
         line.color = if (light) 0x40000000 else 0x50FFFFFF
         line.strokeWidth = 1.5f * dp
