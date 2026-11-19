@@ -222,9 +222,16 @@ class PageDesignTest {
         val cls = StudioActivity::class.java
         fun field(n: String) = cls.getDeclaredField(n).apply { isAccessible = true }
         val kv = field("kv").get(a) as CatKeyboardView
-        // 首頁：注音頁有這三類可以一起改
+        // 首頁：注音分頁只列注音鍵盤上的類別（「，」只有一顆，不列）
         val labels = buttons(a.window.decorView).map { it.text.toString() }
-        for (g in listOf("所有注音鍵", "所有英文、數字、符號鍵", "所有功能鍵")) assertTrue("首頁少了 $g：$labels", labels.any { it.contains(g) })
+        for (g in listOf("所有注音鍵", "所有功能鍵")) assertTrue("首頁少了 $g：$labels", labels.any { it.contains(g) })
+        assertTrue("注音分頁不該有英文鍵：$labels", labels.none { it.contains("所有英文") })
+        // 英文分頁：列英文鍵，不列注音鍵
+        buttons(a.window.decorView).first { it.text == "英文" }.performClick()
+        val en = buttons(a.window.decorView).map { it.text.toString() }
+        assertTrue("英文分頁要有英文鍵：$en", en.any { it.contains("所有英文、數字、符號鍵") })
+        assertTrue(en.none { it.contains("所有注音鍵") })
+        buttons(a.window.decorView).first { it.text == "注音" }.performClick()
         // 點單顆鍵：沒有「只改這一顆／所有注音鍵」的選項
         kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])
         assertTrue(!(field("groupScope").getBoolean(a)))

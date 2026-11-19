@@ -582,8 +582,8 @@ class StudioActivity : Activity() {
             text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面那一列），就可以開始改它的樣子。每一頁（上面的分頁）各自設計；沒設計過的頁是主題原本的樣子。", 15f).setPadding(0, px(8f), 0, px(8f))
             text("改好按右上角「儲存」才會套用到鍵盤上。想換整體主題、字體，到「${getString(R.string.app_name)}」設定的外觀頁。", 13f, dim = true)
             // 一整類一起改：只列這一頁有的、而且不只一顆的類別
-            // （注音和英文是同一頁、共用同一類：兩個鍵盤一起算，例如注音頁只有「，」，但英文的字母也是這一類）
-            val pageKeys = kv.rows.flatten() + if (page.isEmpty()) (if (tab == "en") Layouts.ZHUYIN else Layouts.ENGLISH).flatten() else emptyList()
+            // 只看這個分頁上的鍵：注音分頁列注音鍵，英文分頁列英文鍵
+            val pageKeys = kv.rows.flatten()
             val groups = listOf(KeyStyles.Group.ZHUYIN, KeyStyles.Group.CHAR, KeyStyles.Group.FUNC, KeyStyles.Group.CLIP)
                 .mapNotNull { g -> pageKeys.filter { it.act != Act.GAP && KeyStyles.groupOf(it) == g }.takeIf { it.size > 1 }?.let { g to it.first() } }
             if (groups.isNotEmpty()) {
