@@ -521,14 +521,16 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     /**
      * 長按最近使用的東西、剪貼簿：跳出的選單。
-     * 第一個是「取消」（直接放開＝什麼都不做，不小心長按到也沒關係），手指往右滑選其他的。
+     * 一開始選的是「取消」（直接放開＝什麼都不做，不小心長按到也沒關係），手指滑過去選其他的。
+     * 剪貼簿的「取消」放中間：釘選／解除釘選在左邊、刪除／排順序在右邊。
      */
     private fun itemActionsFor(key: Key): List<Pair<String, String>>? {
         // 剪貼簿：排順序到設定裡用 ↑ ↓ 排（長按選單裡的「排順序」直接打開那一頁）
         if (page == Page.CLIP && key.act == Act.CLIP && key.text.isNotEmpty()) {
             val pinned = clips.all().any { it.text == key.text && it.pinned }
-            return if (pinned) listOf(CANCEL, "unpin" to "解除釘選", "sort" to "排順序", "remove" to "刪除")
-            else listOf(CANCEL, "pin" to "釘選", "remove" to "刪除")
+            // 釘選的不放「刪除」：要刪先解除釘選，比較不會手滑刪掉重要的
+            return if (pinned) listOf("unpin" to "解除釘選", CANCEL, "sort" to "排順序")
+            else listOf("pin" to "釘選", CANCEL, "remove" to "刪除")
         }
         val kind = recentKind() ?: return null
         if (key.act != Act.TEXT || key.text.isEmpty()) return null

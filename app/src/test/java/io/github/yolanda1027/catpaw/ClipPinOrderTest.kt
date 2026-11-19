@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** 剪貼簿：長按 → 取消／釘選／解除釘選／排順序／刪除；釘選的在設定裡用 ↑ ↓ 排順序 */
+/** 剪貼簿：長按 → 釘選｜取消｜刪除，釘選的是 解除釘選｜取消｜排順序（取消在中間、一開始選它）；釘選的在設定裡用 ↑ ↓ 排順序 */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -67,8 +67,8 @@ class ClipPinOrderTest {
         val actions = CatImeService::class.java.getDeclaredMethod("itemActionsFor", Key::class.java).apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         fun menu(t: String) = (actions.invoke(s, Key(t, Act.CLIP, text = t)) as List<Pair<String, String>>).map { it.second }
-        assertEquals("第一個是取消（直接放開什麼都不做）", listOf("取消", "解除釘選", "排順序", "刪除"), menu("0912-345-678"))
-        assertEquals(listOf("取消", "釘選", "刪除"), menu("cat@example.com"))
+        assertEquals("取消在中間；釘選的沒有刪除", listOf("解除釘選", "取消", "排順序"), menu("0912-345-678"))
+        assertEquals(listOf("釘選", "取消", "刪除"), menu("cat@example.com"))
         // 取消：什麼都沒變
         s.onItemAction(Key("cat@example.com", Act.CLIP, text = "cat@example.com"), "cancel")
         assertEquals(listOf("台北市大安區", "0912-345-678", "cat@example.com"), clips.all().map { it.text })
@@ -115,21 +115,20 @@ class ClipPinOrderTest {
             return rect
         }
         fun state() = clips.all().map { it.text to it.pinned }
-        // 左邊長按：「取消」就在手指正上方；手指抖一下（10px）放開也是取消
-        val rect = longPress(200f, 10f)
+        // 中間長按：中間的「取消」就在手指正上方；手指抖一下（10px）放開也是取消
+        val rect = longPress(540f, 10f)
         val optW = rect.width() / 3
-        assertEquals("取消在手指正上方", 200f, rect.left + optW / 2, 1f)
+        assertEquals("取消在手指正上方", 540f, rect.left + optW * 1.5f, 1f)
         assertEquals(listOf("留著" to false), state())
-        // 中間長按：一樣對準手指
-        val mid = longPress(540f, -10f)
-        assertEquals(540f, mid.left + mid.width() / 6, 1f)
+        // 靠左邊長按：選單碰到螢幕邊緣沒辦法對準手指，一樣先停在取消
+        longPress(60f, 8f)
         assertEquals(listOf("留著" to false), state())
-        // 靠右邊長按：選單碰到螢幕邊緣沒辦法對準手指，一樣先停在取消
-        longPress(1040f, -8f)
-        assertEquals(listOf("留著" to false), state())
-        // 往右滑一格：釘選
-        longPress(300f, optW)
+        // 往左滑一格：釘選
+        longPress(540f, -optW)
         assertEquals(listOf("留著" to true), state())
+        // 釘選的再長按、往左滑一格：解除釘選
+        longPress(540f, -optW)
+        assertEquals(listOf("留著" to false), state())
     }
 
     @Test fun settingsArrowsReorderPinned() {

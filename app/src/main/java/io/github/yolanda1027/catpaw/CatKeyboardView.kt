@@ -187,7 +187,11 @@ class CatKeyboardView(
             return@Runnable
         }
         val opts = popupOptionsFor(kr.key)
-            ?: itemActions?.invoke(kr.key)?.let { acts -> PopupOptions(acts.map { it.second }, 0, 0, actions = acts.map { it.first }) }
+            ?: itemActions?.invoke(kr.key)?.let { acts ->
+                // 一開始選「取消」（不在第一個也一樣，例如剪貼簿放中間）
+                val def = acts.indexOfFirst { it.first == "cancel" }.coerceAtLeast(0)
+                PopupOptions(acts.map { it.second }, def, def, actions = acts.map { it.first })
+            }
         if (opts != null) {
             // 跳出長按選單，手指左右滑來選，放開就打出來
             popup = opts
