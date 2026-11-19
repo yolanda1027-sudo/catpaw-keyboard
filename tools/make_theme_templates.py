@@ -1,31 +1,32 @@
-"""產生鍵盤主題設計用的版型圖（跟 CatKeyboardView 的排版算法一樣）。
+"""產生鍵盤主題設計用的版型圖（8 頁：注音、英文、符號、顏文字、表情、我的貼圖、剪貼簿、數字）。
 
-以手機寬 1080px、1dp = 2.625px 計算（大多數 1080 寬的手機在這附近，差一點點沒關係，App 裡可以裁切）。
-用法：python3 tools/make_theme_templates.py app/src/main/assets/fonts/jf-openhuninn.ttf docs/theme-templates
+每一頁的按鍵排列從 App 匯出（跟鍵盤真正的排法一樣），不用在這裡另外抄一份：
+  ./gradlew testDebugUnitTest --tests '*TemplateLayoutsTest*'   → app/build/template-layouts.json
+再畫圖：
+  python3 tools/make_theme_templates.py app/src/main/assets/fonts/jf-openhuninn.ttf app/build/template-layouts.json docs/theme-templates
+
+以手機寬 1080px、1dp = 2.625px、按鍵高度預設 45 計算（大多數 1080 寬的手機在這附近，差一點點沒關係，App 裡可以裁切）。
 """
+import json
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
-FONT, OUT = sys.argv[1], sys.argv[2]
+FONT, LAYOUTS, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 W = 1080
 DP = 2.625
-TOP = 40 * DP        # 上方列（中／En、選字列）
-QUICK = 40 * DP      # 快捷符號列（可以關掉）
+TOP = 40 * DP        # 上方列（中／En、選字列、分類列）
+QUICK = 40 * DP      # 快捷符號列（只有注音、英文頁有，可以關掉）
 PAD_TOP = 6 * DP
 PAD_BOTTOM = 10 * DP
-KEY_AREA = 45 * 5 * DP  # 按鍵高度設定預設 45dp × 5
-
-ZHUYIN = [[1] * 10] * 4 + [[1.5, 1, 1, 2.5, 1, 1.5, 1.5]]
-ZHUYIN_LABELS = [list("ㄅㄉˇˋㄓˊ˙ㄚㄞㄢ"), list("ㄆㄊㄍㄐㄔㄗㄧㄛㄟㄣ"), list("ㄇㄋㄎㄑㄕㄘㄨㄜㄠㄤ"), list("ㄈㄌㄏㄒㄖㄙㄩㄝㄡㄥ"),
-                 ["?123", "，", "表情", "空白鍵", "ㄦ", "刪除", "Enter"]]
-ENGLISH = [[1] * 10, [0.5] + [1] * 9 + [0.5], [1.5] + [1] * 7 + [1.5], [1.5, 1, 1, 4, 1, 1.5]]
-ENGLISH_LABELS = [list("qwertyuiop"), [None] + list("asdfghjkl") + [None], ["Shift"] + list("zxcvbnm") + ["刪除"],
-                  ["?123", ",", "表情", "空白鍵", ".", "Enter"]]
+KEY_AREA = 45 * 5 * DP  # 按鍵高度設定預設 45dp × 5（不管幾排，總高度一樣）
 
 COL = {
     "top": (91, 141, 239), "quick": (156, 107, 230), "key": (255, 143, 177), "func": (255, 176, 59),
     "pad": (120, 120, 120), "line": (40, 40, 40),
 }
+
+# 分類列上哪一格是「選中」的（畫底框）
+SELECTED_TAB = {"symbol": 1, "kaomoji": 2, "emoji": 2, "mystickers": 1, "clipboard": 0, "numpad": 0}
 
 
 def f(size):
@@ -37,13 +38,13 @@ def layout(rows, quick):
     row_h = KEY_AREA / len(rows)
     keys = []
     for ri, row in enumerate(rows):
-        unit = W / sum(row)
+        unit = W / sum(k["weight"] for k in row)
         y = TOP + (QUICK if quick else 0) + PAD_TOP + ri * row_h
         x = 0
-        for ci, wgt in enumerate(row):
-            keys.append((ri, ci, x, y, x + unit * wgt, y + row_h))
-            x += unit * wgt
-    return round(h), keys, row_h
+        for k in row:
+            keys.append((k, x, y, x + unit * k["weight"], y + row_h))
+            x += unit * k["weight"]
+    return round(h), keys
 
 
 def body(r):
@@ -52,16 +53,14 @@ def body(r):
     return (x0 + 3 * DP, y0 + 4 * DP, x1 - 3 * DP, y1 - 4 * DP)
 
 
-def draw(rows, labels, quick, name, overlay):
-    h, keys, row_h = layout(rows, quick)
-    bg = (0, 0, 0, 0) if overlay else (250, 248, 252, 255)
-    im = Image.new("RGBA", (W, h), bg)
-    d = ImageDraw.Draw(im, "RGBA")
-    a = 255 if overlay else 255
-    line = COL["line"] + (200,)
+def fit_text(d, text, max_w, size):
+    while size > 12 and d.textlength(text, font=f(size)) > max_w:
+        size -= 1
+    return f(size)
 
-    # 上方列
-    d.rectangle((0, 0, W - 1, TOP), outline=COL["top"] + (a,), width=3, fill=None if overlay else COL["top"] + (40,))
+
+def draw_top_zhen(d, a):
+    """注音、英文頁：中／En、剪貼簿、▽"""
     tab = W * 0.2
     d.rounded_rectangle((8 * DP, 7 * DP, tab - 8 * DP, TOP - 7 * DP), radius=(TOP - 14 * DP) / 2, outline=COL["top"] + (a,), width=3)
     d.text((tab / 2, TOP / 2), "中", font=f(TOP * 0.45), fill=COL["top"] + (a,), anchor="mm")
@@ -71,12 +70,44 @@ def draw(rows, labels, quick, name, overlay):
         d.text((cx, TOP / 2), t, font=f(TOP * (0.18 if len(t) > 1 else 0.3)), fill=COL["top"] + (a,), anchor="mm")
     d.text((W * 0.5, TOP / 2), f"上方列 1080×{round(TOP)}", font=f(26), fill=COL["top"] + (a,), anchor="mm")
 
+
+def draw_top_tabs(d, a, tabs, sel):
+    """其他頁：分類列，每一格一樣寬"""
+    tw = W / len(tabs)
+    for i, t in enumerate(tabs):
+        x0 = tw * i
+        if i == sel:
+            d.rounded_rectangle((x0 + 3 * DP, 6 * DP, x0 + tw - 3 * DP, TOP - 6 * DP), radius=10, outline=COL["top"] + (a,), width=3)
+        elif i > 0:
+            d.line((x0, TOP * 0.3, x0, TOP * 0.7), fill=COL["top"] + (120,), width=1)
+        d.text((x0 + tw / 2, TOP / 2), t, font=fit_text(d, t, tw - 10, 30), fill=COL["top"] + (a,), anchor="mm")
+    # 尺寸寫在最下面那條（上方列整條都是分類，沒地方寫）
+    return f"分類列 1080×{round(TOP)}，每格 {round(tw)} 寬" if len(tabs) > 1 else f"上方列 1080×{round(TOP)}"
+
+
+def draw(name, page, quick, file, overlay):
+    rows = page["rows"]
+    h, keys = layout(rows, quick)
+    bg = (0, 0, 0, 0) if overlay else (250, 248, 252, 255)
+    im = Image.new("RGBA", (W, h), bg)
+    d = ImageDraw.Draw(im, "RGBA")
+    a = 255
+    line = COL["line"] + (200,)
+
+    # 上方列
+    d.rectangle((0, 0, W - 1, TOP), outline=COL["top"] + (a,), width=3, fill=None if overlay else COL["top"] + (40,))
+    top_note = None
+    if page["tabs"] == "zhen":
+        draw_top_zhen(d, a)
+    else:
+        top_note = draw_top_tabs(d, a, page["tabs"], SELECTED_TAB.get(name, 0))
+
     y = TOP
     if quick:
         n = 4
         for i in range(n):
             x0, x1 = W / n * i, W / n * (i + 1)
-            d.rounded_rectangle(body((x0, y + 3 * DP - 4 * DP + 4 * DP, x1, y + QUICK - 1 * DP)), radius=12, outline=COL["quick"] + (a,), width=3)
+            d.rounded_rectangle(body((x0, y + 3 * DP, x1, y + QUICK - 1 * DP)), radius=12, outline=COL["quick"] + (a,), width=3)
         t = f"快捷符號列 1080×{round(QUICK)}（按鈕數量照設定，寬＝1080÷個數）"
         bb = d.textbbox((W / 2, y + QUICK / 2), t, font=f(22), anchor="mm")
         d.rounded_rectangle((bb[0] - 10, bb[1] - 6, bb[2] + 10, bb[3] + 6), radius=8, fill=(255, 255, 255, 235))
@@ -84,28 +115,36 @@ def draw(rows, labels, quick, name, overlay):
         y += QUICK
     d.rectangle((0, y, W - 1, y + PAD_TOP), fill=COL["pad"] + (40,))
 
-    for (ri, ci, x0, y0, x1, y1) in keys:
-        lab = labels[ri][ci]
-        if lab is None:
-            continue  # 英文第二排兩邊的空隙
-        func = len(lab) > 1 and lab not in ("，",)
-        c = COL["func"] if func else COL["key"]
+    for (k, x0, y0, x1, y1) in keys:
+        if k["kind"] == "gap":
+            continue  # 空隙（英文第二排兩邊、符號第三排左邊）
+        c = COL["func"] if k["kind"] == "func" else COL["key"]
+        lab = k["label"]
         d.rectangle((x0, y0, x1, y1), outline=line if not overlay else c + (90,), width=1)
         b = body((x0, y0, x1, y1))
         d.rounded_rectangle(b, radius=min(b[2] - b[0], b[3] - b[1]) * 0.15, outline=c + (a,), width=3, fill=None if overlay else c + (35,))
-        d.text(((x0 + x1) / 2, (y0 + y1) / 2 - 8), lab, font=f(30 if len(lab) < 3 else 24), fill=c + (a,), anchor="mm")
+        size = 30 if len(lab) < 3 else 24
+        d.text(((x0 + x1) / 2, (y0 + y1) / 2 - 8), lab, font=fit_text(d, lab, b[2] - b[0] - 8, size), fill=c + (a,), anchor="mm")
         d.text(((x0 + x1) / 2, b[3] - 16), f"{round(b[2] - b[0])}×{round(b[3] - b[1])}", font=f(17), fill=c + (a,), anchor="mm")
 
     bottom = h - PAD_BOTTOM
     d.rectangle((0, bottom, W - 1, h - 1), fill=COL["pad"] + (40,))
     d.text((W - 10, h - PAD_BOTTOM / 2), f"整張 1080×{h}", font=f(18), fill=COL["line"] + (220,), anchor="rm")
-    im.save(f"{OUT}/{name}.png")
+    if top_note:
+        d.text((10, h - PAD_BOTTOM / 2), "上面藍色：" + top_note, font=f(18), fill=COL["top"] + (255,), anchor="lm")
+    im.save(f"{OUT}/{file}.png")
     return h
 
 
 if __name__ == "__main__":
-    print("zhuyin quick", draw(ZHUYIN, ZHUYIN_LABELS, True, "zhuyin-quickbar-on-reference", False))
-    draw(ZHUYIN, ZHUYIN_LABELS, True, "zhuyin-quickbar-on-overlay", True)
-    print("zhuyin noquick", draw(ZHUYIN, ZHUYIN_LABELS, False, "zhuyin-quickbar-off-overlay", True))
-    print("english quick", draw(ENGLISH, ENGLISH_LABELS, True, "english-quickbar-on-overlay", True))
-    draw(ENGLISH, ENGLISH_LABELS, False, "english-quickbar-off-overlay", True)
+    pages = json.load(open(LAYOUTS, encoding="utf-8"))
+    # 注音、英文：有快捷列、沒有快捷列各一張
+    print("zhuyin quick", draw("zhuyin", pages["zhuyin"], True, "zhuyin-quickbar-on-reference", False))
+    draw("zhuyin", pages["zhuyin"], True, "zhuyin-quickbar-on-overlay", True)
+    print("zhuyin noquick", draw("zhuyin", pages["zhuyin"], False, "zhuyin-quickbar-off-overlay", True))
+    print("english quick", draw("english", pages["english"], True, "english-quickbar-on-overlay", True))
+    draw("english", pages["english"], False, "english-quickbar-off-overlay", True)
+    # 其他頁：沒有快捷列；參考用（有底色）＋描圖用（透明）
+    for name in ("symbol", "kaomoji", "emoji", "mystickers", "clipboard", "numpad"):
+        print(name, draw(name, pages[name], False, f"{name}-reference", False))
+        draw(name, pages[name], False, f"{name}-overlay", True)
