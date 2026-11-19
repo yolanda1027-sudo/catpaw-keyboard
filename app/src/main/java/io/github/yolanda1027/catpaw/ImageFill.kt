@@ -52,10 +52,11 @@ data class ImageFill(
     /** 放法：照片、花紋／邊框／整張都要看到 */
     val mode: Mode get() = when { nine -> Mode.BORDER; fit -> Mode.WHOLE; else -> Mode.COVER }
 
+    /** 放法的名稱和說明（說明放在「?」裡，選項上只寫名稱） */
     enum class Mode(val title: String, val hint: String) {
-        COVER("照片、花紋", "等比例放大蓋滿，邊邊可能裁掉一點"),
-        BORDER("邊框", "四個角保持原樣，只拉長中間"),
-        WHOLE("整張都要看到", "不裁切，但可能被拉寬或壓扁"),
+        COVER("照片、花紋", "照原圖比例，大小、位置、長寬可以自己調；換到大小不同的鍵盤，邊邊可能被裁掉。"),
+        BORDER("邊框", "四個角保持原樣，只拉長中間；換到哪個鍵盤，四個角都完整。適合有邊框、四個角有花紋的圖。"),
+        WHOLE("整張都要看到", "整張圖塞滿框、不裁切；換到大小不同的鍵盤，會被拉寬或壓扁一點。"),
     }
 
     /**

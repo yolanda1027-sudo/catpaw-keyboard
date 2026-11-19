@@ -154,6 +154,14 @@ class ImageFillTest {
         // 上傳完先問要怎麼放（三種放法的預覽）→ 選「照片、花紋」→ 進裁切畫面
         val ask = ShadowDialog.getLatestDialog() as Dialog
         render(ask.window!!.decorView, "fill-mode-dialog")
+        // 右上角「?」：三種放法的說明
+        (find(ask.window!!.decorView) { it is TextView && it.text == "?" } as TextView).performClick()
+        ShadowLooper.idleMainLooper()
+        val help = ShadowDialog.getLatestDialog() as Dialog
+        assertTrue(find(help.window!!.decorView) { it is TextView && it.text.toString().contains("照原圖比例") } != null)
+        render(help.window!!.decorView, "fill-mode-help")
+        help.dismiss()
+        ShadowLooper.idleMainLooper()
         pickMode(ask.window!!.decorView, "照片、花紋")
         var crop = ShadowDialog.getLatestDialog() as Dialog
         val cv = find(crop.window!!.decorView) { it is CropView } as CropView

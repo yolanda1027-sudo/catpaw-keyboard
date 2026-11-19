@@ -1806,7 +1806,7 @@ class StudioActivity : Activity() {
         if (fill == null) return
         val bmp = loadFill(fill.img) ?: return
         // 放法：三選一，每一種都用這張圖畫預覽
-        text("放法", 14f).setPadding(0, px(8f), 0, 0)
+        panel.addView(titleWithHelp("放法", 14f, KeyStyles.baseOf(target) == KeyStyles.KEYBOARD).apply { setPadding(0, px(8f), 0, 0) })
         modeChooser(panel, target, fill, bmp, fill.mode) { m -> applyMode(target, fill, m, bmp, afterUpload = false) }
         // 按鍵才有：外觀跟著圖片的形狀（去背圖用）
         if (KeyStyles.baseOf(target) != KeyStyles.KEYBOARD) {
@@ -1900,29 +1900,55 @@ class StudioActivity : Activity() {
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = px(10f) })
             val words = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             words.addView(TextView(this).apply { text = (if (m == current) "✓ " else "") + m.title; textSize = 15f })
-            words.addView(TextView(this).apply { text = m.hint; textSize = 12f; alpha = 0.65f })
             row.addView(words, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             parent.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, px(3f), 0, px(3f)) })
         }
-        parent.addView(TextView(this).apply {
-            text = if (isKeyboard) "預覽：左邊是現在的鍵盤，右邊是矮一點的（例如沒開快捷列的手機）" else "預覽：左邊是這顆鍵，右邊是寬一點的鍵"
-            textSize = 11f
-            alpha = 0.55f
-        })
+    }
+
+    /** 標題＋右邊一個「?」：點了跳出三種放法的說明 */
+    private fun titleWithHelp(title: String, size: Float, isKeyboard: Boolean): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        addView(TextView(this@StudioActivity).apply { text = title; textSize = size }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(TextView(this@StudioActivity).apply {
+            text = "?"
+            textSize = 15f
+            gravity = android.view.Gravity.CENTER
+            contentDescription = "放法說明"
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setStroke(px(1.5f), 0xFF888888.toInt())
+            }
+            setOnClickListener { modeHelp(isKeyboard) }
+        }, LinearLayout.LayoutParams(px(30f), px(30f)))
+    }
+
+    /** 「?」：三種放法的說明 */
+    private fun modeHelp(isKeyboard: Boolean) {
+        val msg = ImageFill.Mode.values().joinToString("\n\n") { "【${it.title}】\n${it.hint}" } +
+            "\n\n預覽：左邊是" + (if (isKeyboard) "現在的鍵盤背景，右邊是矮一點的（例如沒開快捷列的手機）。" else "這顆鍵，右邊是寬一點的鍵。")
+        android.app.AlertDialog.Builder(this).setTitle("放法說明").setMessage(msg).setPositiveButton("知道了", null).show()
     }
 
     /** 上傳完：問這張圖要怎麼放 */
     private fun askMode(target: String, fill: ImageFill, preselect: ImageFill.Mode) {
         val bmp = loadFill(fill.img) ?: return
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(px(16f), px(8f), px(16f), 0) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(px(20f), px(16f), px(20f), 0) }
+        val isKeyboard = KeyStyles.baseOf(target) == KeyStyles.KEYBOARD
+        box.addView(titleWithHelp("這張圖要怎麼放？", 19f, isKeyboard).apply { setPadding(0, 0, 0, px(8f)) })
         var dialog: android.app.AlertDialog? = null
         modeChooser(box, target, fill, bmp, preselect) { m ->
             dialog?.setOnDismissListener(null)
             dialog?.dismiss()
             applyMode(target, fill, m, bmp, afterUpload = true)
         }
+        box.addView(TextView(this).apply {
+            text = "選了之後，還是可以在編輯頁面的「放法」改"
+            textSize = 12f
+            alpha = 0.6f
+            setPadding(0, px(6f), 0, 0)
+        })
         dialog = android.app.AlertDialog.Builder(this)
-            .setTitle("這張圖要怎麼放？")
             .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setNegativeButton("取消", null)
             .show()
