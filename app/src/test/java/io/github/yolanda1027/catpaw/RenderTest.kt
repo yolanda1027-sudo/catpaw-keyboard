@@ -350,7 +350,7 @@ class RenderTest {
             prefs.theme = t
             val v = CatKeyboardView(ctx, prefs, Haptics(ctx))
             v.rows = Layouts.clipRows(h.all(), 0)
-            v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選、排順序")
+            v.symbolTabs = listOf(CatImeService.CLIP_TAB)
             v.symbolTab = 0
             v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
             v.layout(0, 0, v.measuredWidth, v.measuredHeight)

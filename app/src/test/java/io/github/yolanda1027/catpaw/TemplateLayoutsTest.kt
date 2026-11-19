@@ -65,7 +65,7 @@ class TemplateLayoutsTest {
             .put("kaomoji", page(Symbols.rows(kaoItems, true), tabs(listOf("返回", null) + Symbols.kaomojiGroups.map { it.first }), false, "顏文字"))
             .put("emoji", page(Emojis.rows(emoItems), tabs(emoTabs), false, "表情"))
             .put("mystickers", page(stickers, tabs(emoTabs), false, "貼圖"))
-            .put("clipboard", page(Layouts.clipRows(clips, 0), tabs(listOf("剪貼簿　點一下貼上，長按釘選、排順序")), false, "剪貼簿的一筆"))
+            .put("clipboard", page(Layouts.clipRows(clips, 0), tabs(listOf(CatImeService.CLIP_TAB)), false, "剪貼簿的一筆"))
             .put("numpad", page(Layouts.NUMPAD, tabs(listOf("數字")), false))
         File("build").mkdirs()
         File("build/template-layouts.json").writeText(out.toString(1))

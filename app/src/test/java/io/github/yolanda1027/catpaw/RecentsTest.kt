@@ -53,7 +53,7 @@ class RecentsTest {
         kv.rows = Emojis.rows(items)
         kv.symbolTabs = listOf(null, "😀")
         kv.symbolTab = 0
-        kv.itemActions = { k -> if (k.text == "🐱") listOf("unpin" to "取消", "left" to "往前", "right" to "往後", "remove" to "刪除") else listOf("pin" to "釘選", "remove" to "刪除") }
+        kv.itemActions = { k -> if (k.text == "🐱") listOf("cancel" to "取消", "unpin" to "解除釘選", "left" to "往前", "right" to "往後", "remove" to "刪除") else listOf("cancel" to "取消", "pin" to "釘選", "remove" to "刪除") }
         kv.isPinned = { k -> k.text == "🐱" }
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
@@ -81,7 +81,7 @@ class RecentsTest {
         File("build/renders").mkdirs()
         File("build/renders/recent-pin-menu.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         kv.dispatchTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, r.centerX(), y, 0))
-        assertEquals("👍" to "pin", got)
+        assertEquals("直接放開＝取消", "👍" to "cancel", got)
         assertNull(typed) // 長按選單不會打字
     }
 }

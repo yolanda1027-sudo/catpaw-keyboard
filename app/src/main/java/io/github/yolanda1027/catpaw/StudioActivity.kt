@@ -386,7 +386,7 @@ class StudioActivity : Activity() {
                 if (tab == "stk") MyStickers.rows(this, 0) else Emojis.rows(Emojis.page(Emojis.groups[0].second, 0))
             }
             "clip" -> {
-                kv.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選、排順序"); kv.symbolTab = 0
+                kv.symbolTabs = listOf(CatImeService.CLIP_TAB); kv.symbolTab = 0
                 kv.symbolPageCount = 1; kv.symbolPage = 0
                 Layouts.clipRows(listOf(
                     ClipHistory.Item("複製過的文字會出現在這裡", 0L, false),

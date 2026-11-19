@@ -3,6 +3,7 @@ package io.github.yolanda1027.catpaw
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -12,7 +13,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** 剪貼簿釘選的可以排順序：長按 → 釘選／取消釘選／往前／往後／刪除 */
+/** 剪貼簿：長按 → 取消／釘選／解除釘選／排順序／刪除；釘選的在設定裡用 ↑ ↓ 排順序 */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -66,11 +67,11 @@ class ClipPinOrderTest {
         val actions = CatImeService::class.java.getDeclaredMethod("itemActionsFor", Key::class.java).apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         fun menu(t: String) = (actions.invoke(s, Key(t, Act.CLIP, text = t)) as List<Pair<String, String>>).map { it.second }
-        assertEquals(listOf("取消釘選", "往前", "往後", "刪除"), menu("0912-345-678"))
-        assertEquals(listOf("釘選", "刪除"), menu("cat@example.com"))
-        // 往前：電話排到地址前面
-        s.onItemAction(Key("0912-345-678", Act.CLIP, text = "0912-345-678"), "up")
-        assertEquals(listOf("0912-345-678", "台北市大安區"), clips.all().filter { it.pinned }.map { it.text })
+        assertEquals("第一個是取消（直接放開什麼都不做）", listOf("取消", "解除釘選", "排順序", "刪除"), menu("0912-345-678"))
+        assertEquals(listOf("取消", "釘選", "刪除"), menu("cat@example.com"))
+        // 取消：什麼都沒變
+        s.onItemAction(Key("cat@example.com", Act.CLIP, text = "cat@example.com"), "cancel")
+        assertEquals(listOf("台北市大安區", "0912-345-678", "cat@example.com"), clips.all().map { it.text })
 
         // 截圖：在剪貼簿長按第一筆
         kv.measure(android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.UNSPECIFIED)
@@ -89,5 +90,53 @@ class ClipPinOrderTest {
         // 四個選項都在畫面裡
         val r = kf("popupRect").get(kv) as android.graphics.RectF
         org.junit.Assert.assertTrue("選單 $r 要整個在畫面裡", r.left >= 0f && r.right <= kv.width + 0.5f)
+    }
+
+    @Test fun releaseWithoutSlidingCancels() {
+        File(ctx.filesDir, "clips.json").delete()
+        val s = Robolectric.buildService(CatImeService::class.java).create().get()
+        val kv = s.onCreateInputView() as CatKeyboardView
+        val clips = CatImeService::class.java.getDeclaredField("clips").apply { isAccessible = true }.get(s) as ClipHistory
+        clips.add("留著")
+        s.onClipboard()
+        kv.measure(android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.UNSPECIFIED)
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val r = kv.keyRectOf(kv.rows[0][0])!!
+        val t0 = android.os.SystemClock.uptimeMillis()
+        val y = r.centerY() + kv.floatH
+        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, r.centerX(), y, 0))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(Prefs(ctx).longPressMs + 50L, java.util.concurrent.TimeUnit.MILLISECONDS)
+        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 900, android.view.MotionEvent.ACTION_UP, r.centerX(), y, 0))
+        assertEquals("長按後直接放開：沒釘選、沒刪除", listOf("留著" to false), clips.all().map { it.text to it.pinned })
+    }
+
+    @Test fun settingsArrowsReorderPinned() {
+        val f = File(ctx.filesDir, "clips.json").apply { delete() }
+        ClipHistory(f).apply {
+            for (t in listOf("甲", "乙", "丙")) add(t)
+            for (t in listOf("甲", "乙", "丙")) action("pin", t)
+        }
+        val act = Robolectric.buildActivity(SettingsActivity::class.java, android.content.Intent().putExtra("page", "clip")).setup().get()
+        fun buttons(v: android.view.View, out: MutableList<android.widget.Button>) {
+            if (v is android.widget.Button) out.add(v)
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) buttons(v.getChildAt(i), out)
+        }
+        val dv = act.window.decorView
+        dv.measure(android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(2000, android.view.View.MeasureSpec.EXACTLY))
+        dv.layout(0, 0, 1080, 2000)
+        Bitmap.createBitmap(1080, 2000, Bitmap.Config.ARGB_8888).also { b ->
+            dv.draw(Canvas(b))
+            File("build/renders").mkdirs()
+            File("build/renders/settings-clip-order.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        val all = mutableListOf<android.widget.Button>().also { buttons(act.window.decorView, it) }
+        val downs = all.filter { it.text == "↓" }
+        assertEquals(3, downs.size)
+        assertFalse("最後一個不能再往後", downs.last().isEnabled)
+        downs.first().performClick() // 甲 往後
+        assertEquals(listOf("乙", "甲", "丙"), ClipHistory(f).all().filter { it.pinned }.map { it.text })
+        val unpin = mutableListOf<android.widget.Button>().also { buttons(act.window.decorView, it) }.filter { it.text == "解除" }
+        unpin.last().performClick() // 丙 解除釘選
+        assertEquals(listOf("乙", "甲"), ClipHistory(f).all().filter { it.pinned }.map { it.text })
     }
 }

@@ -260,7 +260,7 @@ class SettingsActivity : Activity() {
         PageInfo("haptic", "🎵 手感", "震動、長按時間、按下時放大的字", false, group = "打字"),
         PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、英文建議字、清除學習紀錄", false, group = "打字"),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true, group = "打字"),
-        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false, group = "打字"),
+        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、釘選的順序、清除", false, group = "打字"),
         PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false, group = "打字"),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false, group = "其他"),
         PageInfo("privacy", "🔒 隱私權", "打的字只留在手機裡：存了什麼、怎麼刪", false, group = "其他"),
@@ -1062,6 +1062,53 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         note("只存在這支手機裡。沒釘選的 1 小時後會自動刪掉；密碼管理 App 複製的密碼不會被記錄。")
+
+        // 釘選的順序：鍵盤上照這個順序排在最前面
+        subTitle("釘選的順序")
+        val file = java.io.File(filesDir, "clips.json")
+        val pinned = ClipHistory(file).all().filter { it.pinned }
+        if (pinned.isEmpty()) {
+            note("還沒有釘選的。在鍵盤的剪貼簿長按一筆，手指滑到「釘選」再放開。")
+        } else {
+            note("用 ↑ ↓ 調整順序，鍵盤的剪貼簿會照這個順序排在最前面。")
+            // 每次按都重新讀檔再改：鍵盤那邊剛記下的新紀錄才不會被蓋掉
+            fun change(action: String, text: String) {
+                ClipHistory(file).action(action, text)
+                prefs.sp.edit().putLong("clips_changed", System.currentTimeMillis()).apply()
+                showPage("clip")
+            }
+            pinned.forEachIndexed { i, item ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
+                }
+                row.addView(TextView(this).apply {
+                    text = item.text.replace(Regex("\\s+"), " ").trim()
+                    textSize = 15f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                fun small(label: String, desc: String, enabled: Boolean, onClick: () -> Unit) = row.addView(Button(this).apply {
+                    text = label
+                    isAllCaps = false
+                    textSize = 13f
+                    minWidth = 0
+                    minimumWidth = (44 * dp).toInt()
+                    setPadding((8 * dp).toInt(), paddingTop, (8 * dp).toInt(), paddingBottom)
+                    isEnabled = enabled
+                    alpha = if (enabled) 1f else 0.35f
+                    contentDescription = desc
+                    setOnClickListener { onClick() }
+                })
+                small("↑", "往前", i > 0) { change("up", item.text) }
+                small("↓", "往後", i < pinned.size - 1) { change("down", item.text) }
+                small("解除", "解除釘選", true) { change("unpin", item.text) }
+                root.addView(row)
+            }
+        }
+
+        subTitle("清除")
         button("清除剪貼簿紀錄（包含釘選的）") {
             java.io.File(filesDir, "clips.json").delete()
             prefs.sp.edit().putLong("clear_clips", System.currentTimeMillis()).apply()

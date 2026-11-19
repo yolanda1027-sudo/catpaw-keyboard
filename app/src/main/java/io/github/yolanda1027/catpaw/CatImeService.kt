@@ -161,6 +161,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 File(filesDir, "clips.json").delete()
                 clips = ClipHistory(File(filesDir, "clips.json"))
             }
+            "clips_changed" -> { // 設定頁排了釘選的順序、解除釘選、刪除：重新讀
+                clips = ClipHistory(File(filesDir, "clips.json"))
+                if (page == Page.CLIP) refresh()
+            }
             else -> kv?.reloadPrefs()
         }
     }
@@ -402,7 +406,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             v.symbolPageCount = 1
             v.symbolPage = 0
         } else if (page == Page.CLIP) {
-            v.symbolTabs = listOf("剪貼簿　點一下貼上，長按釘選、排順序")
+            v.symbolTabs = listOf(CLIP_TAB)
             v.symbolTab = 0
             v.symbolPageCount = clipPageCount()
             v.symbolPage = clipPage
@@ -515,21 +519,29 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         else -> null
     }
 
-    /** 長按最近使用的東西：跳出的選單。直接放開＝第一個（釘選／取消釘選） */
+    /**
+     * 長按最近使用的東西、剪貼簿：跳出的選單。
+     * 第一個是「取消」（直接放開＝什麼都不做，不小心長按到也沒關係），手指往右滑選其他的。
+     */
     private fun itemActionsFor(key: Key): List<Pair<String, String>>? {
-        // 剪貼簿：釘選的可以往前、往後排
+        // 剪貼簿：排順序到設定裡用 ↑ ↓ 排（長按選單裡的「排順序」直接打開那一頁）
         if (page == Page.CLIP && key.act == Act.CLIP && key.text.isNotEmpty()) {
             val pinned = clips.all().any { it.text == key.text && it.pinned }
-            return if (pinned) listOf("unpin" to "取消釘選", "up" to "往前", "down" to "往後", "remove" to "刪除")
-            else listOf("pin" to "釘選", "remove" to "刪除")
+            return if (pinned) listOf(CANCEL, "unpin" to "解除釘選", "sort" to "排順序", "remove" to "刪除")
+            else listOf(CANCEL, "pin" to "釘選", "remove" to "刪除")
         }
         val kind = recentKind() ?: return null
         if (key.act != Act.TEXT || key.text.isEmpty()) return null
-        return if (key.text in pinned(kind)) listOf("unpin" to "取消", "left" to "往前", "right" to "往後", "remove" to "刪除")
-        else listOf("pin" to "釘選", "remove" to "刪除")
+        return if (key.text in pinned(kind)) listOf(CANCEL, "unpin" to "解除釘選", "left" to "往前", "right" to "往後", "remove" to "刪除")
+        else listOf(CANCEL, "pin" to "釘選", "remove" to "刪除")
     }
 
     override fun onItemAction(key: Key, action: String) {
+        if (action == CANCEL.first) return
+        if (page == Page.CLIP && key.act == Act.CLIP && action == "sort") {
+            openSettingsPage("clip")
+            return
+        }
         if (page == Page.CLIP && key.act == Act.CLIP) {
             clips.action(action, key.text)
             // 這一頁刪光了：退回上一頁
@@ -831,9 +843,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     /** 開設定的「我的貼圖」頁（上傳、刪除） */
-    private fun openStickerSettings() {
+    private fun openStickerSettings() = openSettingsPage("mystickers")
+
+    /** 從鍵盤直接打開設定的某一頁（上傳貼圖、剪貼簿排順序） */
+    private fun openSettingsPage(page: String) {
+        requestHideSelf(0)
         val i = android.content.Intent(this, SettingsActivity::class.java)
-            .putExtra("page", "mystickers")
+            .putExtra("page", page)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
         startActivity(i)
     }
@@ -996,6 +1012,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
         /** 選字列最多放幾個（很常見的音可能有上千個字，太多會拖慢） */
         private const val MAX_CANDIDATES = 400
+        /** 長按選單的「取消」：放在第一個，直接放開就是它 */
+        private val CANCEL = "cancel" to "取消"
+        /** 剪貼簿頁最上面那條的說明 */
+        const val CLIP_TAB = "剪貼簿　點一下貼上，長按釘選、刪除、排順序"
         private const val EN_WORDS = "en_words.txt"
         /** 英文學過的字（設定裡「清除學習紀錄」會一起刪） */
         const val EN_USER_FILE = "en_user.txt"

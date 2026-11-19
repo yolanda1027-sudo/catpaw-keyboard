@@ -60,7 +60,7 @@ class ClipHistory(private val file: File) {
      * 長按選單的動作：
      * - pin 釘選（排到釘選的最後面）
      * - unpin 取消釘選（放回沒釘選的最前面，不會一下子不見）
-     * - up / down 釘選的往前、往後一格
+     * - up / down 釘選的往前、往後一格（設定的「剪貼簿」頁用 ↑ ↓ 排）
      * - remove 刪除
      */
     fun action(action: String, text: String, now: Long = System.currentTimeMillis()) {
