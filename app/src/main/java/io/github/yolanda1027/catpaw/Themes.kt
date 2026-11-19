@@ -115,12 +115,37 @@ abstract class KbTheme(protected val dp: Float) {
         val box = RectF(r.left + 6 * dp, r.top + 4 * dp, r.right - 6 * dp, r.bottom - 4 * dp)
         val size = rowH * 0.3f
         val maxW = box.width() - 28 * dp
-        var shown = label
-        if (measure(shown, size) > maxW) {
-            while (shown.isNotEmpty() && measure("$shown…", size) > maxW) shown = shown.dropLast(1)
-            shown += "…"
+        drawTextLeft(c, fitOneLine(label, size, maxW), box.left + 14 * dp, box.centerY(), size, color)
+    }
+
+    /** 截好的字記起來：按鍵動畫每一幀都要重畫，不要每次都重新量（一筆剪貼簿最多 5000 字） */
+    private val fitCache = object : LinkedHashMap<String, String>(32, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, String>?) = size > 64
+    }
+
+    /**
+     * 一行放不下就截掉加「…」。
+     * 先照「最窄的字也有字高的 0.25 倍寬」粗估最多放得下幾個字，把後面的先切掉，
+     * 再用二分搜尋找剛好放得下的長度（以前一個字一個字刪，5000 字要量 5000 次，畫面會卡住）
+     */
+    fun fitOneLine(label: String, size: Float, maxW: Float): String {
+        val key = "${size.toInt()}|${maxW.toInt()}|$label"
+        fitCache[key]?.let { return it }
+        val cap = (maxW / (size * 0.25f)).toInt().coerceAtLeast(1) + 1
+        val head = if (label.length > cap) label.take(cap) else label
+        val out = if (head.length == label.length && measure(label, size) <= maxW) label else {
+            var lo = 0
+            var hi = head.length
+            while (lo < hi) {
+                val mid = (lo + hi + 1) / 2
+                if (measure(head.take(mid) + "…", size) <= maxW) lo = mid else hi = mid - 1
+            }
+            // 不要從表情符號（兩個字元組成的字）中間切開，會變亂碼
+            val cut = if (lo > 0 && Character.isHighSurrogate(head[lo - 1])) lo - 1 else lo
+            head.take(cut) + "…"
         }
-        drawTextLeft(c, shown, box.left + 14 * dp, box.centerY(), size, color)
+        fitCache[key] = out
+        return out
     }
 
     /** 長按選單的配色 */
