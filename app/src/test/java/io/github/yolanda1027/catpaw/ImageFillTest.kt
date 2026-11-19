@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.net.Uri
 import android.view.View
+import android.widget.TextView
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.SeekBar
@@ -70,6 +71,13 @@ class ImageFillTest {
         val bmp = Bitmap.createBitmap(1080, 2340, Bitmap.Config.ARGB_8888)
         v.draw(Canvas(bmp))
         save(bmp, name)
+    }
+
+    /** 「這張圖要怎麼放？」／放法：點某一種（找到名稱那行字，點它那一整列） */
+    private fun pickMode(v: View, title: String) {
+        val t = find(v) { it is TextView && (it.text.toString() == title || it.text.toString() == "✓ $title") } ?: error("找不到放法：$title")
+        (t.parent.parent as View).performClick()
+        ShadowLooper.idleMainLooper()
     }
 
     private fun find(v: View, pred: (View) -> Boolean): View? {
@@ -143,7 +151,10 @@ class ImageFillTest {
         var req = shadowOf(a).nextStartedActivityForResult
         shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(photoFile("work_p.png"))))
         ShadowLooper.idleMainLooper()
-        // 上傳完直接進裁切畫面
+        // 上傳完先問要怎麼放（三種放法的預覽）→ 選「照片、花紋」→ 進裁切畫面
+        val ask = ShadowDialog.getLatestDialog() as Dialog
+        render(ask.window!!.decorView, "fill-mode-dialog")
+        pickMode(ask.window!!.decorView, "照片、花紋")
         var crop = ShadowDialog.getLatestDialog() as Dialog
         val cv = find(crop.window!!.decorView) { it is CropView } as CropView
         render(crop.window!!.decorView, "fill-crop-key")
@@ -171,6 +182,7 @@ class ImageFillTest {
         req = shadowOf(a).nextStartedActivityForResult
         shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(bgGif)))
         ShadowLooper.idleMainLooper()
+        pickMode((ShadowDialog.getLatestDialog() as Dialog).window!!.decorView, "照片、花紋")
         crop = ShadowDialog.getLatestDialog() as Dialog
         render(crop.window!!.decorView, "fill-crop-bg")
         button(crop.window!!.decorView, "完成").performClick()

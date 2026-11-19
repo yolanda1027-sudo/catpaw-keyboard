@@ -59,6 +59,13 @@ class KeyNineTest {
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    /** 「這張圖要怎麼放？」／放法：點某一種（找到名稱那行字，點它那一整列） */
+    private fun pickMode(v: View, title: String) {
+        val t = find(v) { it is TextView && (it.text.toString() == title || it.text.toString() == "✓ $title") } ?: error("找不到放法：$title")
+        (t.parent.parent as View).performClick()
+        ShadowLooper.idleMainLooper()
+    }
+
     private fun find(v: View, pred: (View) -> Boolean): View? {
         if (pred(v)) return v
         if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
@@ -147,8 +154,7 @@ class KeyNineTest {
         StudioActivity::class.java.declaredMethods.first { it.name == "setFill" }.apply { isAccessible = true }.invoke(a, "space", ImageFill(name))
         ShadowLooper.idleMainLooper()
         val root = a.window.decorView
-        (find(root) { it is RadioButton && it.text.startsWith("固定邊角") } as RadioButton).performClick()
-        ShadowLooper.idleMainLooper()
+        pickMode(root, "邊框")
         // 切到九宮格：直接打開調整邊角，預覽用這顆鍵的大小
         val d = ShadowDialog.getLatestDialog() as Dialog
         assertNotNull(find(d.window!!.decorView) { it is TextView && it.text == "調整按鍵圖片的邊角" })
@@ -167,7 +173,7 @@ class KeyNineTest {
         assertEquals(0.25f, f.sx, 0.001f)
         // 裁切換成調整邊角；底色、外框、圓角變灰
         assertNotNull(find(root) { it is Button && it.text == "📐 調整邊角" })
-        assertNotNull(find(root) { it is TextView && it.text.toString().contains("現在用「固定邊角」") })
+        assertNotNull(find(root) { it is TextView && it.text.toString().contains("現在用「邊框」") })
         Ui.spaceButtons(root, 8)
         root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, 1080, 2340)

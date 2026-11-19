@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
 import android.view.View
+import android.widget.TextView
 import android.view.ViewGroup
 import android.widget.Button
 import org.json.JSONObject
@@ -65,6 +66,13 @@ class ImageStretchTest {
         return b
     }
 
+    /** 「這張圖要怎麼放？」／放法：點某一種（找到名稱那行字，點它那一整列） */
+    private fun pickMode(v: View, title: String) {
+        val t = find(v) { it is TextView && (it.text.toString() == title || it.text.toString() == "✓ $title") } ?: error("找不到放法：$title")
+        (t.parent.parent as View).performClick()
+        ShadowLooper.idleMainLooper()
+    }
+
     private fun find(v: View, pred: (View) -> Boolean): View? {
         if (pred(v)) return v
         if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
@@ -95,20 +103,13 @@ class ImageStretchTest {
         val f = File(ctx.cacheDir, "framed.png").apply { outputStream().use { framedPicture().compress(Bitmap.CompressFormat.PNG, 100, it) } }
         shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(f)))
         ShadowLooper.idleMainLooper()
+        // 上傳完問要怎麼放：選「整張都要看到」（不用裁切）
         val d = ShadowDialog.getLatestDialog() as Dialog
-        val cv = find(d.window!!.decorView) { it is CropView } as CropView
-        // 原本：鋪滿框（左右剛好、上下被裁掉一點 → 上下的金框不見）
-        cv.setZoom(cv.minZoom) // 縮到最小：整張放進去，左右會有空白（像截圖那樣）
         shot(d.window!!.decorView, "stretch-before")
-        (find(d.window!!.decorView) { it is Button && it.text == "剛好塞滿框" } as Button).performClick()
-        shot(d.window!!.decorView, "stretch-after")
-        val dr = cv.fill.destRect(cv.frame, cv.bmp.width, cv.bmp.height)
-        assertEquals(cv.frame.width(), dr.width(), 1f)
-        assertEquals(cv.frame.height(), dr.height(), 1f)
-        (find(d.window!!.decorView) { it is Button && it.text == "完成" } as Button).performClick()
-        ShadowLooper.idleMainLooper()
+        pickMode(d.window!!.decorView, "整張都要看到")
         val saved = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).keyboardImage!!
-        assertTrue("有拉寬：${saved.stretch}", saved.stretch > 1.05f)
+        assertTrue(saved.fit)
+        assertTrue("舊版 App 看的拉寬也算好了：${saved.stretch}", saved.stretch > 1.05f)
 
         // 鍵盤上：背景圖的金框四邊都看得到（左右沒有被裁掉、也沒有空白）
         val kv = CatKeyboardView(ctx, Prefs(ctx, ThemeStore.WORK), Haptics(ctx))
@@ -123,6 +124,21 @@ class ImageStretchTest {
         val midY = (top + fr.top + fr.height() * 0.5f).toInt()
         assertTrue("左邊有金框", (0..30).any { isGold(b.getPixel(it, midY)) })
         assertTrue("右邊有金框", (1049..1079).any { isGold(b.getPixel(it, midY)) })
+
+        // 換到框比較高的手機（開了快捷列）：每台照自己的框重新塞滿，金框四邊還是都在
+        kv.quickItems = listOf("()", "「」")
+        kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val b2 = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)
+        kv.draw(Canvas(b2))
+        val fr2 = kv.keyboardImageFrame()
+        val mid2 = (top + fr2.top + fr2.height() * 0.5f).toInt()
+        val cx = 540
+        assertTrue("左邊有金框", (0..30).any { isGold(b2.getPixel(it, mid2)) })
+        assertTrue("右邊有金框", (1049..1079).any { isGold(b2.getPixel(it, mid2)) })
+        assertTrue("上面有金框", ((top + fr2.top).toInt()..(top + fr2.top + 30).toInt()).any { isGold(b2.getPixel(cx, it)) })
+        assertTrue("下面有金框", ((top + fr2.bottom - 30).toInt() until (top + fr2.bottom).toInt()).any { isGold(b2.getPixel(cx, it)) })
+        File("build/renders/stretch-keyboard-quickbar.png").outputStream().use { b2.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     /** 裁切畫面：拉寬、拉高分開兩條，可以只拉一邊，也可以兩邊都拉 */

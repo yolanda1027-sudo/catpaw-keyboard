@@ -3,6 +3,7 @@ package io.github.yolanda1027.catpaw
 import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Color
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -646,7 +647,7 @@ class StudioActivity : Activity() {
             })
             text("0% 是直角，100% 是膠囊形。改了底色、外框或圓角，這顆鍵會換成自訂的形狀（羊皮紙這類紋理會變成接近的單色）。", 12f, dim = true)
         }
-        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「" + (if (eff.bgImage?.nine == true) "固定邊角" else "照圖片的形狀") + "」，這些都交給圖片。", 12f, dim = true)
+        if (shapeMode) text("💡 底色、外框、圓角是灰的：現在用「" + (if (eff.bgImage?.nine == true) "邊框" else "按鍵外觀跟著圖片的形狀") + "」，這些都交給圖片。", 12f, dim = true)
 
         panel.addView(CheckBox(this).apply {
             text = "不顯示文字（只留底色和外框）"
@@ -793,7 +794,11 @@ class StudioActivity : Activity() {
     /** 這組設定改了哪些地方 */
     private fun describe(st: KeyStyle, decalCount: Int): String = listOfNotNull(
         if (st.bg != null) "底色" else null,
-        st.bgImage?.let { f -> when { f.nine -> "底圖（固定邊角）"; f.shape -> "底圖（照圖片形狀）"; f.isGif -> "底圖（GIF）"; else -> "底圖" } },
+        st.bgImage?.let { f ->
+            // 照片、花紋是一般的放法，不特別寫
+            val notes = listOfNotNull(f.mode.takeIf { it != ImageFill.Mode.COVER }?.title, "去背形狀".takeIf { f.shape }, "GIF".takeIf { f.isGif })
+            if (notes.isEmpty()) "底圖" else "底圖（" + notes.joinToString("、") + "）"
+        },
         if (st.text != null) "文字顏色" else null,
         if (st.hideLabel == true) "不顯示文字" else null,
         if (!st.labels.isNullOrEmpty()) "字的位置、大小" else null,
@@ -1085,14 +1090,10 @@ class StudioActivity : Activity() {
             val uri = data?.data
             if (resultCode != RESULT_OK || uri == null || target == null) return
             val name = readImage(uri, Decals.FILL_MAX_PX) ?: return
-            // 上傳完直接進裁切畫面；按取消就不套用。原本是「照圖片的形狀」就沿用
+            // 上傳完先問「這張圖要怎麼放」（用這張圖畫出三種放法的預覽）；按取消就不套用
             val prev = styles.map[target]?.bgImage
-            when {
-                // 原本是九宮格：沿用邊角設定，直接打開調整邊角
-                prev?.nine == true -> ImageFill(name, nine = true, sx = prev.sx, sy = prev.sy).let { setFill(target, it); openKeyNine(target, it) }
-                prev?.shape == true -> openCrop(target, ImageFill(name, zoom = ImageFill.FIT, shape = true))
-                else -> openCrop(target, ImageFill(name))
-            }
+            val fresh = ImageFill(name, shape = prev?.shape == true, sx = prev?.sx ?: NineFrame.DEFAULT, sy = prev?.sy ?: NineFrame.DEFAULT)
+            askMode(target, fresh, prev?.mode ?: ImageFill.Mode.COVER)
             return
         }
         if (requestCode == REQ_EFFECT_IMAGE) {
@@ -1794,36 +1795,162 @@ class StudioActivity : Activity() {
             startActivityForResult(i, REQ_FILL)
         }
         if (fill != null) {
-            if (fill.nine) b("📐 調整邊角") { openKeyNine(target, fill) }
-            else b("✂️ 裁切") { openCrop(target, fill) }
+            when (fill.mode) {
+                ImageFill.Mode.BORDER -> b("📐 調整邊角") { openNine(target, fill) }
+                ImageFill.Mode.COVER -> b("✂️ 裁切") { openCrop(target, fill) }
+                ImageFill.Mode.WHOLE -> Unit // 整張塞滿：沒有要調的
+            }
             b("拿掉") { setFill(target, null) }
         }
         panel.addView(row)
-        // 按鍵才有：圖片怎麼用（鋪滿裁切／照圖片的形狀／九宮格）
-        if (fill != null && KeyStyles.baseOf(target) != KeyStyles.KEYBOARD) {
-            text("圖片怎麼用", 14f).setPadding(0, px(6f), 0, 0)
-            val modes = listOf(
-                "鋪滿裁切（可以放大縮小、選要露出哪一塊）",
-                "照圖片的形狀（去背 PNG 透明的地方就是按鍵外面）",
-                "固定邊角（四個角不變形，按鍵變寬只拉長中間）",
-            )
-            val current = when { fill.nine -> 2; fill.shape -> 1; else -> 0 }
-            val rg = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-            val ids = modes.map { m ->
-                RadioButton(this).apply { id = View.generateViewId(); text = m; textSize = 14f }.also { rg.addView(it) }.id
-            }
-            rg.check(ids[current])
-            rg.setOnCheckedChangeListener { _, id ->
-                when (ids.indexOf(id)) {
-                    0 -> setFill(target, fill.copy(shape = false, nine = false, zoom = 1f, cx = 0.5f, cy = 0.5f))
-                    // 照圖片的形狀：整張放進按鍵裡，毛邊才不會被裁掉
-                    1 -> setFill(target, fill.copy(shape = true, nine = false, zoom = ImageFill.FIT, cx = 0.5f, cy = 0.5f))
-                    // 九宮格：切換過去就打開調整邊角
-                    2 -> fill.copy(shape = false, nine = true).let { setFill(target, it); openKeyNine(target, it) }
+        if (fill == null) return
+        val bmp = loadFill(fill.img) ?: return
+        // 放法：三選一，每一種都用這張圖畫預覽
+        text("放法", 14f).setPadding(0, px(8f), 0, 0)
+        modeChooser(panel, target, fill, bmp, fill.mode) { m -> applyMode(target, fill, m, bmp, afterUpload = false) }
+        // 按鍵才有：外觀跟著圖片的形狀（去背圖用）
+        if (KeyStyles.baseOf(target) != KeyStyles.KEYBOARD) {
+            val isBorder = fill.mode == ImageFill.Mode.BORDER
+            panel.addView(CheckBox(this).apply {
+                text = "按鍵外觀跟著圖片的形狀（去背圖用）"
+                isChecked = fill.shape || isBorder
+                isEnabled = !isBorder
+                setOnCheckedChangeListener { _, on ->
+                    val frame = fillFrame(target)?.first
+                    val next = when {
+                        // 勾起來：通常去背圖要整張出現，形狀才完整，順便換成「整張都要看到」
+                        on && frame != null && fill.mode == ImageFill.Mode.COVER ->
+                            fill.copy(shape = true).withMode(ImageFill.Mode.WHOLE, frame, bmp.width, bmp.height, ImageFill.contentOf(bmp))
+                        on -> fill.copy(shape = true)
+                        else -> fill.copy(shape = false, zoom = if (fill.zoom == ImageFill.FIT) 1f else fill.zoom)
+                    }
+                    setFill(target, next)
                 }
+            })
+            text(
+                if (isBorder) "「邊框」本來就照圖片的形狀：不畫圓角方塊的底和外框。"
+                else "不畫圓角方塊的底和外框，圖片透明的地方露出後面的背景。能按的範圍不變。",
+                12f, dim = true,
+            )
+        }
+    }
+
+    /** 這張底圖鋪在哪個框（按鍵或鍵盤背景）、圓角半徑（佔短邊的比例） */
+    private fun fillFrame(target: String): Pair<RectF, Float>? {
+        if (KeyStyles.baseOf(target) == KeyStyles.KEYBOARD) return kv.keyboardImageFrame().takeIf { !it.isEmpty }?.let { it to 0f }
+        val key = selected ?: return null
+        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
+        val (box, rad) = kv.keyImageFrame(key, st) ?: return null
+        return box to rad / minOf(box.width(), box.height())
+    }
+
+    private fun loadFill(name: String): android.graphics.Bitmap? =
+        java.io.File(Decals.dir(this), name).takeIf { Decals.safeName(name) && it.exists() }
+            ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
+
+    /**
+     * 一種放法的預覽：現在的框，和比例不一樣的框（換到別的手機、別的按鍵大概會這樣）。
+     * 背景：另一個是矮一點的（沒開快捷列）；按鍵：另一個是寬一點的。
+     */
+    private fun modePreview(fill: ImageFill, bmp: android.graphics.Bitmap, frame: RectF, corner: Float, isKeyboard: Boolean): android.graphics.Bitmap {
+        val h = px(if (isKeyboard) 46f else 40f).toFloat()
+        val frames = listOf(frame.width() / frame.height(), if (isKeyboard) frame.width() / (frame.height() * 0.86f) else frame.width() * 1.6f / frame.height())
+        val gap = px(6f).toFloat()
+        val ws = frames.map { it * h }
+        val out = android.graphics.Bitmap.createBitmap((ws.sum() + gap).toInt() + 2, h.toInt() + 2, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(out)
+        val base = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF55505A.toInt() }
+        var x = 1f
+        for (w in ws) {
+            val r = RectF(x, 1f, x + w, 1f + h)
+            val rad = if (fill.shape || fill.nine) 0f else corner * minOf(r.width(), r.height())
+            if (!fill.shape && !fill.nine) c.drawRoundRect(r, rad, rad, base)
+            val clip = if (fill.shape || fill.nine) null else android.graphics.Path().apply { addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW) }
+            // 照片模式：換到別的框時，cover 的裁切照比例算（跟鍵盤真的畫法一樣）
+            ImageFill.draw(c, fill, r, clip, bmp, null)
+            x += w + gap
+        }
+        return out
+    }
+
+    /** 三種放法排成一列一列：預覽圖＋名稱＋說明，選中的有框 */
+    private fun modeChooser(
+        parent: LinearLayout, target: String, fill: ImageFill, bmp: android.graphics.Bitmap,
+        current: ImageFill.Mode?, onPick: (ImageFill.Mode) -> Unit,
+    ) {
+        val (frame, corner) = fillFrame(target) ?: return
+        val isKeyboard = KeyStyles.baseOf(target) == KeyStyles.KEYBOARD
+        val content = ImageFill.contentOf(bmp)
+        for (m in ImageFill.Mode.values()) {
+            val f = if (m == fill.mode) fill else fill.withMode(m, frame, bmp.width, bmp.height, content)
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(px(8f), px(6f), px(8f), px(6f))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = px(10f).toFloat()
+                    if (m == current) { setStroke(px(2f), 0xFFE8628E.toInt()); setColor(0x18E8628E) } else setColor(0x0F888888)
+                }
+                isClickable = true
+                setOnClickListener { onPick(m) }
             }
-            panel.addView(rg)
-            if (fill.ownsShape) text("這個模式不畫底色和外框（形狀、邊框都交給圖片），按下去只有圖片本身會變暗。", 12f, dim = true)
+            row.addView(android.widget.ImageView(this).apply {
+                setImageBitmap(modePreview(f, bmp, frame, corner, isKeyboard))
+                adjustViewBounds = true
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = px(10f) })
+            val words = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            words.addView(TextView(this).apply { text = (if (m == current) "✓ " else "") + m.title; textSize = 15f })
+            words.addView(TextView(this).apply { text = m.hint; textSize = 12f; alpha = 0.65f })
+            row.addView(words, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            parent.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, px(3f), 0, px(3f)) })
+        }
+        parent.addView(TextView(this).apply {
+            text = if (isKeyboard) "預覽：左邊是現在的鍵盤，右邊是矮一點的（例如沒開快捷列的手機）" else "預覽：左邊是這顆鍵，右邊是寬一點的鍵"
+            textSize = 11f
+            alpha = 0.55f
+        })
+    }
+
+    /** 上傳完：問這張圖要怎麼放 */
+    private fun askMode(target: String, fill: ImageFill, preselect: ImageFill.Mode) {
+        val bmp = loadFill(fill.img) ?: return
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(px(16f), px(8f), px(16f), 0) }
+        var dialog: android.app.AlertDialog? = null
+        modeChooser(box, target, fill, bmp, preselect) { m ->
+            dialog?.setOnDismissListener(null)
+            dialog?.dismiss()
+            applyMode(target, fill, m, bmp, afterUpload = true)
+        }
+        dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("這張圖要怎麼放？")
+            .setView(android.widget.ScrollView(this).apply { addView(box) })
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 換成某一種放法；照片模式剛上傳時接著打開裁切，邊框接著調整邊角 */
+    private fun applyMode(target: String, fill: ImageFill, m: ImageFill.Mode, bmp: android.graphics.Bitmap, afterUpload: Boolean) {
+        val frame = fillFrame(target)?.first ?: return
+        val f = if (m == fill.mode && !afterUpload) fill else fill.withMode(m, frame, bmp.width, bmp.height, ImageFill.contentOf(bmp))
+        when (m) {
+            ImageFill.Mode.COVER -> if (afterUpload) openCrop(target, f) else setFill(target, f)
+            ImageFill.Mode.BORDER -> { setFill(target, f); openNine(target, f) }
+            ImageFill.Mode.WHOLE -> setFill(target, f)
+        }
+    }
+
+    /** 邊框：調整邊角（按鍵用那顆鍵的大小預覽；鍵盤背景用整個背景的大小） */
+    private fun openNine(target: String, fill: ImageFill) {
+        if (KeyStyles.baseOf(target) != KeyStyles.KEYBOARD) { openKeyNine(target, fill); return }
+        val bmp = loadFill(fill.img) ?: return
+        val frame = kv.keyboardImageFrame()
+        NineSliceDialog.show(
+            this, bmp, NineFrame(fill.img, fill.sx, fill.sy), "", Color.WHITE,
+            buttonW = frame.width(), buttonH = frame.height(),
+            title = "調整背景圖片的邊角",
+            caption = "預覽：鍵盤背景實際的大小，和更窄、更寬的",
+        ) { done ->
+            if (done != null) setFill(target, fill.copy(nine = true, fit = false, sx = done.sx, sy = done.sy))
         }
     }
 
@@ -1846,7 +1973,7 @@ class StudioActivity : Activity() {
             title = "調整按鍵圖片的邊角",
             caption = "預覽：這顆鍵實際的大小，和更窄、更寬的",
         ) { done ->
-            if (done != null) setFill(target, fill.copy(nine = true, shape = false, sx = done.sx, sy = done.sy))
+            if (done != null) setFill(target, fill.copy(nine = true, fit = false, shape = false, sx = done.sx, sy = done.sy))
         }
     }
 

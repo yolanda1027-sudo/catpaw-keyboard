@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
+import android.widget.TextView
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
@@ -79,6 +80,13 @@ class KeyShapeImageTest {
     private fun near(a: Int, b: Int, tol: Int = 12) =
         abs(Color.red(a) - Color.red(b)) <= tol && abs(Color.green(a) - Color.green(b)) <= tol && abs(Color.blue(a) - Color.blue(b)) <= tol
 
+    /** 「這張圖要怎麼放？」／放法：點某一種（找到名稱那行字，點它那一整列） */
+    private fun pickMode(v: View, title: String) {
+        val t = find(v) { it is TextView && (it.text.toString() == title || it.text.toString() == "✓ $title") } ?: error("找不到放法：$title")
+        (t.parent.parent as View).performClick()
+        ShadowLooper.idleMainLooper()
+    }
+
     private fun find(v: View, pred: (View) -> Boolean): View? {
         if (pred(v)) return v
         if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
@@ -149,12 +157,13 @@ class KeyShapeImageTest {
         ShadowLooper.idleMainLooper()
         StudioActivity::class.java.declaredMethods.first { it.name == "setFill" }.apply { isAccessible = true }.invoke(a, "@zhuyin", ImageFill(name))
         ShadowLooper.idleMainLooper()
-        val box = find(root) { it is android.widget.RadioButton && it.text.startsWith("照圖片的形狀") } as android.widget.RadioButton
+        val box = find(root) { it is android.widget.CheckBox && it.text.startsWith("按鍵外觀跟著圖片的形狀") } as android.widget.CheckBox
         box.performClick()
         ShadowLooper.idleMainLooper()
         val f = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["@zhuyin"]!!.bgImage!!
         assertTrue(f.shape)
-        assertEquals(ImageFill.FIT, f.zoom)
+        assertTrue("勾了之後順便換成「整張都要看到」", f.fit)
+        assertEquals(ImageFill.Mode.WHOLE, f.mode)
         Ui.spaceButtons(root, 8)
         root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, 1080, 2340)
@@ -162,7 +171,10 @@ class KeyShapeImageTest {
         root.draw(Canvas(shot))
         save(shot, "keyshape-studio")
 
-        // 裁切畫面：灰白格子底
+        // 照片模式＋跟著圖片形狀（以前的「照圖片的形狀」）：裁切畫面是灰白格子底
+        StudioActivity::class.java.declaredMethods.first { it.name == "setFill" }.apply { isAccessible = true }
+            .invoke(a, "@zhuyin", ImageFill(name, shape = true, zoom = ImageFill.FIT))
+        ShadowLooper.idleMainLooper()
         val cropBtn = find(root) { it is Button && it.text == "✂️ 裁切" } as Button
         cropBtn.performClick()
         ShadowLooper.idleMainLooper()

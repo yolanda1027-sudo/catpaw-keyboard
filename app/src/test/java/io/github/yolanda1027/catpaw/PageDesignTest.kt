@@ -188,7 +188,7 @@ class PageDesignTest {
             if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
         }
         walk(a.window.decorView)
-        for (want in listOf("注音頁", "所有注音鍵", "底圖（照圖片形狀）、文字顏色", "Enter 鍵", "圖案 1 個",
+        for (want in listOf("注音頁", "所有注音鍵", "底圖（去背形狀）、文字顏色", "Enter 鍵", "圖案 1 個",
                 "符號頁", "刪除鍵", "剪貼簿頁", "鍵盤背景", "表情符號頁", "上方列")) {
             assertTrue("總覽裡少了「$want」：$texts", texts.any { it.contains(want) })
         }

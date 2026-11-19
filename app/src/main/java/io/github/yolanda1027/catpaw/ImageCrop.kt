@@ -144,7 +144,8 @@ object ImageCrop {
             setMargins(m, 0, m, 0)
         })
         qbtn("原比例") { view.setStretch(1f) }
-        qbtn("剛好塞滿框") { view.fitFrame() }
+        // 「剛好塞滿框」（會拉寬、壓扁）改成另一種放法「整張都要看到」；這裡是不變形的照片模式
+        qbtn("整張放進框") { view.setZoom(view.minZoom) }
         root.addView(quick)
 
         view.onChange = { f -> sync(f) }

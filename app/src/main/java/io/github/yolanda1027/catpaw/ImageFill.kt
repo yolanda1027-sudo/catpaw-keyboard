@@ -10,7 +10,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * 拿一張圖片鋪滿一個框（按鍵底圖、鍵盤背景圖）：可以放大、縮小、選要露出哪一塊（裁切）。
+ * 拿一張圖片放進一個框（按鍵底圖、鍵盤背景圖）。三種放法（[mode]）：
+ * - 照片、花紋（預設）：等比例鋪滿，可以放大、縮小、選要露出哪一塊（裁切）；換到框比例不同的手機，邊邊可能裁掉一點
+ * - 邊框（[nine]）：四個角保持原樣，只拉長中間
+ * - 整張都要看到（[fit]）：圖片有畫東西的範圍剛好塞滿框，不裁切；每台手機照自己的框重新算，可能被拉寬或壓扁
+ *
+ * 以下說明「照片、花紋」：
  *
  * - zoom = 1：剛好鋪滿框（多出來的邊裁掉，像手機桌布）
  * - zoom > 1：再放大
@@ -36,8 +41,32 @@ data class ImageFill(
     val sy: Float = NineFrame.DEFAULT,
     /** 只拉寬或只拉高：圖片的寬度乘上這個倍數（> 1 變寬、< 1 變高，1 = 原比例） */
     val stretch: Float = 1f,
+    /**
+     * 整張都要看到：畫的時候照「現在這個框」把圖片有畫東西的範圍剛好塞滿。
+     * 同時也留著 zoom、cx、cy、stretch（選的時候在當時的框算好的），舊版 App 看不懂 fit 也會長得差不多。
+     */
+    val fit: Boolean = false,
 ) {
     val isGif get() = img.endsWith(".gif")
+
+    /** 放法：照片、花紋／邊框／整張都要看到 */
+    val mode: Mode get() = when { nine -> Mode.BORDER; fit -> Mode.WHOLE; else -> Mode.COVER }
+
+    enum class Mode(val title: String, val hint: String) {
+        COVER("照片、花紋", "等比例放大蓋滿，邊邊可能裁掉一點"),
+        BORDER("邊框", "四個角保持原樣，只拉長中間"),
+        WHOLE("整張都要看到", "不裁切，但可能被拉寬或壓扁"),
+    }
+
+    /**
+     * 換成另一種放法。
+     * @param content 圖片有畫東西的範圍（「整張都要看到」用）；frame、iw、ih 是現在的框和圖片大小
+     */
+    fun withMode(m: Mode, frame: RectF, iw: Int, ih: Int, content: RectF): ImageFill = when (m) {
+        Mode.COVER -> copy(nine = false, fit = false, zoom = if (shape) FIT else 1f, cx = 0.5f, cy = 0.5f, stretch = 1f)
+        Mode.BORDER -> copy(nine = true, fit = false, shape = false)
+        Mode.WHOLE -> fitContent(frame, iw, ih, content).copy(nine = false, fit = true)
+    }
 
     /** 圖片自己決定按鍵的形狀（照圖片的形狀、九宮格）：底色、外框、圓角都不畫 */
     val ownsShape get() = shape || nine
@@ -74,6 +103,7 @@ data class ImageFill(
             if (shape) put("shape", true)
             if (nine) put("nine", true).put("sx", sx.toDouble()).put("sy", sy.toDouble())
             if (stretch != 1f) put("stretch", stretch.toDouble())
+            if (fit) put("fit", true)
         }
 
     /** 這張圖（含拉寬／拉高）最小可以縮到多小 */
@@ -136,7 +166,22 @@ data class ImageFill(
                 sx = f("sx", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
                 sy = f("sy", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
                 stretch = f("stretch", 1f, MIN_STRETCH, MAX_STRETCH),
+                fit = o.optBoolean("fit", false) && !nine,
             )
+        }
+
+        /** 每張圖有畫東西的範圍（量一次記住；圖片換掉時 Bitmap 也會是新的一個） */
+        private val contentCache = java.util.WeakHashMap<Bitmap, RectF>()
+        fun contentOf(bmp: Bitmap): RectF = synchronized(contentCache) { contentCache.getOrPut(bmp) { opaqueBounds(bmp) } }
+
+        /** 整張都要看到：讓 content（圖片座標）剛好對到 frame，整張圖要畫在哪 */
+        fun wholeDest(frame: RectF, iw: Int, ih: Int, content: RectF): RectF {
+            val c = if (content.isEmpty) RectF(0f, 0f, iw.toFloat(), ih.toFloat()) else content
+            val kx = frame.width() / c.width()
+            val ky = frame.height() / c.height()
+            val left = frame.left - c.left * kx
+            val top = frame.top - c.top * ky
+            return RectF(left, top, left + iw * kx, top + ih * ky)
         }
 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -146,9 +191,17 @@ data class ImageFill(
          * @param anim 會動的 GIF；有的話用它，沒有就用 bmp
          */
         fun draw(c: Canvas, fill: ImageFill, frame: RectF, clip: Path?, bmp: Bitmap?, anim: android.graphics.drawable.Drawable?) {
+            if (fill.nine) {
+                // 邊框：四個角不變形（會動的 GIF 用第一格）
+                if (bmp != null) NineFrame.draw(c, bmp, fill.sx, fill.sy, frame)
+                return
+            }
             val iw = anim?.intrinsicWidth?.takeIf { it > 0 } ?: bmp?.width ?: return
             val ih = anim?.intrinsicHeight?.takeIf { it > 0 } ?: bmp?.height ?: return
-            val dst = fill.destRect(frame, iw, ih)
+            val dst = if (fill.fit) {
+                // 整張都要看到：照現在的框重新算（GIF 沒辦法量透明範圍，用整張）
+                wholeDest(frame, iw, ih, if (anim == null && bmp != null) contentOf(bmp) else RectF(0f, 0f, iw.toFloat(), ih.toFloat()))
+            } else fill.destRect(frame, iw, ih)
             c.save()
             if (clip != null) c.clipPath(clip) else c.clipRect(frame)
             if (anim != null) Decals.drawAnim(c, anim, dst, 255)
