@@ -1,0 +1,96 @@
+name: Family version (給家人的正式版)
+
+# 給家人用的「貓爪鍵盤」（正式簽章，跟之後上架 Google Play 的是同一個 App）。
+#
+# 怎麼更新家人版：Actions → Family version → Run workflow
+#   「Use workflow from」選哪個分支，就把那個分支目前的程式變成家人版：
+#     ・選 ccr-dd7ad214-r4eofc（測試版的分支）＝把測試版目前的功能升級成家人版
+#     ・選 family ＝不換程式，只是重新打包一次
+# 打包好的 APK 固定放在同一個連結（Releases 裡的 family）：
+#   https://github.com/yolanda1027-sudo/catpaw-keyboard/releases/download/family/catpaw-keyboard.apk
+#
+# 需要的 Secret 跟 release.yml 一樣：CATPAW_UPLOAD_KEYSTORE_B64、CATPAW_UPLOAD_PASSWORD
+on:
+  workflow_dispatch:
+  push:
+    branches: [family]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: family
+  cancel-in-progress: false
+
+jobs:
+  family:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 版本編號用 commit 數量算，要拿到完整歷史
+          fetch-depth: 0
+
+      # 從別的分支按 Run workflow：把那個分支的程式搬到 family 分支。
+      # 只允許「往前走」（fast-forward）：family 上如果有別的分支沒有的修改，會停下來，不會蓋掉。
+      - name: Move family branch here
+        if: github.ref_name != 'family'
+        run: |
+          if git ls-remote --exit-code --heads origin family > /dev/null; then
+            git fetch origin family
+            if ! git merge-base --is-ancestor origin/family HEAD; then
+              echo "::error::family 分支上有「${{ github.ref_name }}」沒有的修改，不能直接蓋過去。請先把那些修改合併進來。"
+              exit 1
+            fi
+          fi
+          git push origin "HEAD:refs/heads/family"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Restore upload key
+        env:
+          KEYSTORE_B64: ${{ secrets.CATPAW_UPLOAD_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::還沒設定 Secret CATPAW_UPLOAD_KEYSTORE_B64（上傳金鑰）"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/upload.p12"
+
+      - name: Version code
+        id: ver
+        run: |
+          # 每多一個 commit 就 +1，新版一定比舊版大，手機才肯直接更新
+          echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "name=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed APK
+        env:
+          CATPAW_UPLOAD_KEYSTORE: ${{ runner.temp }}/upload.p12
+          CATPAW_UPLOAD_PASSWORD: ${{ secrets.CATPAW_UPLOAD_PASSWORD }}
+          CATPAW_VERSION_CODE: ${{ steps.ver.outputs.code }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Remove upload key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.p12"
+
+      - name: Publish "家人版"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk catpaw-keyboard.apk
+          gh release delete family --yes --cleanup-tag || true
+          gh release create family catpaw-keyboard.apk \
+            --target "$(git rev-parse HEAD)" \
+            --latest \
+            --title "家人版 v${{ steps.ver.outputs.name }}（建置 ${{ steps.ver.outputs.code }}）" \
+            --notes "給家人用的「貓爪鍵盤」。安裝過的手機直接下載新的 APK 安裝就會更新，主題和設定都會留著。（跟「貓爪鍵盤 測試版」是兩個不同的 App，可以同時裝。）commit：$(git rev-parse HEAD)"

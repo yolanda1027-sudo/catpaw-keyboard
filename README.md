@@ -20,6 +20,12 @@
 這裡下載的是**測試版**，App 名稱是「貓爪鍵盤 測試版」（圖示是淺藍底），
 跟 Google Play 上的正式版是兩個不同的 App，可以同時裝在手機上，設定、主題各自分開。
 
+### 家人版（正式版）
+
+想用比較穩定的版本，下載 Releases 裡「家人版」的 `catpaw-keyboard.apk`
+（固定連結：<https://github.com/yolanda1027-sudo/catpaw-keyboard/releases/download/family/catpaw-keyboard.apk>）。
+App 名稱是「貓爪鍵盤」，只有在測試版的功能確認沒問題之後才會更新。
+
 ## 開發進度
 
 - [x] **第一階段：手感原型**（v0.2：字的比例重新調整過，新增「粉紅縫線」主題）
@@ -72,6 +78,10 @@
 - 本機建置：`./gradlew assembleDebug`
 - 注音引擎測試：`./gradlew testDebugUnitTest --tests '*ZhuyinEngineTest*'`
 - 畫面截圖測試：`./gradlew testDebugUnitTest`，用 Robolectric 把鍵盤畫成 PNG，存到 `app/build/renders/`
+- 家人版：到 Actions →「Family version」→ Run workflow。「Use workflow from」選哪個分支，
+  就把那個分支目前的程式搬到 `family` 分支、打包成正式簽章的 APK，放到 Releases 的「家人版」（連結固定）。
+  `family` 分支只會往前走，上面有別的分支沒有的修改時會停下來，不會蓋掉。push 到 `family` 也會自動重新打包
+- 版本編號（versionCode）＝ commit 數量（`git rev-list --count HEAD`），家人版和 Google Play 版用同一套算法
 - 正式版（上傳 Google Play）：到 Actions →「Build release (Google Play)」→ Run workflow，
   建好的 `.aab` 會放在一個草稿 Release（只有 repo 擁有者看得到）。
   需要先在 Settings → Secrets and variables → Actions 放好 `CATPAW_UPLOAD_KEYSTORE_B64`（上傳金鑰 .p12 的 base64）和 `CATPAW_UPLOAD_PASSWORD`。

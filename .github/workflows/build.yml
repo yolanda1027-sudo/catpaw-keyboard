@@ -2,6 +2,8 @@ name: Build APK
 
 on:
   push:
+    # family 分支是給家人的正式版，由 family.yml 打包，不要蓋掉「最新測試版」
+    branches-ignore: [family]
   workflow_dispatch:
 
 permissions:
