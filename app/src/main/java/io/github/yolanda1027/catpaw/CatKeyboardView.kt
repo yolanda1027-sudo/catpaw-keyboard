@@ -357,8 +357,8 @@ class CatKeyboardView(
 
     private fun layoutKeys() {
         keyRects.clear()
-        nativeCache.clear()
-        styledCache.clear()
+        // 量好的按鍵顏色不用清：記的時候已經帶著「哪一頁的哪顆鍵、多大」，換頁回來還能用
+        //（換主題、改設計時 reloadPrefs 會清）
         val w = width.toFloat()
         if (w <= 0f) return
         rows.forEachIndexed { ri, row ->
@@ -1093,14 +1093,22 @@ class CatKeyboardView(
             drawOneKey(c, kr, content, styled)
             return bmp
         }
-        val body = render(false)
-        val full = render(true)
+        // 一次把整張圖的顏色讀進陣列（一點一點 getPixel 很慢：每次換頁四十幾顆鍵，會卡住半秒）
+        fun pixels(content: Boolean): IntArray {
+            val bmp = render(content)
+            val arr = IntArray(w * h)
+            bmp.getPixels(arr, 0, w, 0, 0, w, h)
+            bmp.recycle()
+            return arr
+        }
+        val body = pixels(false)
+        val full = pixels(true)
         fun opaque(c: Int) = c or (0xFF shl 24)
 
         // 底色：中間區域分成小格子統計，取最多的那一組平均
         val count = HashMap<Int, IntArray>() // 格子 → [數量, r 總和, g 總和, b 總和]
         for (y in (h * 0.2f).toInt() until (h * 0.8f).toInt()) for (x in (w * 0.2f).toInt() until (w * 0.8f).toInt()) {
-            val p = body.getPixel(x, y)
+            val p = body[y * w + x]
             val k = (android.graphics.Color.red(p) shr 4 shl 8) or (android.graphics.Color.green(p) shr 4 shl 4) or (android.graphics.Color.blue(p) shr 4)
             val a = count.getOrPut(k) { IntArray(4) }
             a[0]++; a[1] += android.graphics.Color.red(p); a[2] += android.graphics.Color.green(p); a[3] += android.graphics.Color.blue(p)
@@ -1112,8 +1120,8 @@ class CatKeyboardView(
         var best = -1
         var text = theme.text
         for (y in 0 until h) for (x in 0 until w) {
-            val a = full.getPixel(x, y)
-            val b = body.getPixel(x, y)
+            val a = full[y * w + x]
+            val b = body[y * w + x]
             val d = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
                 kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
                 kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
@@ -1131,8 +1139,8 @@ class CatKeyboardView(
             val y0 = (e.cy - half - r.top).toInt().coerceIn(0, h - 1)
             val y1 = (e.cy + half - r.top).toInt().coerceIn(0, h - 1)
             for (y in y0..y1) for (x in x0..x1) {
-                val a = full.getPixel(x, y)
-                val b = body.getPixel(x, y)
+                val a = full[y * w + x]
+                val b = body[y * w + x]
                 val d = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
                     kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
                     kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
@@ -1148,15 +1156,13 @@ class CatKeyboardView(
         var border = text // 沒有底框的主題：外框就先用字的顏色
         var edgeFound = false
         for (x in 0 until w / 2) {
-            if (dist(body.getPixel(x, h / 2), base) > 60) {
+            if (dist(body[(h / 2) * w + x], base) > 60) {
                 edgeFound = true
                 // 往內 1 點，避開邊緣半透明的那一圈
-                border = body.getPixel(minOf(x + 1, w - 1), h / 2)
+                border = body[(h / 2) * w + minOf(x + 1, w - 1)]
                 break
             }
         }
-        body.recycle()
-        full.recycle()
         val hasBody = dist(bg, base) > 24
         val hasBorder = edgeFound && dist(border, bg) > 40
         return KeyColors(opaque(bg), opaque(text), opaque(border), hasBody, hasBorder, opaque(sub))
