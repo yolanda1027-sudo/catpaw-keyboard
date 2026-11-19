@@ -1219,7 +1219,7 @@ class CatKeyboardView(
 
     /** 展開面板裡每個選項的位置（還沒加上捲動） */
     /** 展開面板左邊那一欄（放「簡」切換鍵）；設定裡關掉切換鍵就沒有這欄 */
-    private val panelLeft get() = if (prefs.showScToggle) width / 7f else 0f
+    private val panelLeft get() = if (prefs.showScToggle && isChinese) width / 7f else 0f // 英文建議字不用「簡」
 
     /** 「簡」切換鍵的位置：左邊那一欄的最下面 */
     private fun scToggleRect() = RectF(0f, kbH - padBottom - panelRowH, panelLeft, kbH - padBottom)

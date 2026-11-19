@@ -76,6 +76,11 @@ class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
         get() = sp.getBoolean("show_sc_toggle", true)
         set(v) = sp.edit().putBoolean("show_sc_toggle", v).apply()
 
+    /** 英文模式打字時，選字列顯示建議字（只建議，不自動改） */
+    var enSuggest: Boolean
+        get() = sp.getBoolean("en_suggest", true)
+        set(v) = sp.edit().putBoolean("en_suggest", v).apply()
+
     /** 自訂按鍵動畫的設定（按鍵動畫選「custom」時用） */
     var customEffect: CustomEffect
         get() = try {

@@ -33,6 +33,12 @@ object OpenSource {
             listOf("opencc/LICENSE"),
         ),
         Entry(
+            "AOSP 英文鍵盤（LatinIME）", "英文建議字的單字表和常用度（去掉冒犯字和罕見字，見 tools/build_en_dict.py）", "Apache License 2.0",
+            "Copyright (c) 2008, The Android Open Source Project",
+            "https://android.googlesource.com/platform/packages/inputmethods/LatinIME",
+            listOf("aosp-latinime/NOTICE"),
+        ),
+        Entry(
             "unicode-emoji-json", "表情符號的清單和分類", "MIT License",
             "Copyright (c) 2019 Mu-An Chiou",
             "https://github.com/muan/unicode-emoji-json",

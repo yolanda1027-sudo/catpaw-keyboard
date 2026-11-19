@@ -258,7 +258,7 @@ class SettingsActivity : Activity() {
         PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true, group = "外觀"),
         PageInfo("font", "🔤 字體", "中文、注音、英文各用不同字體，也可以上傳自己的", true, group = "外觀"),
         PageInfo("haptic", "🎵 手感", "震動、長按時間、按下時放大的字", false, group = "打字"),
-        PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、清除學習紀錄", false, group = "打字"),
+        PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、英文建議字、清除學習紀錄", false, group = "打字"),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true, group = "打字"),
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false, group = "打字"),
         PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false, group = "打字"),
@@ -953,9 +953,19 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         note("打字時把選字面板展開（選字列右邊的箭頭），左下角的「簡」按一下就切換簡體／繁體，面板上的字會馬上換。選字一樣用繁體詞庫，只有顯示和打出去的字變簡體（對照表來自 OpenCC）。關掉這個開關會拿掉切換鍵，並回到繁體。")
-        note("記憶選字：你從選字列挑的字，下次會排第一個；同一次打字裡分段挑的字（例如先選「妳」再選「好」）會記成新詞「妳好」。直接按空白／Enter 接受預設的不算。只存在這支手機裡。")
+        subTitle("英文")
+        root.addView(Switch(this).apply {
+            text = "英文打字時顯示建議字"
+            isChecked = prefs.enSuggest
+            setOnCheckedChangeListener { _, b -> prefs.enSuggest = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("打到一半會猜你要打的字（hel → hello），小錯字也會猜（teh → the、dont → don't），點一下換上去、後面自動加空白。只建議，不會自己改掉你打的字。常打的字會排前面，字典裡沒有的字（名字、自創字）打過兩次也會出現。密碼欄不會出現建議。")
+        subTitle("學習紀錄")
+        note("記憶選字：你從選字列挑的字，下次會排第一個；同一次打字裡分段挑的字（例如先選「妳」再選「好」）會記成新詞「妳好」。直接按空白／Enter 接受預設的不算。英文常打的字也會記住。都只存在這支手機裡。")
         button("清除學習紀錄") {
             java.io.File(filesDir, "user_scores.txt").delete()
+            java.io.File(filesDir, CatImeService.EN_USER_FILE).delete()
             prefs.sp.edit().putLong("clear_learning", System.currentTimeMillis()).apply()
             android.widget.Toast.makeText(this, "已清除", android.widget.Toast.LENGTH_SHORT).show()
         }
@@ -1219,7 +1229,7 @@ class SettingsActivity : Activity() {
     /** 隱私權：App 裡的簡短版，完整版在 docs/privacy-policy.md（商店頁填的也是那個網址） */
     private fun pagePrivacy() {
         note("🐾 貓爪鍵盤沒有網路權限，不能連上網路，所以你打的字、設定和圖片都只留在這支手機裡，不會傳給任何人（包括我們）。沒有廣告、沒有追蹤、不用註冊。")
-        note("手機裡會存的東西：\n・選字記憶（你挑過的字）\n・剪貼簿紀錄（最多 20 筆，沒釘選的 1 小時後自動刪掉）\n・最近用過的符號、表情\n・設定、主題，還有你自己選的圖片和字體")
+        note("手機裡會存的東西：\n・選字記憶（你挑過的字、英文常打的字）\n・剪貼簿紀錄（最多 20 筆，沒釘選的 1 小時後自動刪掉）\n・最近用過的符號、表情\n・設定、主題，還有你自己選的圖片和字體")
         note("特別不記的：\n・密碼欄位\n・無痕模式（例如瀏覽器的無痕分頁）\n・標成機密的剪貼簿內容（例如密碼管理 App 複製的）")
         note("Android 的系統備份可能會把設定、主題和選字記憶備份到你自己的 Google 帳號（我們看不到），剪貼簿紀錄不會備份。解除安裝貓爪鍵盤，所有資料都會一起刪掉。")
         button("清除學習紀錄…") { showPage("candidate") }

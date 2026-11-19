@@ -18,6 +18,8 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputMethodManager
 import io.github.yolanda1027.catpaw.engine.Bpmf
 import io.github.yolanda1027.catpaw.engine.Candidate
+import io.github.yolanda1027.catpaw.engine.EnglishDict
+import io.github.yolanda1027.catpaw.engine.EnglishUser
 import io.github.yolanda1027.catpaw.engine.UserScores
 import io.github.yolanda1027.catpaw.engine.ZhuyinDict
 import io.github.yolanda1027.catpaw.engine.ZhuyinEngine
@@ -61,6 +63,19 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     private var candidates: List<Candidate> = emptyList()
     /** 聯想詞（剛送出一個字之後，猜你接下來要打的） */
     private var associated: List<String> = emptyList()
+
+    /** 英文建議字（字典在背景載入，載好之前是 null） */
+    private var enDict: EnglishDict? = null
+    private var enUser: EnglishUser? = null
+    private var enSuggest: List<String> = emptyList()
+    /** 正在打英文字（打了字母或按了刪除）：這時游標前面的字才拿來猜；按空白、標點、換頁就停 */
+    private var enTyping = false
+    /** 剛從建議點了一個字（後面自動加了空白）：接著打逗號、句號會把那個空白移到標點後面 */
+    private var justPicked = false
+    /** 這個輸入框可以顯示英文建議（密碼欄、App 說不要建議的欄位不行） */
+    private var enAllowed = true
+    /** 網址、Email 欄位：點建議字後面不加空白 */
+    private var enNoSpace = false
 
     override fun onCreate() {
         super.onCreate()
@@ -113,9 +128,19 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 }
             }
         }.start()
+        // 英文字典另外載，不拖慢注音
+        Thread {
+            val en = try { assets.open(EN_WORDS).use { EnglishDict.load(it) } } catch (_: Exception) { null }
+            val user = EnglishUser(File(filesDir, EN_USER_FILE))
+            main.post {
+                enDict = en
+                enUser = user.also { it.paused = noLearning }
+            }
+        }.start()
     }
 
     override fun onDestroy() {
+        enUser?.save()
         getSystemService(ClipboardManager::class.java)?.removePrimaryClipChangedListener(clipListener)
         prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         super.onDestroy()
@@ -127,7 +152,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             "simplified" -> refresh() // 簡繁切換：選字列馬上換
             "my_stickers_ver", "my_stickers" -> refresh() // 設定裡加了／刪了貼圖、開關分類
             "quick_bar", "quick_items", "quick_config" -> refresh()
-            "clear_learning" -> reloadUserScores() // 設定頁按了「清除學習紀錄」
+            "clear_learning" -> { // 設定頁按了「清除學習紀錄」
+                reloadUserScores()
+                enUser = EnglishUser(File(filesDir, EN_USER_FILE)).also { it.paused = noLearning }
+            }
+            "en_suggest" -> updateEnglish()
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
                 File(filesDir, "clips.json").delete()
                 clips = ClipHistory(File(filesDir, "clips.json"))
@@ -202,6 +231,14 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         // 輸入框說「不要記住打的字」（瀏覽器無痕模式等）：這次不學新的選字
         noLearning = isPassword(info) || (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
         engine?.learning = !noLearning
+        enUser?.paused = noLearning
+        val cls = info.inputType and InputType.TYPE_MASK_CLASS
+        val variation = info.inputType and InputType.TYPE_MASK_VARIATION
+        enAllowed = cls == InputType.TYPE_CLASS_TEXT && !isPassword(info) &&
+            (info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) == 0
+        enNoSpace = variation == InputType.TYPE_TEXT_VARIATION_URI ||
+            variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+            variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
         captureClipboard() // 鍵盤打開時順便看一下剛剛有沒有複製新東西
         kv?.reloadPrefs()
         refresh()
@@ -210,6 +247,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     override fun onFinishInputView(finishingInput: Boolean) {
         currentInputConnection?.finishComposingText()
         resetComposing()
+        enUser?.save()
         super.onFinishInputView(finishingInput)
     }
 
@@ -218,6 +256,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         pending.setLength(0)
         candidates = emptyList()
         associated = emptyList()
+        enSuggest = emptyList()
+        enTyping = false
+        justPicked = false
     }
 
     private val isComposing get() = (engine?.isEmpty == false) || pending.isNotEmpty()
@@ -234,6 +275,65 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             resetComposing()
             refresh()
         }
+        // 英文：每次輸入框的字或游標變了，重新猜游標前面那個字（選取了一段字就不猜）
+        if (enTyping || enSuggest.isNotEmpty()) updateEnglish(newSelStart == newSelEnd)
+    }
+
+    // ---------- 英文建議字 ----------
+
+    /** 看游標前面正在打的英文字，更新選字列上的建議 */
+    private fun updateEnglish(collapsed: Boolean = true) {
+        val d = enDict
+        val ic = currentInputConnection
+        val list = if (!enTyping || chinese || page != Page.MAIN || !enAllowed || !prefs.enSuggest || !collapsed || d == null || ic == null) {
+            emptyList()
+        } else {
+            val w = EnglishDict.currentWord(ic.getTextBeforeCursor(48, 0))
+            // 游標在一個字的中間（後面還接著字母）：不猜
+            val after = if (w.isEmpty()) null else ic.getTextAfterCursor(1, 0)?.firstOrNull()
+            if (w.isEmpty() || (after != null && (EnglishDict.isWordChar(after) || after.isDigit()))) emptyList()
+            else d.suggest(w, enUser)
+        }
+        if (list != enSuggest) {
+            enSuggest = list
+            refresh()
+        }
+    }
+
+    /** 點了英文建議字：換掉正在打的那個字，後面加空白 */
+    private fun pickEnglish(index: Int) {
+        val ic = currentInputConnection ?: return
+        val word = enSuggest.getOrNull(index) ?: return
+        val typed = EnglishDict.currentWord(ic.getTextBeforeCursor(48, 0))
+        ic.beginBatchEdit()
+        if (typed.isNotEmpty()) ic.deleteSurroundingText(typed.length, 0)
+        ic.commitText(if (enNoSpace) word else "$word ", 1)
+        ic.endBatchEdit()
+        if (enAllowed) enUser?.learn(word)
+        justPicked = !enNoSpace
+        enTyping = enNoSpace // 網址欄沒加空白：還在同一個字上，繼續猜
+        enSuggest = emptyList()
+        if (shift == 1) shift = 0
+        refresh()
+    }
+
+    /** 打完一個英文字（接著打空白、標點、Enter）：記一次，下次排前面 */
+    private fun learnEnglishWord() {
+        if (chinese || !enAllowed) return
+        val u = enUser ?: return
+        val w = EnglishDict.currentWord(currentInputConnection?.getTextBeforeCursor(48, 0))
+        if (w.isNotEmpty()) u.learn(w)
+    }
+
+    /** 點了建議字（後面自動有空白）接著打標點：變成「hello, 」而不是「hello ,」 */
+    private fun punctAfterPick(t: String) {
+        val ic = currentInputConnection ?: return
+        ic.beginBatchEdit()
+        if (ic.getTextBeforeCursor(1, 0)?.toString() == " ") ic.deleteSurroundingText(1, 0)
+        ic.commitText("$t ", 1)
+        ic.endBatchEdit()
+        associated = emptyList()
+        refresh()
     }
 
     /** 目前的輸入框不要學習（密碼欄、無痕模式） */
@@ -313,8 +413,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.shiftState = shift
         v.composing = if (inline) pending.toString() else ""
         // 簡體模式：選字列顯示簡體；兩個繁體轉成同一個簡體（例如「髮」「發」→「发」）只留第一個
-        val src = if (candidates.isNotEmpty()) candidates.map { it.text } else associated
-        if (prefs.simplified) {
+        val en = !chinese && page == Page.MAIN && candidates.isEmpty() && enSuggest.isNotEmpty()
+        val src = if (candidates.isNotEmpty()) candidates.map { it.text } else if (en) enSuggest else associated
+        if (prefs.simplified && !en) {
             val (shown, index) = ChineseConvert.dedupe(src, ::conv)
             v.candidates = shown
             shownIndex = index
@@ -457,8 +558,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onCandidate(shown: Int) {
         val ic = currentInputConnection ?: return
-        val e = engine ?: return
         val index = shownIndex.getOrNull(shown) ?: shown
+        if (!chinese && candidates.isEmpty() && enSuggest.isNotEmpty()) {
+            pickEnglish(index)
+            return
+        }
+        justPicked = false
+        val e = engine ?: return
         if (candidates.isNotEmpty()) {
             val c = candidates.getOrNull(index) ?: return
             val text = e.select(c)
@@ -483,6 +589,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onKey(key: Key, longPress: Boolean) {
         val ic = currentInputConnection ?: return
+        val afterPick = justPicked
+        justPicked = false
         if (longPress) {
             when (key.act) {
                 Act.SPACE -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
@@ -502,7 +610,15 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 }
                 if (page == Page.EMOJI) addRecentEmoji(key.text)
                 val upper = !key.exact && !chinese && page == Page.MAIN && shift > 0
-                commitText(if (upper) key.text.uppercase() else key.text)
+                val t = if (upper) key.text.uppercase() else key.text
+                if (afterPick && !chinese && t in PUNCT_AFTER_WORD) {
+                    punctAfterPick(t)
+                } else {
+                    // 英文模式打字母：開始猜這個字
+                    if (!chinese && page == Page.MAIN && t.length == 1 && EnglishDict.isWordChar(t[0])) enTyping = true
+                    commitText(t)
+                    if (enTyping) updateEnglish()
+                }
                 if (shift == 1 && page == Page.MAIN) {
                     shift = 0
                     refresh()
@@ -518,6 +634,9 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 }
             }
             Act.ENTER -> if (isComposing) commitComposingAll() else {
+                learnEnglishWord()
+                enTyping = false
+                enSuggest = emptyList()
                 associated = emptyList()
                 refresh()
                 sendKeyChar('\n')
@@ -533,7 +652,11 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                     }
                     // 有聯想詞的時候：刪除鍵只把聯想詞關掉，不刪字
                     associated.isNotEmpty() -> { associated = emptyList(); refresh() }
-                    else -> sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                    else -> {
+                        // 英文：刪回前一個字也會出現建議（游標更新後在 onUpdateSelection 猜）
+                        if (!chinese && page == Page.MAIN) enTyping = true
+                        sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                    }
                 }
             }
             Act.SHIFT -> {
@@ -562,7 +685,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 emojiPage = 0
                 refresh()
             }
-            Act.TO_MAIN -> { page = Page.MAIN; refresh() }
+            Act.TO_MAIN -> { page = Page.MAIN; refresh(); updateEnglish() }
             Act.STICKER -> sendSticker(key.text)
             Act.OPEN_STICKERS -> openStickerSettings()
             Act.GAP -> Unit
@@ -582,6 +705,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     /** 送出一般文字（標點、英文、表情符號）：如果正在組字，先把組好的中文送出 */
     private fun commitText(t: String) {
         if (isComposing) commitComposingAll()
+        // 英文字打完了（接著空白、標點、表情）：記下這個字，停止猜
+        if (!chinese && t.isNotEmpty() && !EnglishDict.isWordChar(t[0])) {
+            learnEnglishWord()
+            enTyping = false
+            enSuggest = emptyList()
+        }
         associated = emptyList()
         currentInputConnection?.commitText(t, 1)
         refresh()
@@ -592,6 +721,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             chinese = true
             prefs.chinese = true
             page = Page.MAIN
+            enTyping = false
+            enSuggest = emptyList()
             refresh()
         }
     }
@@ -745,6 +876,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onQuick(item: String) {
         val ic = currentInputConnection ?: return
+        justPicked = false
         if (isComposing) commitComposingAll()
         if (associated.isNotEmpty()) { associated = emptyList(); refresh() }
         when (item) {
@@ -864,5 +996,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
         /** 選字列最多放幾個（很常見的音可能有上千個字，太多會拖慢） */
         private const val MAX_CANDIDATES = 400
+        private const val EN_WORDS = "en_words.txt"
+        /** 英文學過的字（設定裡「清除學習紀錄」會一起刪） */
+        const val EN_USER_FILE = "en_user.txt"
+        /** 點了建議字之後打這些標點：空白移到標點後面 */
+        private val PUNCT_AFTER_WORD = setOf(",", ".", "!", "?", ";", ":")
     }
 }

@@ -33,7 +33,7 @@ App 名稱是「貓爪鍵盤」，只有在測試版的功能確認沒問題之�
 - [x] **第二階段：能打中文**：整句智慧轉換、不打聲調也可以、聲母縮寫（ㄒㄒ → 謝謝）、選字列（可左右滑、可展開）、聯想詞、記住你選過的字
 - [x] **第三階段：造型自由**：功能鍵貼圖（從相簿選）、按鍵動畫（彈一下／愛心／貓爪／星星）、自訂配色（設定頁即時預覽）
 - [x] **第四階段：主題工作室**：在鍵盤上直接貼圖案、改單顆按鍵（文字位置、顏色、刪除）、鍵盤背景和按鍵放圖片或 GIF（縮放、裁切、照圖片形狀、九宮格）、外框樣式（實線／虛線／點點／縫線）、上方列和快捷列配色、汲色器、主題匯出匯入。設計說明見 [主題設計手冊](docs/theme-guide/README.md)
-- [x] **其他**：我的貼圖（上傳自己的圖當表情）、剪貼簿（釘選、排順序）、顏文字、字體選擇
+- [x] **其他**：我的貼圖（上傳自己的圖當表情）、剪貼簿（釘選、排順序）、顏文字、字體選擇、英文建議字（補完、猜小錯字，只建議不自動改）
 - [ ] **上架 Google Play**：準備中
 
 ## 隱私權
@@ -48,6 +48,11 @@ App 名稱是「貓爪鍵盤」，只有在測試版的功能確認沒問題之�
 
 簡體輸出用的繁簡對照表來自 [OpenCC](https://github.com/BYVoid/OpenCC)（Apache License 2.0），
 原檔未修改，放在 `app/src/main/assets/opencc/`。授權全文見 `third_party/opencc/`。
+
+英文建議字的單字表（`app/src/main/assets/en_words.txt`）用 `tools/build_en_dict.py` 從
+[AOSP 英文鍵盤 LatinIME](https://android.googlesource.com/platform/packages/inputmethods/LatinIME) 的
+`dictionaries/en_US_wordlist.combined.gz`（Apache License 2.0）轉出來，拿掉標成冒犯、不是單字的字和罕見字。
+授權全文見 `third_party/aosp-latinime/NOTICE`。
 
 表情符號清單（`app/src/main/assets/emoji.txt`）用 `tools/build_emoji.py` 從
 [unicode-emoji-json](https://github.com/muan/unicode-emoji-json)（MIT License，資料來自 unicode.org，Unicode License v3）轉出來，

@@ -14,7 +14,7 @@
 
 | 資料 | 用途 | 怎麼刪除 |
 |---|---|---|
-| 選字記憶（你從選字列挑過的字、分段選出來的詞） | 下次把你常用的字排在前面 | 設定 →「選字與記憶」→「清除學習紀錄」 |
+| 選字記憶（你從選字列挑過的字、分段選出來的詞，以及英文常打的字和打過的次數） | 下次把你常用的字排在前面、英文建議字猜得更準 | 設定 →「選字與記憶」→「清除學習紀錄」 |
 | 剪貼簿紀錄（你複製過的文字，最多 20 筆；沒釘選的 1 小時後自動刪除） | 在鍵盤上快速貼上 | 設定 →「剪貼簿」→ 關掉紀錄，或「清除剪貼簿紀錄」 |
 | 最近用過的符號、表情、顏文字 | 放在「最近使用」 | 長按項目移除 |
 | 設定、主題、按鍵樣式 | 鍵盤外觀和手感 | 設定裡恢復預設 |
@@ -25,7 +25,7 @@
 ### 我們特別不記的東西
 
 - **密碼欄位**：不學習、不記錄你打的內容（也會自動切到英文）。
-- **無痕模式**：輸入框要求「不要記住打的字」時（例如瀏覽器的無痕分頁），本 App 不學新的選字；在這種輸入框打開鍵盤時，剪貼簿裡的內容也不會被記下來（之後換到別的 App 也不會補記）。
+- **無痕模式**：輸入框要求「不要記住打的字」時（例如瀏覽器的無痕分頁），本 App 不學新的選字（中文、英文都一樣）；在這種輸入框打開鍵盤時，剪貼簿裡的內容也不會被記下來（之後換到別的 App 也不會補記）。
 - **標記為機密的剪貼簿內容**：例如密碼管理 App 複製的密碼（Android 13 以上），不會存進剪貼簿紀錄。
 
 ## 權限
@@ -84,7 +84,7 @@ CatPaw Keyboard ("the App") is a Zhuyin (Bopomofo) input method for Android.
 
 **Data stored on your device only** (in the App's private storage; not accessible to other apps or to the developer):
 
-- Learned word choices, so frequently picked words appear first. Clear them in Settings → 選字與記憶 → 清除學習紀錄.
+- Learned word choices (including English words you type often and how often), so frequently used words appear first. Clear them in Settings → 選字與記憶 → 清除學習紀錄.
 - Clipboard history: up to 20 items, and unpinned items are deleted after 1 hour. You can turn it off or clear it in Settings → 剪貼簿.
 - Recently used symbols, emoji and kaomoji.
 - Settings, themes and key styles.
