@@ -1031,7 +1031,46 @@ class CatKeyboardView(
     private fun geoOf(d: Decal): DecalHandles.Geo? =
         targetOf(d)?.let { (r, ref) -> DecalHandles.Geo(r, ref, decalBitmaps[d.fileName]) }
 
+    /** 主題工作室「排列」勾選到的背景圖案（畫粉紅虛線框） */
+    var decalMarkIds: Set<String> = emptySet()
+        set(v) { field = v; invalidate() }
+
+    /**
+     * 主題工作室「對齊」：把這些元素對齊，回傳改好位置的（按鍵上的字也是包成 Decal 的，id 是 label:…）。
+     * @param key 按鍵上的字和圖案；null ＝ 這一頁背景上的圖案
+     */
+    fun alignElements(key: Key?, ids: Collection<String>, op: ElementAlign.Op): List<Decal> {
+        class E(val d: Decal, val target: RectF, val w: Float, val h: Float)
+        val es: List<E>
+        val frame: RectF
+        if (key != null) {
+            val r = keyRects.firstOrNull { it.key == key }?.rect ?: return emptyList()
+            es = keyElements(key).filter { it.decal.id in ids }.map { el ->
+                val (w, h) = Decals.sizeOf(el.decal, r.height(), el.bmp, el.aspect)
+                E(el.decal, r, w, h)
+            }
+            frame = theme.styledBox(r) // 對齊按鍵看得到的那一塊（鍵和鍵之間的縫不算）
+        } else {
+            val r = bgRect
+            es = decals.filter { onMyBg(it) && it.id in ids }.map { d ->
+                val (w, h) = Decals.sizeOf(d, r.height(), decalBitmaps[d.fileName])
+                E(d, r, w, h)
+            }
+            frame = r
+        }
+        val items = es.map { e ->
+            val (cx, cy) = Decals.centerOf(e.d, e.target)
+            val (hw, hh) = ElementAlign.halfExtents(e.w, e.h, e.d.rotation)
+            ElementAlign.Item(e.d.id, cx, cy, hw, hh)
+        }
+        val moved = ElementAlign.apply(items, op, frame)
+        return es.mapNotNull { e ->
+            moved[e.d.id]?.let { (cx, cy) -> e.d.copy(x = (cx - e.target.left) / e.target.width(), y = (cy - e.target.top) / e.target.height()) }
+        }
+    }
+
     private fun drawDecalSelection(c: Canvas) {
+        for (id in decalMarkIds) decals.firstOrNull { it.id == id && onMyBg(it) }?.let { d -> geoOf(d)?.let { decalHandles.drawMark(c, d, it) } }
         val d = currentDecal() ?: return
         val g = geoOf(d) ?: return
         decalHandles.draw(c, d, g, width.toFloat(), kbH)

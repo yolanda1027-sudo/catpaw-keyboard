@@ -91,6 +91,25 @@ class DecalHandles(private val dp: Float) {
 
     // ---------- 畫 ----------
 
+    /** 「排列」勾選到的元素：粉紅色細虛線框（沒有把手，只是標出選了哪幾個） */
+    fun drawMark(c: Canvas, d: Decal, g: Geo) {
+        val f = frame(d, g)
+        c.save()
+        c.translate(f.cx, f.cy)
+        c.rotate(f.rot)
+        val box = RectF(-f.hw, -f.hh, f.hw, f.hh)
+        line.pathEffect = null
+        line.color = Color.WHITE
+        line.strokeWidth = 3f * dp
+        c.drawRect(box, line)
+        line.color = 0xFFE8628E.toInt()
+        line.strokeWidth = 1.6f * dp
+        line.pathEffect = DashPathEffect(floatArrayOf(4 * dp, 3 * dp), 0f)
+        c.drawRect(box, line)
+        line.pathEffect = null
+        c.restore()
+    }
+
     fun draw(c: Canvas, d: Decal, g: Geo, viewW: Float, viewH: Float) {
         val f = frame(d, g)
         // 框：白色底線＋藍色虛線

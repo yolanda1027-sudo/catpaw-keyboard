@@ -562,6 +562,12 @@ class StudioActivity : Activity() {
         zoom.key = zoomKey
         zoom.selectedId = decalSel
         kv.decalEditId = decalSel
+        // 「排列」勾選的元素：換到別顆鍵、別頁就清掉；只有在那個面板時畫虛線框
+        val scope = when { bgSelected -> "bg:$page"; zoomKey != null -> KeyStyles.idOf(zoomKey); else -> null }
+        if (scope != markedScope) { marked.clear(); markedScope = scope }
+        val showMarks = decalSel == null && animMode == null
+        zoom.markedIds = if (showMarks && zoomKey != null) marked.toSet() else emptySet()
+        kv.decalMarkIds = if (showMarks && bgSelected) marked.toSet() else emptySet()
         if (animMode == GLOBAL || (animMode == KEY && selected != null)) { animPanel(); return }
         animMode = null
         val sk = selected
@@ -687,6 +693,14 @@ class StudioActivity : Activity() {
             section("這顆鍵上的圖案")
             text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
             decalList(selId)
+            val order = kv.elementOrder(key)
+            if (order.isNotEmpty()) {
+                val keyDecals = decals.filter { it.target == selId }
+                arrangeSection(key, order.map { id ->
+                    id to if (id.startsWith(LABEL)) labelName(key, id.removePrefix(LABEL))
+                    else "${keyDecals.indexOfFirst { it.id == id } + 1}. " + (keyDecals.firstOrNull { it.id == id }?.let { shapeName(it) } ?: "圖案")
+                })
+            }
         }
 
         section("按鍵動畫")
@@ -983,10 +997,80 @@ class StudioActivity : Activity() {
         section("背景上的圖案")
         text("背景的圖案預設在按鍵後面（可以放在鍵和鍵之間的空隙），也可以設定成蓋在按鍵上面。", 13f, dim = true)
         decalList(Decal.bgFor(page))
+        val bgDecals = decals.filter { it.target == Decal.bgFor(page) }
+        if (bgDecals.isNotEmpty()) arrangeSection(null, bgDecals.mapIndexed { i, d -> d.id to "${i + 1}. ${shapeName(d)}" })
         if (styles.keyboardImageFor(page) != null || decals.any { it.target == Decal.bgFor(page) }) {
             section("其他頁")
             button("📋 這一頁的背景套用到所有頁面") { confirmAllPages("這一頁的背景圖片和背景上的圖案") { copyBackgroundToAllPages() } }
         }
+    }
+
+    // ---------- 對齊、排列 ----------
+
+    /** 「排列」勾選的元素（同一顆鍵或同一頁背景；換別的就清掉） */
+    private val marked = LinkedHashSet<String>()
+    private var markedScope: String? = null
+
+    /**
+     * 排列：列出上面所有的字和圖案，勾幾個就對齊幾個。
+     * @param key 按鍵；null ＝ 這一頁的背景
+     */
+    private fun arrangeSection(key: Key?, items: List<Pair<String, String>>) {
+        section("排列")
+        text("勾 1 個＝對齊${if (key == null) "鍵盤背景" else "這顆鍵"}；勾 2 個以上＝彼此對齊；勾 3 個以上還可以等距排開。勾到的會畫粉紅虛線框。", 13f, dim = true)
+        marked.retainAll(items.map { it.first }.toSet())
+        for ((id, name) in items) panel.addView(CheckBox(this).apply {
+            text = name
+            isChecked = id in marked
+            setOnCheckedChangeListener { _, on ->
+                if (on) marked.add(id) else marked.remove(id)
+                refresh()
+            }
+        })
+        val ids = items.map { it.first }.filter { it in marked }
+        alignButtons(ids.size, distribute = true) { op -> doAlign(key, ids, op) }
+    }
+
+    /** 對齊按鈕：靠左／水平置中／靠右、靠上／垂直置中／靠下；distribute 再加水平、垂直等距 */
+    private fun alignButtons(count: Int, distribute: Boolean, onOp: (ElementAlign.Op) -> Unit) {
+        val rows = mutableListOf(
+            listOf(ElementAlign.Op.LEFT, ElementAlign.Op.HCENTER, ElementAlign.Op.RIGHT),
+            listOf(ElementAlign.Op.TOP, ElementAlign.Op.VCENTER, ElementAlign.Op.BOTTOM),
+        )
+        if (distribute) rows.add(listOf(ElementAlign.Op.HSPACE, ElementAlign.Op.VSPACE))
+        for (ops in rows) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (op in ops) row.addView(Button(this).apply {
+                text = op.label
+                isAllCaps = false
+                textSize = 13f
+                val need = if (op == ElementAlign.Op.HSPACE || op == ElementAlign.Op.VSPACE) 3 else 1
+                isEnabled = count >= need
+                alpha = if (isEnabled) 1f else 0.4f
+                setOnClickListener { onOp(op) }
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(2f), px(2f), px(2f)) })
+            panel.addView(row)
+        }
+    }
+
+    /** 真的去對齊：字改它的位置（LabelStyle），圖案改 x、y；整個算一步（可以「上一步」） */
+    private fun doAlign(key: Key?, ids: List<String>, op: ElementAlign.Op) {
+        val moved = kv.alignElements(key, ids, op)
+        if (moved.isEmpty()) return
+        var list = decals
+        for (d in moved) {
+            if (d.id.startsWith(LABEL)) {
+                val k = key ?: continue
+                val name = d.id.removePrefix(LABEL)
+                val from = kv.labelStyleFrom(k, d) ?: continue
+                val cur = styles.map[KeyStyles.idOf(k)]?.labels?.get(name) ?: styles.resolve(k)?.labels?.get(name) ?: LabelStyle()
+                setLabelStyle(k, name, cur.copy(dx = from.dx, dy = from.dy), rebuild = false)
+            } else {
+                list = list.map { if (it.id == d.id) d else it }
+            }
+        }
+        if (list !== decals) saveDecals(list, rebuild = false)
+        refresh()
     }
 
     private fun shapeName(d: Decal) = if (d.isShape) Decals.SHAPES.firstOrNull { it.first == d.shapeName }?.second ?: "圖案" else "我的圖片"
@@ -1129,6 +1213,9 @@ class StudioActivity : Activity() {
         text("貼在：$where", 14f, dim = true)
         val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖下面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
+        section("對齊")
+        text("對齊$where" + (if (d.onBackground) "" else "（按鍵看得到的那一塊）"), 13f, dim = true)
+        alignButtons(1, distribute = false) { op -> doAlign(if (d.onBackground) null else selected, listOf(d.id), op) }
 
         fun change(f: (Decal) -> Decal, rebuild: Boolean = false) {
             val cur = decals.firstOrNull { it.id == d.id } ?: return
@@ -1351,6 +1438,9 @@ class StudioActivity : Activity() {
         header("正在編輯：" + labelName(key, name))
         text("貼在：" + KeyStyles.nameOf(key), 14f, dim = true)
         text("👆 拖中間或上面的十字＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設、刪除", 14f).setPadding(0, px(8f), 0, px(4f))
+        section("對齊")
+        text("對齊${KeyStyles.nameOf(key)}（按鍵看得到的那一塊）", 13f, dim = true)
+        alignButtons(1, distribute = false) { op -> doAlign(key, listOf(LABEL + name), op) }
 
         // 顏色
         val row = LinearLayout(this).apply {

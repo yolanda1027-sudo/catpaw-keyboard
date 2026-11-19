@@ -25,6 +25,10 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
     var selectedId: String? = null
         set(v) { field = v; invalidate() }
 
+    /** 「排列」勾選到的元素（畫粉紅虛線框） */
+    var markedIds: Set<String> = emptySet()
+        set(v) { field = v; invalidate() }
+
     /** 目前所有圖案（主題工作室提供） */
     var decals: () -> List<Decal> = { emptyList() }
 
@@ -89,6 +93,7 @@ class KeyZoomView(context: Context, private val kv: CatKeyboardView) : View(cont
         if (kv.effectsActive()) postInvalidateOnAnimation()
 
         val els = elements()
+        for (el in els) if (el.decal.id in markedIds) geo(el.decal)?.let { handles.drawMark(c, el.decal, it) }
         val sel = els.firstOrNull { it.decal.id == selectedId }?.decal
         if (sel != null) geo(sel)?.let { handles.draw(c, sel, it, width.toFloat(), height.toFloat()) }
 
