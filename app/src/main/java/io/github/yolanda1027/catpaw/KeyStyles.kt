@@ -260,7 +260,7 @@ data class QuickBarStyle(
  */
 class KeyStyles(
     val map: Map<String, KeyStyle> = emptyMap(),
-    /** 注音／英文鍵盤的上方列 */
+    /** 注音頁的上方列（以前的主題檔就存在這裡） */
     val topBar: TopBarStyle? = null,
     val quick: QuickBarStyle? = null,
     /** 其他頁（符號、表情…）自己的上方列，key 是頁的代號 */
@@ -365,7 +365,8 @@ class KeyStyles(
 
         /** 鍵盤的每一頁 */
         val PAGES = listOf(
-            Page("", "注音／英文"),
+            Page("", "注音"),
+            Page("en", "英文"),
             Page("sym", "符號"),
             Page("kao", "顏文字"),
             Page("emo", "表情符號"),
@@ -376,7 +377,7 @@ class KeyStyles(
 
         fun pageTitle(page: String) = PAGES.firstOrNull { it.id == page }?.title ?: page
 
-        /** 代號加上頁面：注音／英文頁不加（跟以前存的一樣），其他頁加「頁/」 */
+        /** 代號加上頁面：注音頁不加（跟以前存的一樣），其他頁（含英文）加「頁/」 */
         fun scoped(page: String, id: String) = if (page.isEmpty()) id else "$page/$id"
 
         /** 代號是哪一頁的 */

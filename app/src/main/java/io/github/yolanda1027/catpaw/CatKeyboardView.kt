@@ -124,7 +124,7 @@ class CatKeyboardView(
     private val kbH get() = height - floatH - navInset
 
     /**
-     * 現在顯示的是哪一頁（KeyStyles.PAGES）："" 注音／英文、"sym" 符號…
+     * 現在顯示的是哪一頁（KeyStyles.PAGES）："" 注音、"en" 英文、"sym" 符號…
      * 背景圖、上方列、背景圖案都照這一頁自己的設定；按鍵本身用 Key.page 分。
      */
     var pageScope: String = ""

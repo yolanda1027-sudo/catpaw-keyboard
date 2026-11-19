@@ -54,6 +54,8 @@ object ThemeIO {
         val o = JSONObject()
         o.put("format", FORMAT)
         o.put("version", VERSION)
+        // 2 = 注音、英文分開設計（以前的主題檔，匯入時把共用的設計複製一份給英文頁）
+        o.put("pages", 2)
         o.put("name", name.ifBlank { "我的貓爪鍵盤" })
         o.put("theme", prefs.theme)
         o.put("colors", JSONObject()
@@ -250,6 +252,8 @@ object ThemeIO {
             Decals.save(prefs, list)
             if (broken > 0) warnings.add("有 $broken 個圖案的圖片壞掉了，略過")
         }
+        // 舊的主題檔：注音和英文以前共用設計，複製一份給英文頁，英文鍵盤才不會變回原本的樣子
+        if (o.optInt("pages", 1) < 2) ThemeStore.splitEnglish(prefs)
         return warnings
     }
 }

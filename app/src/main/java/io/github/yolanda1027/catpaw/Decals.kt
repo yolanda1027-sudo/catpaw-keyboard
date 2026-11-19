@@ -61,7 +61,7 @@ data class Decal(
     val isShape get() = img.startsWith(SHAPE)
     val shapeName get() = img.removePrefix(SHAPE)
     val fileName get() = img.removePrefix(FILE)
-    /** 貼在鍵盤背景上（哪一頁都算；注音／英文頁是 @bg，其他頁是「頁/@bg」） */
+    /** 貼在鍵盤背景上（哪一頁都算；注音頁是 @bg，其他頁是「頁/@bg」） */
     val onBackground get() = KeyStyles.baseOf(target) == BG
 
     /** 貼在哪一頁 */

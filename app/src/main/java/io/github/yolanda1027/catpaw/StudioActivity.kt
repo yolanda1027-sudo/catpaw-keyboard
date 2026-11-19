@@ -45,7 +45,9 @@ class StudioActivity : Activity() {
     /** 正在編輯哪一頁：zh 注音、en 英文、sym 符號、kao 顏文字、emo 表情、stk 我的貼圖、clip 剪貼簿、num 數字 */
     private var tab = "zh"
     /** 這一頁在主題裡的代號（注音、英文都是 ""） */
-    private val page get() = if (tab == "zh" || tab == "en") "" else tab
+    private val page get() = if (tab == "zh") "" else tab
+    /** 注音、英文頁有快捷符號列 */
+    private val hasQuick get() = page.isEmpty() || page == "en"
     /** 這一頁的鍵盤背景圖代號 */
     private val kbId get() = KeyStyles.scoped(page, KeyStyles.KEYBOARD)
 
@@ -367,7 +369,7 @@ class StudioActivity : Activity() {
         val p = page
         kv.pageScope = p
         kv.isChinese = tab != "en"
-        kv.quickItems = if (p.isEmpty() && prefs.quickBar) prefs.quickList() else emptyList()
+        kv.quickItems = if (hasQuick && prefs.quickBar) prefs.quickList() else emptyList()
         kv.symbolTabs = null
         kv.rows = when (tab) {
             "en" -> Layouts.ENGLISH
@@ -558,7 +560,7 @@ class StudioActivity : Activity() {
         kv.editTopBar = topSelected
         kv.editQuickBar = quickSelected
         // 快捷列在設定裡關著的話，改它的顏色時先顯示出來看
-        kv.quickItems = if (page.isEmpty() && (prefs.quickBar || quickSelected)) prefs.quickList() else emptyList()
+        kv.quickItems = if (hasQuick && (prefs.quickBar || quickSelected)) prefs.quickList() else emptyList()
         // 只改一顆鍵（或那顆鍵上的圖案）時，顯示放大的按鍵
         val zoomKey = selected?.takeIf { !bgSelected && !groupScope && animMode != GLOBAL }
         zoomBox.visibility = if (zoomKey != null) View.VISIBLE else View.GONE
@@ -600,7 +602,7 @@ class StudioActivity : Activity() {
             }
             button("🖼️ 這一頁的鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
             button("🔝 這一頁的上方列顏色") { topSelected = true; refresh() }
-            if (page.isEmpty()) button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
+            if (hasQuick) button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             val nAll = overviewCount()
             if (nAll > 0) {
@@ -796,7 +798,7 @@ class StudioActivity : Activity() {
     private fun goKey(id: String) {
         val page = KeyStyles.pageOf(id)
         val group = KeyStyles.baseOf(id).startsWith("@")
-        for (t in if (page.isEmpty()) listOf("zh", "en") else listOf(page)) {
+        for (t in listOf(if (page.isEmpty()) "zh" else page)) {
             switchTab(t)
             val k = kv.rows.flatten().firstOrNull { it.act != Act.GAP && (if (group) KeyStyles.groupIdOf(it) else KeyStyles.idOf(it)) == id }
             if (k != null) {
@@ -860,7 +862,7 @@ class StudioActivity : Activity() {
     private fun confirmAllPages(what: String, go: () -> Unit) {
         AlertDialog.Builder(this)
             .setTitle("套用到所有頁面？")
-            .setMessage("把${what}複製到每一頁（注音／英文、符號、顏文字、表情、我的貼圖、剪貼簿、數字），其他頁原本的這部分會被換掉。\n\n複製過去之後，每一頁還是可以各自再調。")
+            .setMessage("把${what}複製到每一頁（注音、英文、符號、顏文字、表情、我的貼圖、剪貼簿、數字），其他頁原本的這部分會被換掉。\n\n複製過去之後，每一頁還是可以各自再調。")
             .setPositiveButton("套用") { _, _ -> go() }
             .setNegativeButton("取消", null)
             .show()

@@ -21,7 +21,7 @@ data class Key(
     /** true = 照原樣打出來，不管大寫開沒開（長按選單選的字） */
     val exact: Boolean = false,
     /**
-     * 在哪一頁（見 KeyStyles.PAGES）："" = 注音／英文，"sym" 符號、"emo" 表情…
+     * 在哪一頁（見 KeyStyles.PAGES）："" = 注音，"en" 英文，"sym" 符號、"emo" 表情…
      * 每一頁的按鍵樣式分開存（代號前面加「頁/」），所以符號頁不會借到注音鍵盤的樣式。
      */
     val page: String = "",

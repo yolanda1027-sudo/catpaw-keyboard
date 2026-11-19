@@ -250,7 +250,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     /** 現在這一頁在主題裡的代號（見 KeyStyles.PAGES） */
     private fun pageScope(): String = when (page) {
-        Page.MAIN -> ""
+        Page.MAIN -> if (chinese) "" else "en"
         Page.SYMBOL -> if (symCat == Symbols.KAOMOJI) "kao" else "sym"
         Page.EMOJI -> if (emojiCat == MINE) "stk" else "emo"
         Page.CLIP -> "clip"
@@ -271,7 +271,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
             Page.NUMPAD -> Layouts.NUMPAD
         }.onPage(scope)
-        // 快捷符號列：只在注音／英文鍵盤顯示
+        // 快捷符號列：只在注音、英文鍵盤顯示
         v.quickItems = if (prefs.quickBar && page == Page.MAIN) prefs.quickList() else emptyList()
         // 最近使用的符號、表情：長按可以釘選、換位置；釘選的畫小圖釘
         v.itemActions = { k -> itemActionsFor(k) }

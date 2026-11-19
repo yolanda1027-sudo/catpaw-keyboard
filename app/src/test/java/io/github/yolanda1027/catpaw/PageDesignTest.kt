@@ -115,7 +115,7 @@ class PageDesignTest {
         for ((id, t) in StudioActivity.TABS) {
             buttons(a.window.decorView).first { it.text == t }.performClick()
             assertTrue("$t 頁沒有按鍵", kv.rows.flatten().any { it.act != Act.GAP })
-            val page = if (id == "zh" || id == "en") "" else id
+            val page = if (id == "zh") "" else id
             assertEquals(page, kv.pageScope)
             assertTrue(kv.rows.flatten().all { it.page == page })
             shot(a, "studio-tab-$id")
@@ -188,7 +188,7 @@ class PageDesignTest {
             if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
         }
         walk(a.window.decorView)
-        for (want in listOf("注音／英文頁", "所有注音鍵", "底圖（照圖片形狀）、文字顏色", "Enter 鍵", "圖案 1 個",
+        for (want in listOf("注音頁", "所有注音鍵", "底圖（照圖片形狀）、文字顏色", "Enter 鍵", "圖案 1 個",
                 "符號頁", "刪除鍵", "剪貼簿頁", "鍵盤背景", "表情符號頁", "上方列")) {
             assertTrue("總覽裡少了「$want」：$texts", texts.any { it.contains(want) })
         }
@@ -253,5 +253,66 @@ class PageDesignTest {
         // 剪貼簿頁：有「所有剪貼簿項目」
         buttons(a.window.decorView).first { it.text == "剪貼簿" }.performClick()
         assertTrue(buttons(a.window.decorView).any { it.text.contains("所有剪貼簿項目") })
+    }
+
+    /** 注音、英文各改各的（同一顆空白鍵在兩頁大小不一樣） */
+    @Test fun zhuyinAndEnglishAreSeparatePages() {
+        val zhSpace = Layouts.ZHUYIN.flatten().first { it.act == Act.SPACE }
+        val enSpace = Layouts.ENGLISH.onPage("en").flatten().first { it.act == Act.SPACE }
+        assertEquals("space", KeyStyles.idOf(zhSpace))
+        assertEquals("en/space", KeyStyles.idOf(enSpace))
+        val ks = KeyStyles(mapOf("space" to red, "en/space" to blue))
+        assertEquals(red, ks.resolve(zhSpace))
+        assertEquals(blue, ks.resolve(enSpace))
+        // 打字時：英文鍵盤是英文頁
+        val s = Robolectric.buildService(CatImeService::class.java).create().get()
+        val kv = s.onCreateInputView() as CatKeyboardView
+        CatImeService::class.java.getDeclaredField("chinese").apply { isAccessible = true }.setBoolean(s, false)
+        CatImeService::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }.invoke(s)
+        assertEquals("en", kv.pageScope)
+        assertTrue(kv.rows.flatten().all { it.page == "en" })
+    }
+
+    /** 以前注音和英文共用設計：拆開時複製一份給英文頁（只複製英文鍵盤用得到的），英文鍵盤樣子不變 */
+    @Test fun splitCopiesSharedDesignToEnglish() {
+        val p = Prefs(ctx)
+        KeyStyles.save(p, KeyStyles(mapOf(
+            "space" to red.copy(order = listOf("label:main", "d1")),
+            "@char" to blue,
+            "@zhuyin" to blue,
+            "@keyboard" to KeyStyle(bgImage = ImageFill("decal_bg.png")),
+        ), topBar = TopBarStyle(bg = Color.BLACK)))
+        Decals.save(p, listOf(Decal("d1", "space", "shape:heart"), Decal("bg1", Decal.BG, "shape:star"), Decal("z1", "zy:ㄅ", "shape:paw")))
+        ThemeStore.splitEnglish(p)
+        val ks = KeyStyles.load(p)
+        assertEquals(Color.RED, ks.map["en/space"]!!.bg)
+        assertEquals(blue, ks.map["en/@char"])
+        assertNull("注音鍵的設定不用複製", ks.map["en/@zhuyin"])
+        assertEquals("decal_bg.png", ks.keyboardImageFor("en")!!.img)
+        assertEquals(Color.BLACK, ks.topBarFor("en")!!.bg)
+        val ds = Decals.load(p)
+        val enHeart = ds.single { it.target == "en/space" }
+        assertTrue(enHeart.id != "d1")
+        assertEquals("上下順序換成英文頁那份的 id", listOf("label:main", enHeart.id), ks.map["en/space"]!!.order)
+        assertEquals(1, ds.count { it.target == Decal.bgFor("en") })
+        assertTrue(ds.none { it.target == "en/zy:ㄅ" })
+        // 原本注音頁的不動；再拆一次不會重複
+        assertEquals(Color.RED, ks.map["space"]!!.bg)
+        ThemeStore.splitEnglish(p)
+        assertEquals(ds.size, Decals.load(p).size)
+    }
+
+    /** 舊的主題檔（沒有分注音、英文）匯入：英文頁也有一份；新的主題檔不會多複製 */
+    @Test fun oldThemeFileImportSplits() {
+        val old = org.json.JSONObject().put("format", ThemeIO.FORMAT).put("version", 1).put("name", "舊主題").put("theme", "classic")
+            .put("keyStyles", org.json.JSONObject().put("space", org.json.JSONObject().put("bg", "#FF0000")))
+        val p = Prefs(ctx)
+        ThemeIO.apply(ctx, p, old)
+        assertNotNull(KeyStyles.load(p).map["en/space"])
+        val fresh = ThemeIO.parse(ThemeIO.export(ctx, p, "新", ThemeIO.Part.values().toSet()))!!
+        assertEquals(2, fresh.optInt("pages"))
+        KeyStyles.save(p, KeyStyles(mapOf("space" to red)))
+        ThemeIO.apply(ctx, p, fresh.put("keyStyles", org.json.JSONObject().put("space", org.json.JSONObject().put("bg", "#FF0000"))))
+        assertNull("新格式的主題檔：英文頁沒設計就是沒設計", KeyStyles.load(p).map["en/space"])
     }
 }

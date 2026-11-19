@@ -321,15 +321,76 @@ object ThemeStore {
      * 照使用者的選擇：這些清掉，內建主題回到原廠的樣子（之後再自己匯入主題檔）。
      */
     fun migrate(ctx: Context, live: Prefs) {
-        if (live.sp.getInt("theme_store", 0) >= 1) return
-        val base = live.theme
-        val e = live.sp.edit()
-        for (k in LOOK_KEYS) if (k != "theme") e.remove(k)
-        e.putString("active_theme", if (isBuiltIn(base)) base else "classic")
-        e.putInt("theme_store", 1)
-        e.commit()
-        // 舊版的功能鍵貼圖（files/sticker_enter.png 這種）
-        for (slot in StickerSlot.values()) File(ctx.filesDir, "sticker_${slot.id}.png").delete()
-        cleanupImages(ctx)
+        if (live.sp.getInt("theme_store", 0) < 1) {
+            val base = live.theme
+            val e = live.sp.edit()
+            for (k in LOOK_KEYS) if (k != "theme") e.remove(k)
+            e.putString("active_theme", if (isBuiltIn(base)) base else "classic")
+            e.putInt("theme_store", 1)
+            e.commit()
+            // 舊版的功能鍵貼圖（files/sticker_enter.png 這種）
+            for (slot in StickerSlot.values()) File(ctx.filesDir, "sticker_${slot.id}.png").delete()
+            cleanupImages(ctx)
+        }
+        if (live.sp.getInt("theme_store", 0) < 2) {
+            splitEnglishEverywhere(ctx, live)
+            live.sp.edit().putInt("theme_store", 2).commit()
+        }
+    }
+
+    // ---------- 注音、英文拆成兩頁 ----------
+
+    /**
+     * 以前注音和英文是同一頁（共用按鍵樣式、背景、上方列、圖案），現在各改各的。
+     * 把英文鍵盤上用得到的設計複製一份到英文頁（en/…），英文鍵盤的樣子才不會變。
+     * 英文頁已經有自己的設計就不動。
+     */
+    fun splitEnglish(p: Prefs) {
+        val ks = KeyStyles.load(p)
+        val ds = Decals.load(p)
+        if (ks.map.keys.any { KeyStyles.pageOf(it) == "en" } || ks.pageTops.containsKey("en") || ds.any { KeyStyles.pageOf(it.target) == "en" }) return
+        // 英文鍵盤上有的代號（單顆、整類）＋背景圖
+        val enIds = Layouts.ENGLISH.flatten().filter { it.act != Act.GAP }
+            .flatMap { listOf(KeyStyles.idOf(it), KeyStyles.groupIdOf(it)) }.toSet() + KeyStyles.KEYBOARD
+        fun en(id: String) = KeyStyles.scoped("en", id)
+        // 圖案：背景上的、英文鍵盤有的鍵上的，各複製一份（新的 id）
+        val idMaps = HashMap<String, MutableMap<String, String>>()
+        val copies = ArrayList<Decal>()
+        for (d in ds) {
+            val target = when {
+                d.target == Decal.BG -> Decal.bgFor("en")
+                KeyStyles.pageOf(d.target).isEmpty() && d.target in enIds -> en(d.target)
+                else -> null
+            } ?: continue
+            val n = d.copy(id = Decals.newId(), target = target)
+            idMaps.getOrPut(target) { HashMap() }[d.id] = n.id
+            copies.add(n)
+        }
+        val m = LinkedHashMap(ks.map)
+        for ((id, st) in ks.map) {
+            if (KeyStyles.pageOf(id).isNotEmpty() || id !in enIds) continue
+            val target = en(id)
+            // 按鍵上字和圖案的上下順序：換成英文頁那份圖案的 id
+            val map = idMaps[target]
+            m[target] = if (map != null && st.order != null) st.copy(order = st.order.map { map[it] ?: it }) else st
+        }
+        var out = KeyStyles(m, ks.topBar, ks.quick, ks.pageTops)
+        ks.topBar?.let { out = out.withTopBarFor("en", it) }
+        KeyStyles.save(p, out)
+        if (copies.isNotEmpty()) Decals.save(p, ds + copies)
+        p.sp.edit().commit()
+    }
+
+    /** 手機裡所有主題（現在用的、存起來的、原本的樣子）都拆一次 */
+    private fun splitEnglishEverywhere(ctx: Context, live: Prefs) {
+        splitEnglish(live)
+        dir(ctx).listFiles { f -> f.name.endsWith(".json") }.orEmpty().forEach { f ->
+            val o = try { JSONObject(f.readText()) } catch (_: Exception) { null } ?: return@forEach
+            for (k in listOf("snap", "origin")) {
+                val snap = o.optJSONObject(k) ?: continue
+                o.put(k, withTemp(ctx, snap) { t -> splitEnglish(t); snapshot(t) })
+            }
+            f.writeText(o.toString())
+        }
     }
 }

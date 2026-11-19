@@ -346,4 +346,19 @@ class ThemeStoreTest {
         assertTrue(b.isFinishing)
         assertEquals("從桌面圖示打開的：不用叫設定出來", null, org.robolectric.Shadows.shadowOf(b).nextStartedActivity)
     }
+
+    /** 升級到注音、英文分開：手機裡的主題（現在用的、存起來的、原本的樣子）都複製一份給英文頁 */
+    @Test fun migrationSplitsEnglishInStoredThemes() {
+        val p = live()
+        p.sp.edit().putInt("theme_store", 1).commit()
+        KeyStyles.save(p, KeyStyles.EMPTY.with("space", KeyStyle(bg = Color.RED)))
+        val id = ThemeStore.create(ctx, p, "舊主題", ThemeStore.snapshot(p)) // 存起來的（也有原本的樣子）
+        ThemeStore.migrate(ctx, p)
+        assertEquals(2, p.sp.getInt("theme_store", 0))
+        assertEquals(Color.RED, KeyStyles.load(p).map["en/space"]!!.bg)
+        for (snap in listOf(ThemeStore.load(ctx, p, id), ThemeStore.origin(ctx, id)!!)) {
+            val ks = ThemeStore.withTemp(ctx, snap) { KeyStyles.load(it) }
+            assertEquals(Color.RED, ks.map["en/space"]!!.bg)
+        }
+    }
 }
