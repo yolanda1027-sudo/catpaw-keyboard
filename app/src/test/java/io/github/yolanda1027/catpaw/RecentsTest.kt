@@ -53,7 +53,7 @@ class RecentsTest {
         kv.rows = Emojis.rows(items)
         kv.symbolTabs = listOf(null, "😀")
         kv.symbolTab = 0
-        kv.itemActions = { k -> if (k.text == "🐱") listOf("cancel" to "取消", "unpin" to "解除釘選", "left" to "往前", "right" to "往後", "remove" to "刪除") else listOf("cancel" to "取消", "pin" to "釘選", "remove" to "刪除") }
+        kv.itemActions = { k -> if (k.text == "🐱") listOf("unpin" to "解除釘選", "left" to "往前", "cancel" to "取消", "right" to "往後", "remove" to "刪除") else listOf("pin" to "釘選", "cancel" to "取消", "remove" to "刪除") }
         kv.isPinned = { k -> k.text == "🐱" }
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)

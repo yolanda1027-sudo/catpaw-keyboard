@@ -199,6 +199,7 @@ class CatKeyboardView(
             popupSel = opts.default
             popupRect = popupRectFor(kr, opts)
             popupAnchorX = lastMoveX
+            popupMoved = false
             previewLabel = null
         } else {
             listener?.onKey(kr.key, true)
@@ -1332,6 +1333,10 @@ class CatKeyboardView(
     private var lastMoveX = 0f
     /** 動作選單跳出來那時手指的位置 */
     private var popupAnchorX = 0f
+    /** 動作選單跳出來之後，手指有沒有明顯移動過（還沒的話停在「取消」） */
+    private var popupMoved = false
+    /** 手指移動超過這麼多（dp）才算「滑開」 */
+    private val POPUP_SLOP = 12f
 
     // ---------- 快捷符號列 ----------
     /** 快捷符號列的內容（空的＝不顯示這一排） */
@@ -1678,13 +1683,11 @@ class CatKeyboardView(
                 }
                 if (o != null && i >= 0) {
                     val optW = popupRect.width() / o.items.size
-                    val sel = if (o.actions != null) {
-                        // 動作選單：看手指從跳出選單時「滑了多少」，不是手指在哪一格。
-                        // 選單靠到螢幕邊邊、沒辦法對準手指時，一開始停在「取消」，手指稍微抖一下也不會跳走
-                        (o.default + kotlin.math.round((e.getX(i) - popupAnchorX) / optW).toInt()).coerceIn(0, o.items.size - 1)
-                    } else {
-                        ((e.getX(i) - popupRect.left) / optW).toInt().coerceIn(0, o.items.size - 1)
-                    }
+                    val under = ((e.getX(i) - popupRect.left) / optW).toInt().coerceIn(0, o.items.size - 1)
+                    // 動作選單：手指還沒明顯移動就停在「取消」（選單靠到螢幕邊邊、對不準手指時也一樣）；
+                    // 一滑開就選手指正上方那一格，靠邊邊長按也每一格都滑得到
+                    if (o.actions != null && !popupMoved && kotlin.math.abs(e.getX(i) - popupAnchorX) > POPUP_SLOP * dp) popupMoved = true
+                    val sel = if (o.actions != null && !popupMoved) o.default else under
                     if (sel != popupSel) {
                         popupSel = sel
                         haptics.perform(this, prefs)

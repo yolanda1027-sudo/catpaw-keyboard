@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -123,6 +124,14 @@ class ClipPinOrderTest {
         // 靠左邊長按：選單碰到螢幕邊緣沒辦法對準手指，一樣先停在取消
         longPress(60f, 8f)
         assertEquals(listOf("留著" to false), state())
+        // 靠右邊長按、手指往左滑一點：選到手指正上方那格（右邊的刪除旁邊是取消，再左是釘選）
+        val edge = longPress(1040f, -8f)
+        assertTrue("選單整個在畫面裡", edge.right <= 1080.5f)
+        assertEquals(listOf("留著" to false), state())
+        // 靠左邊長按、往右滑開：手指在最左邊那格上面＝釘選（以前滑不到）
+        longPress(30f, 40f)
+        assertEquals(listOf("留著" to true), state())
+        clips.action("unpin", "留著")
         // 往左滑一格：釘選
         longPress(540f, -optW)
         assertEquals(listOf("留著" to true), state())
