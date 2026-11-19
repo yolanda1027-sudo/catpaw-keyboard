@@ -315,4 +315,34 @@ class PageDesignTest {
         ThemeIO.apply(ctx, p, fresh.put("keyStyles", org.json.JSONObject().put("space", org.json.JSONObject().put("bg", "#FF0000"))))
         assertNull("新格式的主題檔：英文頁沒設計就是沒設計", KeyStyles.load(p).map["en/space"])
     }
+
+    /** 英文頁打字：按著的時候鍵盤重新整理（例如前一個字剛送出），放大的字和按的鍵不能被弄丟 */
+    @Test fun englishPressSurvivesRefresh() {
+        val s = Robolectric.buildService(CatImeService::class.java).create().get()
+        val kv = s.onCreateInputView() as CatKeyboardView
+        CatImeService::class.java.getDeclaredField("chinese").apply { isAccessible = true }.setBoolean(s, false)
+        val refresh = CatImeService::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }
+        refresh.invoke(s)
+        kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+        val rowsBefore = kv.rows
+        refresh.invoke(s)
+        assertTrue("同一頁重新整理：拿到同一份按鍵清單", kv.rows === rowsBefore)
+        fun f(n: String) = CatKeyboardView::class.java.getDeclaredField(n).apply { isAccessible = true }
+        val kr = (f("keyRects").get(kv) as List<*>).first {
+            (it!!.javaClass.getDeclaredField("key").apply { isAccessible = true }.get(it) as Key).label == "a"
+        }!!
+        val r = kr.javaClass.getDeclaredField("rect").apply { isAccessible = true }.get(kr) as android.graphics.RectF
+        val t0 = android.os.SystemClock.uptimeMillis()
+        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, r.centerX(), r.centerY() + kv.floatH, 0))
+        assertNotNull(f("pressed").get(kv))
+        assertEquals("a", f("previewLabel").get(kv))
+        // 按著的時候重新整理（就算拿到內容一樣、但不是同一份的清單）
+        refresh.invoke(s)
+        kv.rows = Layouts.ENGLISH.map { row -> row.map { it.copy(page = "en") } }
+        assertNotNull("按著的鍵不能被弄丟", f("pressed").get(kv))
+        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 60, android.view.MotionEvent.ACTION_UP, r.centerX(), r.centerY() + kv.floatH, 0))
+        assertNull("放開：放大的字收起來", f("previewLabel").get(kv))
+        assertNull(f("pressed").get(kv))
+    }
 }

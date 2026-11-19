@@ -45,7 +45,9 @@ class CatKeyboardView(
 
     var rows: List<List<Key>> = Layouts.ZHUYIN
         set(v) {
-            if (field !== v) {
+            // 比內容不比是不是同一份：一樣的按鍵就不要重排、不要清掉正在按的鍵
+            //（以前英文頁每打一個字都換一份一樣的清單，放大的字收不回去、動畫卡住、也變卡）
+            if (field !== v && field != v) {
                 field = v
                 pressed = null
                 requestLayout()

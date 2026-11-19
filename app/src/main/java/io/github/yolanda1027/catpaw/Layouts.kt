@@ -152,6 +152,18 @@ object Layouts {
     val emojiBottom: List<Key> = pageBottom.map { if (it.act == Act.TO_EMOJI) toSymbol.copy(weight = 1f, label = "符號") else it }
 }
 
-/** 這幾排按鍵都標成在某一頁 */
-fun List<List<Key>>.onPage(page: String): List<List<Key>> =
-    if (page.isEmpty()) this else map { row -> row.map { it.copy(page = page) } }
+/** 這幾排按鍵都標成在某一頁（同一份清單、同一頁會拿到同一份結果，不會每次都重新複製） */
+fun List<List<Key>>.onPage(page: String): List<List<Key>> {
+    if (page.isEmpty()) return this
+    synchronized(onPageCache) {
+        val byPage = onPageCache.getOrPut(this) { HashMap() }
+        byPage[page]?.let { return it }
+        val out = map { row -> row.map { it.copy(page = page) } }
+        if (onPageCache.size > 200) onPageCache.clear() // 剪貼簿、我的貼圖這種每次都是新清單的，不要一直累積
+        byPage[page] = out
+        return out
+    }
+}
+
+/** onPage 的結果：用清單本身（不是內容）當 key */
+private val onPageCache = java.util.IdentityHashMap<List<List<Key>>, HashMap<String, List<List<Key>>>>()
