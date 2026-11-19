@@ -102,7 +102,7 @@ class StudioActivity : Activity() {
             // 快捷符號列有開的話預覽也放上去，看起來才跟實際打字時一樣
             quickItems = if (prefs.quickBar) prefs.quickList() else emptyList()
             editPicker = { key ->
-                if (selected?.let { KeyStyles.idOf(it) } != KeyStyles.idOf(key)) groupScope = false
+                groupScope = false // 點按鍵＝只改這一顆
                 selected = key
                 bgSelected = false
                 topSelected = false
@@ -581,6 +581,23 @@ class StudioActivity : Activity() {
             text("正在設計：${TABS.first { it.first == tab }.second}頁", 18f, bold = true).setPadding(0, px(10f), 0, 0)
             text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面那一列），就可以開始改它的樣子。每一頁（上面的分頁）各自設計；沒設計過的頁是主題原本的樣子。", 15f).setPadding(0, px(8f), 0, px(8f))
             text("改好按右上角「儲存」才會套用到鍵盤上。想換整體主題、字體，到「${getString(R.string.app_name)}」設定的外觀頁。", 13f, dim = true)
+            // 一整類一起改：只列這一頁有的、而且不只一顆的類別
+            // （注音和英文是同一頁、共用同一類：兩個鍵盤一起算，例如注音頁只有「，」，但英文的字母也是這一類）
+            val pageKeys = kv.rows.flatten() + if (page.isEmpty()) (if (tab == "en") Layouts.ZHUYIN else Layouts.ENGLISH).flatten() else emptyList()
+            val groups = listOf(KeyStyles.Group.ZHUYIN, KeyStyles.Group.CHAR, KeyStyles.Group.FUNC, KeyStyles.Group.CLIP)
+                .mapNotNull { g -> pageKeys.filter { it.act != Act.GAP && KeyStyles.groupOf(it) == g }.takeIf { it.size > 1 }?.let { g to it.first() } }
+            if (groups.isNotEmpty()) {
+                section("一整類一起改")
+                for ((g, first) in groups) {
+                    val done = styles.map[KeyStyles.groupIdOf(first)] != null
+                    button("✏️ ${g.title}" + if (done) "（已設計）" else "") {
+                        selected = first
+                        groupScope = true
+                        refresh()
+                    }
+                }
+                section("其他")
+            }
             button("🖼️ 這一頁的鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
             button("🔝 這一頁的上方列顏色") { topSelected = true; refresh() }
             if (page.isEmpty()) button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
@@ -600,21 +617,9 @@ class StudioActivity : Activity() {
         val selId = KeyStyles.idOf(key)
         kv.editHighlight = if (groupScope) { k -> KeyStyles.groupOf(k) == group } else { k -> KeyStyles.idOf(k) == selId }
 
-        text("正在編輯：" + KeyStyles.nameOf(key), 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
-
-        // 空白鍵、Enter 本來就只有一顆，不用選範圍
-        if (group == KeyStyles.Group.ZHUYIN || group == KeyStyles.Group.CHAR || group == KeyStyles.Group.FUNC) {
-            val rg = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
-            val one = RadioButton(this).apply { id = View.generateViewId(); text = "只改這一顆"; isChecked = !groupScope }
-            val all = RadioButton(this).apply { id = View.generateViewId(); text = group.title; isChecked = groupScope }
-            rg.addView(one)
-            rg.addView(all)
-            rg.setOnCheckedChangeListener { _, id ->
-                groupScope = id == all.id
-                refresh()
-            }
-            panel.addView(rg)
-        }
+        // 點按鍵＝只改這一顆；一整類一起改是從工作室首頁的「一整類一起改」進來的
+        text("正在編輯：" + (if (groupScope) group.title else KeyStyles.nameOf(key)), 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        if (groupScope) text("改這裡，這一頁的${group.title.removePrefix("所有")}會一起變（單顆另外改過的地方還是以單顆為準）。", 13f, dim = true)
         val cid = currentId()!!
         if (styles.map[cid] != null || decals.any { it.target == cid }) {
             button("📋 這${if (groupScope) "一類" else "顆鍵"}的設計套用到所有頁面") {
@@ -1581,7 +1586,7 @@ class StudioActivity : Activity() {
         borderEditor(
             style = eff.borderStyle, width = eff.borderWidth, inset = eff.borderInset,
             customized = cur.borderStyle != null || cur.borderWidth != null || cur.borderInset != null,
-            hint = if (noBorder) "💡 這顆鍵現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。" else null,
+            hint = if (noBorder) "💡 這${if (groupScope) "一類" else "顆鍵"}現在沒有外框，先在上面選一個外框顏色，樣式和粗細才看得到。" else null,
             onStyle = { s -> update({ it.copy(borderStyle = s) }) },
             onWidth = { w -> update({ it.copy(borderWidth = w) }, rebuild = false) },
             onInset = { d -> update({ it.copy(borderInset = d) }, rebuild = false) },

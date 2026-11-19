@@ -143,7 +143,9 @@ class KeyShapeImageTest {
         kv.editPicker!!.invoke(Layouts.ZHUYIN[1][0])
         ShadowLooper.idleMainLooper()
         val root = a.window.decorView
-        (find(root) { it is android.widget.RadioButton && it.text == "所有注音鍵" } as android.widget.RadioButton).performClick()
+        StudioActivity::class.java.getDeclaredMethod("back").apply { isAccessible = true }.invoke(a) // 回首頁
+        ShadowLooper.idleMainLooper()
+        (find(root) { it is android.widget.Button && it.text.contains("所有注音鍵") } as android.widget.Button).performClick()
         ShadowLooper.idleMainLooper()
         StudioActivity::class.java.declaredMethods.first { it.name == "setFill" }.apply { isAccessible = true }.invoke(a, "@zhuyin", ImageFill(name))
         ShadowLooper.idleMainLooper()

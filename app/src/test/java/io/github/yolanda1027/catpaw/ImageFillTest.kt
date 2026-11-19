@@ -131,11 +131,13 @@ class ImageFillTest {
         val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
         val root = a.window.decorView
 
-        // ① 點 ㄅ → 改「所有注音鍵」→ 上傳照片當底圖
+        // ① 首頁的「一整類一起改」→ 所有注音鍵 → 上傳照片當底圖
         val bo = Layouts.ZHUYIN[0][0]
         kv.editPicker!!.invoke(bo)
         ShadowLooper.idleMainLooper()
-        (find(root) { it is android.widget.RadioButton && it.text == "所有注音鍵" } as android.widget.RadioButton).performClick()
+        StudioActivity::class.java.getDeclaredMethod("back").apply { isAccessible = true }.invoke(a) // 回首頁
+        ShadowLooper.idleMainLooper()
+        (find(root) { it is android.widget.Button && it.text.contains("所有注音鍵") } as android.widget.Button).performClick()
         ShadowLooper.idleMainLooper()
         button(root, "📷 上傳圖片").performClick()
         var req = shadowOf(a).nextStartedActivityForResult

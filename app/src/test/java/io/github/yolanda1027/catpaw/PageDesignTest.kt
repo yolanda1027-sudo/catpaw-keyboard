@@ -215,4 +215,36 @@ class PageDesignTest {
         assertEquals(null, field("selected").get(a))
         assertTrue(field("overview").getBoolean(a))
     }
+
+    /** 點按鍵只改那一顆；一整類一起改從首頁進去 */
+    @Test fun groupEditingFromHome() {
+        val a = studio()
+        val cls = StudioActivity::class.java
+        fun field(n: String) = cls.getDeclaredField(n).apply { isAccessible = true }
+        val kv = field("kv").get(a) as CatKeyboardView
+        // 首頁：注音頁有這三類可以一起改
+        val labels = buttons(a.window.decorView).map { it.text.toString() }
+        for (g in listOf("所有注音鍵", "所有英文、數字、符號鍵", "所有功能鍵")) assertTrue("首頁少了 $g：$labels", labels.any { it.contains(g) })
+        // 點單顆鍵：沒有「只改這一顆／所有注音鍵」的選項
+        kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])
+        assertTrue(!(field("groupScope").getBoolean(a)))
+        val radios = ArrayList<String>()
+        fun walk(v: View) {
+            if (v is android.widget.RadioButton) radios.add(v.text.toString())
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(a.window.decorView)
+        assertTrue("單顆鍵不該有範圍選項：$radios", radios.none { it == "只改這一顆" || it == "所有注音鍵" })
+        // 回首頁、點「所有注音鍵」：改整類
+        cls.getDeclaredMethod("back").apply { isAccessible = true }.invoke(a)
+        buttons(a.window.decorView).first { it.text.contains("所有注音鍵") }.performClick()
+        assertTrue(field("groupScope").getBoolean(a))
+        shot(a, "studio-group-zhuyin")
+        // 這時點鍵盤上的任何一顆（包括同一顆）：變成只改那顆
+        kv.editPicker!!.invoke(field("selected").get(a) as Key)
+        assertTrue(!(field("groupScope").getBoolean(a)))
+        // 剪貼簿頁：有「所有剪貼簿項目」
+        buttons(a.window.decorView).first { it.text == "剪貼簿" }.performClick()
+        assertTrue(buttons(a.window.decorView).any { it.text.contains("所有剪貼簿項目") })
+    }
 }
