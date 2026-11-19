@@ -194,6 +194,7 @@ class CatKeyboardView(
             popupKr = kr
             popupSel = opts.default
             popupRect = popupRectFor(kr, opts)
+            popupAnchorX = lastMoveX
             previewLabel = null
         } else {
             listener?.onKey(kr.key, true)
@@ -242,13 +243,14 @@ class CatKeyboardView(
     }
 
     private fun popupRectFor(kr: KeyRect, o: PopupOptions): RectF {
-        // 動作選單的字比較多（「釘選」「往前」），每格寬一點；
+        // 動作選單的字比較多（「釘選」「解除釘選」），每格寬一點（但不要太寬，「取消」才對得準手指）；
         // 但不能比「螢幕寬 ÷ 選項數」寬（剪貼簿那種整排寬的鍵，選單才放得進畫面）
         val raw = if (o.actions != null) max(kr.rect.width(), keyH * 1.3f) else kr.rect.width()
-        val optW = if (o.actions != null) min(raw, min(keyH * 2.4f, width.toFloat() / o.items.size)) else min(raw, width.toFloat() / o.items.size)
+        val optW = if (o.actions != null) min(raw, min(keyH * 1.75f, width.toFloat() / o.items.size)) else min(raw, width.toFloat() / o.items.size)
         val w = optW * o.items.size
-        // 預設的選項剛好在按鍵正上方
-        var left = kr.rect.centerX() - optW * (o.default + 0.5f)
+        // 預設的選項剛好在手指正上方（動作選單：剪貼簿那種整排寬的鍵，要對準手指，不是對準鍵的中間）
+        val anchor = if (o.actions != null) downX else kr.rect.centerX()
+        var left = anchor - optW * (o.default + 0.5f)
         left = left.coerceIn(0f, max(0f, width - w))
         val bottom = kr.rect.top + keyH * 0.45f
         val top = max(-floatH, bottom - keyH * 1.15f)
@@ -1322,6 +1324,10 @@ class CatKeyboardView(
     private val tabW get() = width * 0.2f
 
     private var downX = 0f
+    /** 手指最後在哪（跳出長按選單時記下來，之後用「滑了多少」選） */
+    private var lastMoveX = 0f
+    /** 動作選單跳出來那時手指的位置 */
+    private var popupAnchorX = 0f
 
     // ---------- 快捷符號列 ----------
     /** 快捷符號列的內容（空的＝不顯示這一排） */
@@ -1615,6 +1621,7 @@ class CatKeyboardView(
                     val firstTop = topH + quickH + padTop
                     val lastBottom = firstTop + keyAreaH - 1f
                     downX = x
+                    lastMoveX = x
                     val hit = keyAt(x, y.coerceIn(firstTop, lastBottom))
                     if (hit != null) press(hit, e.getPointerId(i))
                     // 符號／表情的最後一頁常常下面是空的：按在空白處也要能左右滑翻頁
@@ -1629,6 +1636,7 @@ class CatKeyboardView(
             MotionEvent.ACTION_MOVE -> {
                 val o = popup
                 val i = e.findPointerIndex(pressedPointer)
+                if (i >= 0 && o == null) lastMoveX = e.getX(i)
                 // 符號鍵盤：左右滑換頁（整頁跟著手指走）
                 if (paging) {
                     val pi = e.findPointerIndex(pagingPointer)
@@ -1666,7 +1674,13 @@ class CatKeyboardView(
                 }
                 if (o != null && i >= 0) {
                     val optW = popupRect.width() / o.items.size
-                    val sel = ((e.getX(i) - popupRect.left) / optW).toInt().coerceIn(0, o.items.size - 1)
+                    val sel = if (o.actions != null) {
+                        // 動作選單：看手指從跳出選單時「滑了多少」，不是手指在哪一格。
+                        // 選單靠到螢幕邊邊、沒辦法對準手指時，一開始停在「取消」，手指稍微抖一下也不會跳走
+                        (o.default + kotlin.math.round((e.getX(i) - popupAnchorX) / optW).toInt()).coerceIn(0, o.items.size - 1)
+                    } else {
+                        ((e.getX(i) - popupRect.left) / optW).toInt().coerceIn(0, o.items.size - 1)
+                    }
                     if (sel != popupSel) {
                         popupSel = sel
                         haptics.perform(this, prefs)

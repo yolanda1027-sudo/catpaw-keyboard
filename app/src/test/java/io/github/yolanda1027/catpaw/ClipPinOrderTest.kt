@@ -102,12 +102,34 @@ class ClipPinOrderTest {
         kv.measure(android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         val r = kv.keyRectOf(kv.rows[0][0])!!
-        val t0 = android.os.SystemClock.uptimeMillis()
         val y = r.centerY() + kv.floatH
-        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, r.centerX(), y, 0))
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(Prefs(ctx).longPressMs + 50L, java.util.concurrent.TimeUnit.MILLISECONDS)
-        kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 900, android.view.MotionEvent.ACTION_UP, r.centerX(), y, 0))
-        assertEquals("長按後直接放開：沒釘選、沒刪除", listOf("留著" to false), clips.all().map { it.text to it.pinned })
+        fun popupRect() = CatKeyboardView::class.java.getDeclaredField("popupRect").apply { isAccessible = true }.get(kv) as android.graphics.RectF
+        /** 在 x 長按，手指往右移 dx 再放開；回傳跳出選單時的位置 */
+        fun longPress(x: Float, dx: Float): android.graphics.RectF {
+            val t0 = android.os.SystemClock.uptimeMillis()
+            kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0, android.view.MotionEvent.ACTION_DOWN, x, y, 0))
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(Prefs(ctx).longPressMs + 50L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            val rect = android.graphics.RectF(popupRect())
+            kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 800, android.view.MotionEvent.ACTION_MOVE, x + dx, y, 0))
+            kv.dispatchTouchEvent(android.view.MotionEvent.obtain(t0, t0 + 900, android.view.MotionEvent.ACTION_UP, x + dx, y, 0))
+            return rect
+        }
+        fun state() = clips.all().map { it.text to it.pinned }
+        // 左邊長按：「取消」就在手指正上方；手指抖一下（10px）放開也是取消
+        val rect = longPress(200f, 10f)
+        val optW = rect.width() / 3
+        assertEquals("取消在手指正上方", 200f, rect.left + optW / 2, 1f)
+        assertEquals(listOf("留著" to false), state())
+        // 中間長按：一樣對準手指
+        val mid = longPress(540f, -10f)
+        assertEquals(540f, mid.left + mid.width() / 6, 1f)
+        assertEquals(listOf("留著" to false), state())
+        // 靠右邊長按：選單碰到螢幕邊緣沒辦法對準手指，一樣先停在取消
+        longPress(1040f, -8f)
+        assertEquals(listOf("留著" to false), state())
+        // 往右滑一格：釘選
+        longPress(300f, optW)
+        assertEquals(listOf("留著" to true), state())
     }
 
     @Test fun settingsArrowsReorderPinned() {
