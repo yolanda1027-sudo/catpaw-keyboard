@@ -399,6 +399,22 @@ class SettingsActivity : Activity() {
             section(g)
             for (p in pages.filter { it.listed && it.group == g }) menuItem(p)
         }
+
+        // 版本號：回報問題、確認有沒有更新到最新版時看這裡
+        root.addView(TextView(this).apply {
+            text = versionText()
+            textSize = 13f
+            alpha = 0.55f
+            gravity = Gravity.CENTER
+            setTextIsSelectable(true)
+            setPadding(0, (24 * dp).toInt(), 0, 0)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+
+    /** 「貓爪鍵盤 測試版　版本 0.51.0（建置 111）」 */
+    internal fun versionText(): String {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        return "${getString(R.string.app_name)}　版本 ${info.versionName}（建置 ${info.longVersionCode}）"
     }
 
     private fun openStudio() =

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -101,5 +102,19 @@ class SettingsScreenTest {
         assertEquals(listOf("()", "⇤"), prefs.quickList())
         prefs.setQuickEntries((1..10).map { Prefs.QuickEntry("a$it", true) })
         assertEquals(7, prefs.quickList().size)
+    }
+
+    /** 首頁最下面看得到版本號 */
+    @Test fun versionShownOnHome() {
+        val a = org.robolectric.Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
+        val want = a.versionText()
+        assertTrue("版本號要有版本和建置編號：$want", Regex("""版本 \d+\.\d+\.\d+.*（建置 \d+）""").containsMatchIn(want))
+        val texts = ArrayList<String>()
+        fun walk(v: android.view.View) {
+            if (v is android.widget.TextView) texts.add(v.text.toString())
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(a.window.decorView)
+        assertTrue(texts.contains(want))
     }
 }
