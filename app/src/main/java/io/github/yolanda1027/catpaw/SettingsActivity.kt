@@ -245,20 +245,27 @@ class SettingsActivity : Activity() {
     private class PageInfo(
         val id: String, val title: String, val desc: String, val preview: Boolean,
         val parent: String = "home", val listed: Boolean = true,
+        /** 首頁上放在哪一區 */
+        val group: String = "",
     )
 
+    /** 首頁的三區（照這個順序） */
+    private val groups = listOf("外觀", "打字", "其他")
+
     private val pages = listOf(
-        PageInfo("haptic", "🎵 震動手感", "震動方式、強度、長度", false),
-        PageInfo("look", "🎨 外觀", "主題、按鍵大小、字體、功能鍵貼圖、主題匯入匯出", true),
-        PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true),
-        PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true),
-        PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、清除學習紀錄", false),
-        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false),
-        PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false),
-        PageInfo("tips", "💡 小提示", "一些好用的小技巧", false),
-        PageInfo("privacy", "🔒 隱私權", "打的字只留在手機裡：存了什麼、怎麼刪", false),
-        PageInfo("licenses", "📜 開放原始碼授權", "注音詞庫、繁簡對照表、表情符號、字體的授權", false),
-        // 從「外觀」的主題清單跳進來，不列在首頁
+        PageInfo("look", "🎨 主題", "選主題、匯入主題檔、按鍵高度、功能鍵貼圖", true, group = "外觀"),
+        PageInfo("studio", "🖌️ 主題工作室", "點按鍵改樣子：底圖、顏色、圖案、背景", false, group = "外觀"),
+        PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true, group = "外觀"),
+        PageInfo("font", "🔤 字體", "中文、注音、英文各用不同字體，也可以上傳自己的", true, group = "外觀"),
+        PageInfo("haptic", "🎵 手感", "震動、長按時間、按下時放大的字", false, group = "打字"),
+        PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、清除學習紀錄", false, group = "打字"),
+        PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true, group = "打字"),
+        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、清除", false, group = "打字"),
+        PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false, group = "打字"),
+        PageInfo("tips", "💡 小提示", "一些好用的小技巧", false, group = "其他"),
+        PageInfo("privacy", "🔒 隱私權", "打的字只留在手機裡：存了什麼、怎麼刪", false, group = "其他"),
+        PageInfo("licenses", "📜 開放原始碼授權", "注音詞庫、繁簡對照表、表情符號、字體的授權", false, group = "其他"),
+        // 從「主題」頁跳進來，不列在首頁
         PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true, parent = "look", listed = false),
     )
 
@@ -353,7 +360,8 @@ class SettingsActivity : Activity() {
         actionBar?.setDisplayHomeAsUpEnabled(info != null)
         when (id) {
             "haptic" -> pageHaptic()
-            "look" -> pageLook()
+            "look" -> pageTheme()
+            "font" -> pageFont()
             "effect" -> pageEffect()
             "color" -> pageColor()
             "quick" -> pageQuick()
@@ -387,14 +395,14 @@ class SettingsActivity : Activity() {
             gravity = Gravity.TOP
         })
 
-        section("設定")
-        for (p in pages.filter { it.listed }) menuItem(p)
-
-        section("自己設計")
-        button("🖌️ 打開貓爪主題工作室（點按鍵改樣子）") {
-            startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true))
+        for (g in groups) {
+            section(g)
+            for (p in pages.filter { it.listed && it.group == g }) menuItem(p)
         }
     }
+
+    private fun openStudio() =
+        startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true))
 
     /** 首頁的分類按鈕：標題＋一行說明，點下去進到那一頁 */
     private fun menuItem(p: PageInfo) {
@@ -408,7 +416,7 @@ class SettingsActivity : Activity() {
                 setColor(0x0F000000)
             }
             isClickable = true
-            setOnClickListener { showPage(p.id) }
+            setOnClickListener { if (p.id == "studio") openStudio() else showPage(p.id) }
         }
         val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         texts.addView(TextView(this).apply {
@@ -445,42 +453,22 @@ class SettingsActivity : Activity() {
         customMsRow = slider("長度", 1, 60, prefs.vibrateMs, " 毫秒") { prefs.vibrateMs = it }
         customMsRow.visibility = if (prefs.hapticMode == "custom") View.VISIBLE else View.GONE
         button("試震一下") { haptics.perform(it, prefs) }
-    }
 
-    /** 外觀：主題、按鍵、字體、功能鍵貼圖，最上面有跳轉按鈕 */
-    private fun pageLook() {
-        val anchors = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        root.addView(anchors)
-        val targets = LinkedHashMap<String, View>()
-        fun anchor(name: String) {
-            val v = TextView(this).apply {
-                text = name
-                textSize = 20f
-                setTypeface(typeface, Typeface.BOLD)
-                setPadding(0, (22 * dp).toInt(), 0, (6 * dp).toInt())
-            }
-            root.addView(v)
-            targets[name] = v
-        }
-        anchor("主題")
-        pageTheme()
-        anchor("字體")
-        pageFont()
-        anchor("功能鍵貼圖")
-        pageSticker()
-        anchor("匯入／匯出")
-        pageShare()
-        // 跳轉按鈕：點了直接捲到那一段
-        for ((name, v) in targets) {
-            anchors.addView(Button(this).apply {
-                text = name
-                isAllCaps = false
-                minWidth = 0
-                minimumWidth = 0
-                setPadding((12 * dp).toInt(), 0, (12 * dp).toInt(), 0)
-                setOnClickListener { scroll?.smoothScrollTo(0, v.top) }
-            })
-        }
+        section("按鍵")
+        slider("長按時間", 200, 700, prefs.longPressMs, " 毫秒") { prefs.longPressMs = it }
+        root.addView(Switch(this).apply {
+            text = "按下時顯示放大的字"
+            isChecked = prefs.preview
+            setOnCheckedChangeListener { _, b -> prefs.preview = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        root.addView(Switch(this).apply {
+            text = "最下面的導覽列也塗上鍵盤底色"
+            isChecked = prefs.navBarKeyboardBg
+            setOnCheckedChangeListener { _, b -> prefs.navBarKeyboardBg = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
     }
 
     // ---------- 主題匯入／匯出 ----------
@@ -490,17 +478,14 @@ class SettingsActivity : Activity() {
 
     private fun mb(bytes: Long) = String.format("%.1f MB", bytes / 1024.0 / 1024.0)
 
-    private fun pageShare() {
-        note("把現在的鍵盤外觀存成一個主題檔（.json），傳給家人朋友，對方匯入就能套用一模一樣的樣子。自己上傳的字體不會放進檔案。")
-        button("📤 匯出目前的主題") { showExportDialog() }
-        button("📥 匯入主題檔") {
-            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*" // 從 LINE 存下來的 .json 常常不會被標成 application/json
-            }
-            @Suppress("DEPRECATION")
-            startActivityForResult(i, REQ_IMPORT)
+    /** 選一個主題檔來匯入 */
+    private fun pickImportFile() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*" // 從 LINE 存下來的 .json 常常不會被標成 application/json
         }
+        @Suppress("DEPRECATION")
+        startActivityForResult(i, REQ_IMPORT)
     }
 
     /** 主題檔變成一個新的「我的主題」（不動到任何現有的主題），回傳 id 和警告 */
@@ -603,8 +588,25 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageTheme() {
-        note("點一下套用。每個主題各自記得自己的樣子（配色、字體、按鍵高度、按鍵圖片、圖案…），換來換去不會互相影響。按「⋯」可以編輯、複製、匯出。")
         val active = ThemeStore.activeId(prefs)
+        // 最常用的兩個動作放最上面
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun topBtn(label: String, onClick: () -> Unit) = top.addView(Button(this).apply {
+            text = label
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        topBtn("📥 匯入主題檔") { pickImportFile() }
+        topBtn("＋ 新增主題") {
+            askName("新增主題", ThemeStore.nameOf(this, active) + " 的副本") { name ->
+                ThemeStore.syncActive(this, prefs)
+                val id = ThemeStore.create(this, prefs, name, ThemeStore.load(this, prefs, active))
+                ThemeStore.applyTheme(this, prefs, id)
+                showPage("look")
+            }
+        }
+        root.addView(top)
+        note("點一下套用。每個主題各自記得自己的樣子，換來換去不會互相影響。按「⋯」可以編輯、複製、匯出、改名。")
         val all = ThemeStore.list(this, prefs)
         val radios = ArrayList<RadioButton>()
         fun row(t: ThemeStore.Info) {
@@ -634,40 +636,24 @@ class SettingsActivity : Activity() {
             }, LinearLayout.LayoutParams((52 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             root.addView(line)
         }
-        all.filter { it.builtIn }.forEach { row(it) }
         subTitle("我的主題")
         val mine = all.filter { !it.builtIn }
-        if (mine.isEmpty()) note("還沒有。匯入主題檔、或在「⋯」選「複製一份」就會出現在這裡。")
+        if (mine.isEmpty()) note("還沒有。按上面的「匯入主題檔」「新增主題」，或在「⋯」選「複製一份」就會出現在這裡。")
         mine.forEach { row(it) }
-        button("＋ 用目前的樣子新增一個主題") {
-            askName("新增主題", ThemeStore.nameOf(this, active) + " 的副本") { name ->
-                ThemeStore.syncActive(this, prefs)
-                val id = ThemeStore.create(this, prefs, name, ThemeStore.load(this, prefs, active))
-                ThemeStore.applyTheme(this, prefs, id)
-                showPage("look")
-            }
-        }
-        root.addView(Button(this).apply {
+        subTitle("內建主題")
+        all.filter { it.builtIn }.forEach { row(it) }
+
+        // 正在用的主題自己的細節（存在主題裡）
+        section("目前主題：" + ThemeStore.nameOf(this, active))
+        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（一般手機鍵盤約 45）") { prefs.keyHeightDp = it }
+        if (prefs.theme == "custom") root.addView(Button(this).apply {
             text = "🖌 調整自訂配色 ›"
             isAllCaps = false
             setOnClickListener { showPage("color") }
         })
-        subTitle("按鍵")
-        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（一般手機鍵盤約 45）") { prefs.keyHeightDp = it }
-        slider("長按時間", 200, 700, prefs.longPressMs, " 毫秒") { prefs.longPressMs = it }
-        root.addView(Switch(this).apply {
-            text = "按下時顯示放大的字"
-            isChecked = prefs.preview
-            setOnCheckedChangeListener { _, b -> prefs.preview = b }
-            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-        })
-        root.addView(Switch(this).apply {
-            text = "最下面的導覽列也塗上鍵盤底色"
-            isChecked = prefs.navBarKeyboardBg
-            setOnCheckedChangeListener { _, b -> prefs.navBarKeyboardBg = b }
-            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-        })
-        note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
+        button("🖌️ 在主題工作室編輯 ›") { openStudio() }
+        subTitle("功能鍵貼圖")
+        pageSticker()
     }
 
     /** 主題的「⋯」選單 */
@@ -973,9 +959,6 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.myStickers = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
-        note("上傳的圖片會放在表情鍵盤的「🖼️」分類，點一下就送出去（GIF 動圖也可以）。關掉的話分類列就不會有它，上傳過的圖片會留著，之後再打開就回來了。")
-        note("聊天 App 支援的話，圖片會直接放進去；不支援的話會先幫你複製好，長按輸入框選「貼上」就行。")
-        note("在鍵盤上長按貼圖可以看放大版（放開就關掉，不會送出）。下面每張圖的 ◀ ▶ 可以調整排列順序，新上傳的會排在最前面。")
         button("＋ 上傳圖片（可以一次選好幾張）") {
             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -1040,6 +1023,9 @@ class SettingsActivity : Activity() {
         // 最後一排不滿 4 張：補空位，縮圖才不會被拉大
         val rest = names.size % 4
         if (rest != 0) repeat(4 - rest) { row!!.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+
+        subTitle("怎麼用")
+        note("・在表情鍵盤的「🖼️」分類，點一下就送出去（GIF 也可以）；長按看放大版，放開就關掉、不會送出。\n・聊天 App 不支援直接放圖的話，會先幫你複製好，長按輸入框選「貼上」就行。\n・◀ ▶ 調整順序，新上傳的排在最前面。關掉上面的開關，分類會藏起來，圖片照樣留著。")
     }
 
     private fun pageClip() {

@@ -181,7 +181,7 @@ class PageDesignTest {
         val a = studio()
         val cls = StudioActivity::class.java
         fun field(n: String) = cls.getDeclaredField(n).apply { isAccessible = true }
-        buttons(a.window.decorView).first { it.text.startsWith("🔍 看有哪些設計") }.performClick()
+        buttons(a.window.decorView).first { it.text.startsWith("🔍 設計總覽") }.performClick()
         val texts = ArrayList<String>()
         fun walk(v: View) {
             if (v is android.widget.TextView && v !is Button) texts.add(v.text.toString())

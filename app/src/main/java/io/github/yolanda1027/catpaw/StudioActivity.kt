@@ -185,12 +185,6 @@ class StudioActivity : Activity() {
             }, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, gravity).apply {
                 setMargins(px(6f), px(6f), px(6f), px(26f))
             })
-            corner("← 整個鍵盤", Gravity.TOP or Gravity.START) {
-                selected = null
-                decalSel = null
-                animMode = null
-                refresh()
-            }
             corner("＋ 加圖案", Gravity.BOTTOM or Gravity.END) {
                 selected?.let { showAddDialog(KeyStyles.idOf(it)) }
             }
@@ -581,37 +575,33 @@ class StudioActivity : Activity() {
         if (key == null) {
             kv.editHighlight = null
             text("正在設計：${TABS.first { it.first == tab }.second}頁", 18f, bold = true).setPadding(0, px(10f), 0, 0)
-            text("👆 點一下上面鍵盤的任何一顆按鍵（或最上面那一列），就可以開始改它的樣子。每一頁（上面的分頁）各自設計；沒設計過的頁是主題原本的樣子。", 15f).setPadding(0, px(8f), 0, px(8f))
-            text("改好按右上角「儲存」才會套用到鍵盤上。想換整體主題、字體，到「${getString(R.string.app_name)}」設定的外觀頁。", 13f, dim = true)
+            text("👆 點上面鍵盤的按鍵（或最上面那一列）改它的樣子。改好按右上角「儲存」才會套用到鍵盤。", 14f).setPadding(0, px(6f), 0, px(2f))
             // 一整類一起改：只列這一頁有的、而且不只一顆的類別
             // 只看這個分頁上的鍵：注音分頁列注音鍵，英文分頁列英文鍵
             val pageKeys = kv.rows.flatten()
             val groups = listOf(KeyStyles.Group.ZHUYIN, KeyStyles.Group.CHAR, KeyStyles.Group.FUNC, KeyStyles.Group.CLIP)
                 .mapNotNull { g -> pageKeys.filter { it.act != Act.GAP && KeyStyles.groupOf(it) == g }.takeIf { it.size > 1 }?.let { g to it.first() } }
-            if (groups.isNotEmpty()) {
-                section("一整類一起改")
-                for ((g, first) in groups) {
-                    val done = styles.map[KeyStyles.groupIdOf(first)] != null
-                    button("✏️ ${g.title}" + if (done) "（已設計）" else "") {
-                        selected = first
-                        groupScope = true
-                        refresh()
-                    }
+            section("這一頁")
+            for ((g, first) in groups) {
+                val done = styles.map[KeyStyles.groupIdOf(first)] != null
+                button("✏️ ${g.title}" + if (done) "（已設計）" else "") {
+                    selected = first
+                    groupScope = true
+                    refresh()
                 }
-                section("其他")
             }
-            button("🖼️ 這一頁的鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
-            button("🔝 這一頁的上方列顏色") { topSelected = true; refresh() }
+            button("🖼️ 鍵盤背景（背景圖片、貼圖案）") { bgSelected = true; refresh() }
+            button("🔝 上方列的顏色") { topSelected = true; refresh() }
             if (hasQuick) button("⌨ 快捷符號列的顏色") { quickSelected = true; refresh() }
+
+            section("全部頁面")
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             val nAll = overviewCount()
-            if (nAll > 0) {
-                text("這個主題目前有 $nAll 項設計", 14f).setPadding(0, px(20f), 0, 0)
-                button("🔍 看有哪些設計、直接去改 ›") { overview = true; refresh() }
-            }
-            if (styles.keyEntries.isNotEmpty()) clearAllButton()
-            if (decals.isNotEmpty()) clearDecalsButton()
+            if (nAll > 0) button("🔍 設計總覽：這個主題有 $nAll 項設計 ›") { overview = true; refresh() }
+
             section("重來")
+            if (styles.keyEntries.keys.any { KeyStyles.pageOf(it) == page }) clearAllButton()
+            if (decals.isNotEmpty()) clearDecalsButton()
             resetButton()
             return
         }
@@ -620,14 +610,9 @@ class StudioActivity : Activity() {
         kv.editHighlight = if (groupScope) { k -> KeyStyles.groupOf(k) == group } else { k -> KeyStyles.idOf(k) == selId }
 
         // 點按鍵＝只改這一顆；一整類一起改是從工作室首頁的「一整類一起改」進來的
-        text("正在編輯：" + (if (groupScope) group.title else KeyStyles.nameOf(key)), 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        header("正在編輯：" + (if (groupScope) group.title else KeyStyles.nameOf(key)))
         if (groupScope) text("改這裡，這一頁的${group.title.removePrefix("所有")}會一起變（單顆另外改過的地方還是以單顆為準）。", 13f, dim = true)
         val cid = currentId()!!
-        if (styles.map[cid] != null || decals.any { it.target == cid }) {
-            button("📋 這${if (groupScope) "一類" else "顆鍵"}的設計套用到所有頁面") {
-                confirmAllPages(if (groupScope) "「${group.title}」的設計" else "${KeyStyles.nameOf(key)}的設計（含上面的圖案）") { copyKeyToAllPages(cid) }
-            }
-        }
 
         val cur = styles.map[currentId()] ?: KeyStyle()
         // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
@@ -675,7 +660,6 @@ class StudioActivity : Activity() {
         }
 
         val what = if (groupScope) group.title else "這顆鍵"
-        button("清除${what}的設定") { update({ null }) }
 
         // 被刪掉的字：可以恢復
         if (!groupScope) {
@@ -698,21 +682,53 @@ class StudioActivity : Activity() {
             }
         }
 
-        section("這顆鍵上的圖案")
-        if (!groupScope) text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
-        decalList(selId)
+        if (!groupScope) {
+            section("這顆鍵上的圖案")
+            text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
+            decalList(selId)
+        }
 
         section("按鍵動畫")
         val own = styles.map[currentId()]?.effect
         text("目前：" + (own?.let { effectName(it) } ?: "跟全部按鍵一樣"), 14f, dim = true)
         button("✨ 設定${if (groupScope) group.title else "這顆鍵"}的動畫") { animMode = KEY; refresh() }
 
-        clearAllButton()
+        // 其他頁、重來：每個面板都放在最下面
+        if (styles.map[cid] != null || decals.any { it.target == cid }) {
+            section("其他頁")
+            button("📋 這${if (groupScope) "一類" else "顆鍵"}的設計套用到所有頁面") {
+                confirmAllPages(if (groupScope) "「${group.title}」的設計" else "${KeyStyles.nameOf(key)}的設計（含上面的圖案）") { copyKeyToAllPages(cid) }
+            }
+        }
+        section("重來")
+        button("清除${what}的設定") { update({ null }) }
     }
 
     // ---------- 圖案 ----------
 
     private fun section(s: String) = text(s, 17f, bold = true).setPadding(0, px(22f), 0, px(4f))
+
+    /** 每個面板最上面：「← 返回」（回上一層，跟按手機的返回一樣）＋正在編輯什麼 */
+    private fun header(title: String) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, px(6f), 0, px(4f))
+        }
+        row.addView(Button(this).apply {
+            text = "← 返回"
+            isAllCaps = false
+            textSize = 14f
+            setOnClickListener { goUp() }
+        })
+        row.addView(TextView(this).apply {
+            text = title
+            textSize = 18f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(px(10f), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        panel.addView(row)
+    }
 
     // ---------- 這個主題有哪些設計（總覽） ----------
 
@@ -815,7 +831,7 @@ class StudioActivity : Activity() {
 
     private fun overviewPanel() {
         kv.editHighlight = null
-        text("這個主題做了哪些設計", 18f, bold = true).setPadding(0, px(10f), 0, px(2f))
+        header("這個主題做了哪些設計")
         text("按「改 ›」會直接跳到那一頁、選好那一項；改完按返回會回到這裡。", 13f, dim = true)
         val items = overviewItems()
         if (items.isEmpty()) text("還沒有任何設計，全部是主題原本的樣子。", 14f).setPadding(0, px(12f), 0, 0)
@@ -839,7 +855,7 @@ class StudioActivity : Activity() {
                 panel.addView(row)
             }
         }
-        button("← 回到首頁") { overview = false; refresh() }
+
     }
 
     private fun selectDecal(d: Decal) {
@@ -955,7 +971,7 @@ class StudioActivity : Activity() {
 
     private fun bgPanel() {
         kv.editHighlight = null
-        text("正在編輯：鍵盤背景", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        header("正在編輯：鍵盤背景")
         section("背景圖片")
         imageRow(kbId, "", styles.keyboardImageFor(page))
         text("鋪滿選字列下面的整塊（按鍵後面）。", 13f, dim = true)
@@ -963,9 +979,9 @@ class StudioActivity : Activity() {
         text("背景的圖案預設在按鍵後面（可以放在鍵和鍵之間的空隙），也可以設定成蓋在按鍵上面。", 13f, dim = true)
         decalList(Decal.bgFor(page))
         if (styles.keyboardImageFor(page) != null || decals.any { it.target == Decal.bgFor(page) }) {
+            section("其他頁")
             button("📋 這一頁的背景套用到所有頁面") { confirmAllPages("這一頁的背景圖片和背景上的圖案") { copyBackgroundToAllPages() } }
         }
-        button("← 回到選按鍵") { bgSelected = false; refresh() }
     }
 
     private fun shapeName(d: Decal) = if (d.isShape) Decals.SHAPES.firstOrNull { it.first == d.shapeName }?.second ?: "圖案" else "我的圖片"
@@ -1108,7 +1124,7 @@ class StudioActivity : Activity() {
     private fun decalPanel(d: Decal) {
         kv.editHighlight = null
         val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
-        text("正在編輯：${shapeName(d)}", 18f, bold = true).setPadding(0, px(10f), 0, 0)
+        header("正在編輯：${shapeName(d)}")
         text("貼在：$where", 14f, dim = true)
         val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖下面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
@@ -1149,11 +1165,11 @@ class StudioActivity : Activity() {
         panel.addView(row)
         if (d.stretch != 1f) button("↔ 恢復原本的寬高比例") { saveDecals(decals.map { if (it.id == d.id) it.copy(stretch = 1f) else it }) }
         if (!d.onBackground) copyButtons(d)
+        section("重來")
         button("🗑 刪除這個圖案") {
             decalSel = null
             saveDecals(decals.filter { it.id != d.id })
         }
-        button(if (d.onBackground) "← 回到鍵盤背景" else "← 回到$where") { decalSel = null; refresh() }
     }
 
     /**
@@ -1331,7 +1347,7 @@ class StudioActivity : Activity() {
     private fun labelPanel(key: Key, name: String) {
         kv.editHighlight = null
         val ls = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
-        text("正在編輯：" + labelName(key, name), 18f, bold = true).setPadding(0, px(10f), 0, 0)
+        header("正在編輯：" + labelName(key, name))
         text("貼在：" + KeyStyles.nameOf(key), 14f, dim = true)
         text("👆 拖中間或上面的十字＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設、刪除", 14f).setPadding(0, px(8f), 0, px(4f))
 
@@ -1376,8 +1392,8 @@ class StudioActivity : Activity() {
         small("往下一層") { moveElement(key, LABEL + name, -1) }
         small("重設") { setLabelStyle(key, name, null) }
         panel.addView(btns)
+        section("重來")
         button("🗑 刪除這個字（按鍵照樣能打字，之後可以恢復）") { deleteLabel(key, name) }
-        button("← 回到" + KeyStyles.nameOf(key)) { decalSel = null; refresh() }
     }
 
     /** 跟同一個位置上的下一個（或上一個）圖案交換順序：後面的畫在上面 */
@@ -1461,7 +1477,7 @@ class StudioActivity : Activity() {
             val dialog = AlertDialog.Builder(this)
                 .setTitle("恢復主題預設？")
                 .setMessage("會清除：\n" + lines.joinToString("\n") +
-                    "\n\n整體主題、字體、全部按鍵共用的動畫不會變。\n清除後沒辦法復原，想留著的話可以先到設定的「外觀 → 匯入／匯出」存一份。")
+                    "\n\n整體主題、字體、全部按鍵共用的動畫不會變。\n清除後沒辦法復原，想留著的話可以先到設定的「主題」頁，在這個主題的「⋯」選「匯出成主題檔」存一份。")
                 .setPositiveButton("恢復預設") { _, _ -> resetAll() }
                 .setNegativeButton("取消", null)
                 .show()
@@ -1506,9 +1522,9 @@ class StudioActivity : Activity() {
     }
 
     private fun clearDecalsButton() {
-        button("清除所有圖案") {
+        button("清除所有圖案（每一頁的都會清掉）") {
             AlertDialog.Builder(this)
-                .setMessage("要把貼上去的圖案全部拿掉嗎？")
+                .setMessage("要把每一頁貼上去的圖案全部拿掉嗎？")
                 .setPositiveButton("全部清除") { _, _ ->
                     decalSel = null
                     saveDecals(emptyList())
@@ -1548,13 +1564,10 @@ class StudioActivity : Activity() {
 
     private fun topBarPanel() {
         kv.editHighlight = null
-        text("正在編輯：上方列", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        header("正在編輯：上方列")
         text("「中／En」那一列。打字時會變成選字列、切到符號時是分類列，顏色都照這裡的。", 13f, dim = true)
         val cur = styles.topBarFor(page) ?: TopBarStyle()
         val now = kv.topBarColors()
-        if (styles.topBarFor(page) != null) {
-            button("📋 這一頁的上方列套用到所有頁面") { confirmAllPages("這一頁上方列的設計") { copyTopBarToAllPages() } }
-        }
         colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v ->
             val wasClear = kv.keyboardImageFrame().top == 0f
             setTopBar { it.copy(bg = v) }
@@ -1577,8 +1590,12 @@ class StudioActivity : Activity() {
         colorRow("文字（選中的「中」、候選字）", cur.text, now.text!!) { v -> setTopBar { it.copy(text = v) } }
         colorRow("文字（沒選中的「En」）", cur.textDim, now.textDim!!) { v -> setTopBar { it.copy(textDim = v) } }
         colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
-        if (styles.topBarFor(page) != null) button("全部改回主題原本的顏色") { setTopBar { null } }
-        button("← 回到選按鍵") { topSelected = false; refresh() }
+        if (styles.topBarFor(page) != null) {
+            section("其他頁")
+            button("📋 這一頁的上方列套用到所有頁面") { confirmAllPages("這一頁上方列的設計") { copyTopBarToAllPages() } }
+            section("重來")
+            button("全部改回主題原本的顏色") { setTopBar { null } }
+        }
     }
 
     // ---------- 按鍵外框：樣式、粗細、縫線離邊距離 ----------
@@ -1644,7 +1661,7 @@ class StudioActivity : Activity() {
 
     private fun quickBarPanel() {
         kv.editHighlight = null
-        text("正在編輯：快捷符號列", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        header("正在編輯：快捷符號列")
         if (!prefs.quickBar) text("💡 快捷符號列在設定裡是關著的，這裡先顯示出來給你看。要用的話到「設定 → ⌨ 快捷符號列」打開。", 13f, dim = true)
         val cur = styles.quick ?: QuickBarStyle()
         val now = kv.quickBarColors()
@@ -1713,8 +1730,10 @@ class StudioActivity : Activity() {
             text("改了按鈕底色、外框或圓角，按鈕會換成自訂的形狀。「整列的底色」透明＝跟原本一樣看得到鍵盤背景。", 12f, dim = true)
         }
         if (hasFrame) text("💡 按鈕底色、外框、圓角是灰的：現在用按鈕圖片，這些都交給圖片。", 12f, dim = true)
-        if (styles.quick != null) button("全部改回主題原本的樣子") { setQuick({ null }) }
-        button("← 回到選按鍵") { quickSelected = false; refresh() }
+        if (styles.quick != null) {
+            section("重來")
+            button("全部改回主題原本的樣子") { setQuick({ null }) }
+        }
     }
 
     /** 調整九宮格的邊角（上傳完、按「調整邊角」都會打開） */
@@ -1937,7 +1956,7 @@ class StudioActivity : Activity() {
             key != null -> KeyStyles.nameOf(key)
             else -> ""
         }
-        text("按鍵動畫：$who", 18f, bold = true).setPadding(0, px(10f), 0, px(4f))
+        header("按鍵動畫：$who")
         if (!global) text("單獨設定的鍵會用自己的動畫，其他鍵照「全部按鍵」的設定。", 13f, dim = true)
         button("▶ 試按看看") { playPreview() }
 
@@ -1965,7 +1984,6 @@ class StudioActivity : Activity() {
         if (cur?.kind == "custom") customEditor(cur.custom ?: CustomEffect())
         section("選一種動畫")
         panel.addView(rg)
-        button(if (global) "← 回去" else "← 回到$who") { animMode = null; refresh() }
     }
 
     /** 自訂動畫的各種調整 */
@@ -2084,7 +2102,7 @@ class StudioActivity : Activity() {
     }
 
     private fun clearAllButton() {
-        button("清除所有按鍵設定") {
+        button("清除這一頁的按鍵設定") {
             AlertDialog.Builder(this)
                 .setMessage("要把「${KeyStyles.pageTitle(page)}」這一頁的所有按鍵都恢復成主題原本的樣子嗎？（其他頁、鍵盤背景圖片、上方列和快捷列的顏色會留著）")
                 .setPositiveButton("全部清除") { _, _ ->
