@@ -146,7 +146,7 @@ object Decals {
     fun newId(): String = "d" + System.currentTimeMillis().toString(36) + (counter++).toString(36)
 
     /** 只接受自己產生的檔名（避免主題檔裡夾帶奇怪的路徑） */
-    fun safeName(n: String) = n.matches(Regex("[A-Za-z0-9_\\-]{1,64}\\.(png|gif)"))
+    fun safeName(n: String) = n.matches(Regex("[A-Za-z0-9_\\-]{1,64}\\.(png|gif|webp)"))
 
     /** 會動的 GIF 最大多大（太大的話，主題檔會超過匯入的上限） */
     const val MAX_GIF_BYTES = 4 * 1024 * 1024
@@ -172,16 +172,42 @@ object Decals {
     /** 底圖（按鍵底圖、鍵盤背景）可以存大一點，放大裁切才不會糊 */
     const val FILL_MAX_PX = 1600
 
-    /** 把圖縮到 maxPx 以內存成 PNG，回傳檔名 */
+    /** 把圖縮到 maxPx 以內存起來（PNG，或設定選「省空間」時 WebP），回傳檔名 */
     fun storeBitmap(ctx: Context, src: Bitmap, maxPx: Int = MAX_PX): String {
         val s = minOf(1f, maxPx.toFloat() / maxOf(src.width, src.height))
         val bmp = if (s < 1f) Bitmap.createScaledBitmap(src, maxOf(1, (src.width * s).toInt()), maxOf(1, (src.height * s).toInt()), true) else src
-        var name = "decal_${System.currentTimeMillis()}.png"
-        var n = 1
-        while (File(dir(ctx), name).exists()) name = "decal_${System.currentTimeMillis()}_${n++}.png"
-        File(dir(ctx), name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val compact = Prefs(ctx).imageCompact
+        val name = newName(ctx, if (compact) "webp" else "png")
+        File(dir(ctx), name).writeBytes(encode(bmp, compact))
         return name
     }
+
+    private fun newName(ctx: Context, ext: String): String {
+        var name = "decal_${System.currentTimeMillis()}.$ext"
+        var n = 1
+        while (File(dir(ctx), name).exists()) name = "decal_${System.currentTimeMillis()}_${n++}.$ext"
+        return name
+    }
+
+    /** 大於這個邊長的圖（背景、按鍵底圖）省空間模式用有損 WebP；小圖案用無損 WebP（畫質不變） */
+    const val LOSSY_MIN_PX = 600
+    /** 省空間模式的有損 WebP 品質（95：放大看也幾乎看不出差別） */
+    const val WEBP_QUALITY = 95
+
+    /**
+     * 圖片存成檔案的內容。
+     * @param compact false = PNG（原圖畫質）；true = WebP：大張的有損（品質 95），小的無損
+     */
+    fun encode(bmp: Bitmap, compact: Boolean): ByteArray = ByteArrayOutputStream().also {
+        when {
+            !compact -> bmp.compress(Bitmap.CompressFormat.PNG, 100, it)
+            maxOf(bmp.width, bmp.height) > LOSSY_MIN_PX -> bmp.compress(Bitmap.CompressFormat.WEBP_LOSSY, WEBP_QUALITY, it)
+            else -> bmp.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, it)
+        }
+    }.toByteArray()
+
+    fun isWebp(bytes: ByteArray) = bytes.size > 12 && String(bytes, 0, 4, Charsets.ISO_8859_1) == "RIFF" &&
+        String(bytes, 8, 4, Charsets.ISO_8859_1) == "WEBP"
 
     /** 從檔案位元組（例如主題檔裡的）存一張圖；不是圖片就回傳 null */
     /**
@@ -191,9 +217,13 @@ object Decals {
     fun storeBytes(ctx: Context, bytes: ByteArray, keepGif: Boolean = false, maxPx: Int = MAX_PX): String? {
         val bmp = decodeCapped(bytes, maxPx) ?: return null // 順便確認真的是圖片
         if (keepGif && isGif(bytes) && bytes.size <= MAX_GIF_BYTES) {
-            var name = "decal_${System.currentTimeMillis()}.gif"
-            var n = 1
-            while (File(dir(ctx), name).exists()) name = "decal_${System.currentTimeMillis()}_${n++}.gif"
+            val name = newName(ctx, "gif")
+            File(dir(ctx), name).writeBytes(bytes)
+            return name
+        }
+        // 本來就是 WebP、也不用縮小（例如省空間模式匯出的主題檔）：照原檔存，不要再壓一次
+        if (isWebp(bytes) && maxOf(bmp.width, bmp.height) <= maxPx && bytesSize(bytes)?.let { it == bmp.width to bmp.height } == true) {
+            val name = newName(ctx, "webp")
             File(dir(ctx), name).writeBytes(bytes)
             return name
         }
@@ -210,7 +240,25 @@ object Decals {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 
-    /** 存起來的圖檔原本的內容（PNG 或 GIF） */
+    /**
+     * 匯出主題檔用的圖片內容。設定選「省空間」時，以前存的 PNG 也轉成 WebP 放進檔案（手機裡的原檔不動）；
+     * 轉完沒有比較小就用原檔。GIF、WebP 照原檔。
+     */
+    fun exportBytes(ctx: Context, name: String): ByteArray? {
+        val bytes = fileBytes(ctx, name) ?: return null
+        if (!name.endsWith(".png") || !Prefs(ctx).imageCompact) return bytes
+        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+        return encode(bmp, compact = true).takeIf { it.size < bytes.size } ?: bytes
+    }
+
+    /** 圖片原本的寬高（不解碼整張） */
+    private fun bytesSize(bytes: ByteArray): Pair<Int, Int>? {
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+        return if (o.outWidth > 0 && o.outHeight > 0) o.outWidth to o.outHeight else null
+    }
+
+    /** 存起來的圖檔原本的內容（PNG、WebP 或 GIF） */
     fun fileBytes(ctx: Context, name: String): ByteArray? =
         File(dir(ctx), name).takeIf { safeName(name) && it.exists() }?.readBytes()
 
@@ -320,7 +368,7 @@ object Decals {
     fun exportJson(ctx: Context, list: List<Decal>): JSONObject {
         val images = JSONObject()
         for (d in list) if (!d.isShape && !images.has(d.fileName)) {
-            fileBytes(ctx, d.fileName)?.let { images.put(d.fileName, android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)) }
+            exportBytes(ctx, d.fileName)?.let { images.put(d.fileName, android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)) }
         }
         return JSONObject().put("items", toJson(list)).put("images", images)
     }

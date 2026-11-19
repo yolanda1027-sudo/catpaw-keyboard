@@ -82,7 +82,7 @@ object ThemeIO {
         }
         if (effectImages.isNotEmpty()) {
             val imgs = JSONObject()
-            for (n in effectImages) Decals.fileBytes(ctx, n)?.let { imgs.put(n, Base64.encodeToString(it, Base64.NO_WRAP)) }
+            for (n in effectImages) Decals.exportBytes(ctx, n)?.let { imgs.put(n, Base64.encodeToString(it, Base64.NO_WRAP)) }
             o.put("effectImages", imgs)
         }
         if (Part.STICKERS in parts) {
@@ -106,8 +106,12 @@ object ThemeIO {
             val list = Decals.load(prefs)
             if (list.isNotEmpty()) o.put("decals", Decals.exportJson(ctx, list))
         }
-        return o.toString(2)
+        // WebP 的圖在主題檔裡改叫 .png：舊版 App 只認得 .png／.gif 的名字，不改的話那些圖匯入時會被丟掉。
+        // 只是名字，匯入時看的是檔案內容，新版、舊版都讀得出來
+        return WEBP_NAME.replace(o.toString(2), "$1_w.png")
     }
+
+    private val WEBP_NAME = Regex("(decal_[0-9_]+)\\.webp")
 
     // ---------- 匯入 ----------
 

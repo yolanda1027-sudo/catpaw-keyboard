@@ -253,7 +253,7 @@ class SettingsActivity : Activity() {
     private val groups = listOf("外觀", "打字", "其他")
 
     private val pages = listOf(
-        PageInfo("look", "🎨 主題", "選主題、匯入主題檔、按鍵高度、功能鍵貼圖", true, group = "外觀"),
+        PageInfo("look", "🎨 主題", "選主題、匯入主題檔、按鍵高度、功能鍵貼圖、圖片存法", true, group = "外觀"),
         PageInfo("studio", "🖌️ 主題工作室", "點按鍵改樣子：底圖、顏色、圖案、背景", false, group = "外觀"),
         PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true, group = "外觀"),
         PageInfo("font", "🔤 字體", "中文、注音、英文各用不同字體，也可以上傳自己的", true, group = "外觀"),
@@ -670,6 +670,19 @@ class SettingsActivity : Activity() {
         button("🖌️ 在主題工作室編輯 ›") { openStudio() }
         subTitle("功能鍵貼圖")
         pageSticker()
+
+        // 主題圖片的存法（所有主題共用，不跟著主題換）
+        subTitle("圖片存法")
+        radios(
+            listOf(
+                "png" to "原圖畫質（PNG，檔案比較大）",
+                "webp" to "省空間（WebP，檔案小很多）",
+            ),
+            if (prefs.imageCompact) "webp" else "png",
+        ) { prefs.imageCompact = it == "webp" }
+        note("影響之後在主題工作室上傳的圖（背景、按鍵底圖、圖案、動畫圖），還有匯出的主題檔；已經存的圖不會動。\n" +
+            "省空間：大張的圖用品質 95 的 WebP，放大看也幾乎看不出差別，照片類大約小 5～6 倍；小圖案用無損 WebP，畫質完全不變。\n" +
+            "我的貼圖、功能鍵貼圖一律用 PNG。")
     }
 
     /** 主題的「⋯」選單 */

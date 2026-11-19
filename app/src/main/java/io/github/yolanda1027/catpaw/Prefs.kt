@@ -76,6 +76,14 @@ class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
         get() = sp.getBoolean("show_sc_toggle", true)
         set(v) = sp.edit().putBoolean("show_sc_toggle", v).apply()
 
+    /**
+     * 主題圖片的存法：false（預設）＝ PNG，原圖畫質；true ＝ 省空間，WebP（大張的品質 95、小的無損）。
+     * 影響之後上傳的圖和匯出的主題檔，已經存的圖不會動。
+     */
+    var imageCompact: Boolean
+        get() = sp.getBoolean("image_compact", false)
+        set(v) = sp.edit().putBoolean("image_compact", v).apply()
+
     /** 英文模式打字時，選字列顯示建議字（只建議，不自動改） */
     var enSuggest: Boolean
         get() = sp.getBoolean("en_suggest", true)
