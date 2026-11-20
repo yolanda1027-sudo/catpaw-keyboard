@@ -59,6 +59,13 @@ data class Decal(
     val band: Int = 0,
     val by: Float = 0f,
     val bs: Float = 0f,
+    /**
+     * 左右靠邊：0 = 沒有（照 x 佔寬度的比例，舊的記法）；1 = 靠左、2 = 靠中間、3 = 靠右。
+     * ax：離那一邊（或正中間）多遠，單位是「這個圖案自己的寬度」。
+     * 換到寬度不同的手機時，靠左的一直貼著左邊、中間的一直在正中間；x 也照樣存著，舊版 App 看得懂。
+     */
+    val hx: Int = 0,
+    val ax: Float = 0f,
 ) {
     /** 內建圖案要怎麼畫 */
     fun shapeStyle(): ShapeStyle =
@@ -90,6 +97,7 @@ data class Decal(
                 put("outlineInset", outlineInset.toDouble())
             }
             if (band != 0) put("band", band).put("by", by.toDouble()).put("bs", bs.toDouble())
+            if (hx != 0) put("hx", hx).put("ax", ax.toDouble())
         }
 
     companion object {
@@ -127,6 +135,8 @@ data class Decal(
                 band = o.optInt("band", 0).takeIf { it in 0..2 } ?: 0,
                 by = f("by", 0f, -5f, 6f),
                 bs = f("bs", 0f, 0f, 40f),
+                hx = o.optInt("hx", 0).takeIf { it in 0..3 } ?: 0,
+                ax = f("ax", 0f, -60f, 60f),
             )
         }
     }

@@ -159,7 +159,8 @@ class StudioActivity : Activity() {
                     val ls = k?.let { kv.labelStyleFrom(it, d) }
                     if (k != null && ls != null) setLabelStyle(k, d.id.removePrefix(LABEL), ls, rebuild = false)
                 } else {
-                    this@StudioActivity.decals = this@StudioActivity.decals.map { if (it.id == d.id) d else it }
+                    // 拖過了：位置以畫面上的為準，靠邊等存檔時再重算
+                    this@StudioActivity.decals = this@StudioActivity.decals.map { if (it.id == d.id) d.copy(band = 0, hx = 0) else it }
                     kv.setDecalsLive(this@StudioActivity.decals)
                     if (done) Decals.save(prefs, forSave(this@StudioActivity.decals))
                 }
@@ -552,7 +553,7 @@ class StudioActivity : Activity() {
     private fun refresh() {
         // 背景圖案照分區放到現在的鍵盤上（存檔的數字可能是別的鍵盤高度時算的）；
         // 這不是使用者的修改，不要變成一步「上一步」
-        val placed = decals.map { if (it.band != 0) kv.placeDecal(it) else it }
+        val placed = decals.map { if (it.band != 0 || it.hx != 0) kv.placeDecal(it) else it }
         if (placed != decals) {
             if (::committed.isInitialized && committed.decals == decals) committed = committed.copy(decals = placed)
             decals = placed
@@ -977,11 +978,13 @@ class StudioActivity : Activity() {
     }
 
     /**
-     * 存檔用：背景圖案記成「分區」（最上面那一條／按鍵區），換到按鍵高度不同的鍵盤也不會偏。
-     * 分區還在的（沒動過）先照分區放好再算，結果一樣；動過的（band = 0）照現在的位置算。
+     * 存檔用：圖案記成「分區」（背景的上下：最上面那一條／按鍵區）和「靠邊」（左右：靠左／中間／靠右），
+     * 換到按鍵高度、手機寬度不同的鍵盤也不會偏。
+     * 分區、靠邊還在的（沒動過）先照它們放好再算，結果一樣；動過的（清成 0）照現在的位置算。
+     * 不在這一頁的按鍵上的圖案量不到位置，照原本的存。
      */
     private fun forSave(list: List<Decal>): List<Decal> =
-        list.map { if (it.onBackground) kv.bandDecal(if (it.band != 0) kv.placeDecal(it) else it) else it }
+        list.map { kv.encodeDecal(if (it.band != 0 || it.hx != 0) kv.placeDecal(it) else it) }
 
     private fun saveDecals(list: List<Decal>, rebuild: Boolean = true) {
         decals = list
@@ -1234,7 +1237,7 @@ class StudioActivity : Activity() {
         fun change(f: (Decal) -> Decal, rebuild: Boolean = false) {
             val cur = decals.firstOrNull { it.id == d.id } ?: return
             // 大小、位置以現在畫面上的為準，存檔時重算分區
-            saveDecals(decals.map { if (it.id == d.id) f(cur).copy(band = 0) else it }, rebuild)
+            saveDecals(decals.map { if (it.id == d.id) f(cur).copy(band = 0, hx = 0) else it }, rebuild)
         }
 
         // 大小：按鍵上 5%–300%（相對按鍵高度）、背景 3%–150%（相對鍵盤高度）
@@ -1429,7 +1432,7 @@ class StudioActivity : Activity() {
             // 按鍵上的圖案跟字一起排順序；背景的圖案照原本的方式
             "up" -> if (!d.onBackground && key != null) moveElement(key, d.id, +1) else moveLayer(d, +1)
             "down" -> if (!d.onBackground && key != null) moveElement(key, d.id, -1) else moveLayer(d, -1)
-            "copy" -> addDecal(d.copy(id = Decals.newId(), x = d.x + 0.08f, y = d.y + 0.08f, band = 0))
+            "copy" -> addDecal(d.copy(id = Decals.newId(), x = d.x + 0.08f, y = d.y + 0.08f, band = 0, hx = 0))
             "flip" -> saveDecals(decals.map { if (it.id == d.id) it.copy(flip = !it.flip) else it })
             "delete" -> {
                 decalSel = null

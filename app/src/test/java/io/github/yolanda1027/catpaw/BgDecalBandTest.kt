@@ -78,4 +78,45 @@ class BgDecalBandTest {
         val saved = Decals.load(Prefs(ctx, ThemeStore.WORK)).single()
         assertEquals("工作室存檔時記成「上面那條」", 1, saved.band)
     }
+
+    private fun keyboardW(widthPx: Int): CatKeyboardView {
+        val p = Prefs(ctx)
+        p.keyHeightDp = 45
+        val v = CatKeyboardView(ctx, p, Haptics(ctx))
+        v.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        return v
+    }
+
+    /** 左右靠邊：換到比較寬的手機，角落的葉子還是貼著角落，小獾還是在正中間；按鍵左上角的小愛心也一樣 */
+    @Test fun edgesStayOnWiderPhone() {
+        val p = Prefs(ctx)
+        val v = keyboardW(1080)
+        val h = 40 * dp + 6 * dp + 45 * 5 * dp + 10 * dp
+        val key = Layouts.ZHUYIN[0][0] // ㄅ
+        val kr = v.keyRectOf(key)!!
+        val leafL = Decal("leafL", Decal.BG, Decal.SHAPE + "flower", x = 60f / 1080, y = 20 * dp / h, size = 30 * dp / h)
+        val leafR = Decal("leafR", Decal.BG, Decal.SHAPE + "flower", x = 1020f / 1080, y = 20 * dp / h, size = 30 * dp / h)
+        val badger = Decal("badger", Decal.BG, Decal.SHAPE + "cat", x = 0.5f, y = 20 * dp / h, size = 36 * dp / h)
+        val heart = Decal("heart", KeyStyles.idOf(key), Decal.SHAPE + "heart", x = 0.15f, y = 0.15f, size = 0.2f)
+        Decals.save(p, listOf(leafL, leafR, badger, heart).map { v.encodeDecal(it) })
+        val saved = Decals.load(p)
+        assertEquals(1, saved.first { it.id == "leafL" }.hx)
+        assertEquals(3, saved.first { it.id == "leafR" }.hx)
+        assertEquals(2, saved.first { it.id == "badger" }.hx)
+        assertEquals("舊版 App 看的 x 照樣存著", 60f / 1080, saved.first { it.id == "leafL" }.x, 0.001f)
+        val heartLeftPx = (kr.left + 0.15f * kr.width()) - kr.left
+
+        // 寬 1300 的手機（高度一樣）
+        val w = keyboardW(1300)
+        val all = placed(w)
+        assertEquals("左邊的葉子離左邊一樣遠", 60f, all.first { it.id == "leafL" }.x * 1300, 1f)
+        assertEquals("右邊的葉子離右邊一樣遠", 60f, 1300 - all.first { it.id == "leafR" }.x * 1300, 1f)
+        assertEquals("小獾在正中間", 0.5f, all.first { it.id == "badger" }.x, 0.001f)
+        val kr2 = w.keyRectOf(key)!!
+        val hx = all.first { it.id == "heart" }
+        assertTrue("按鍵變寬了", kr2.width() > kr.width() + 10)
+        assertEquals("小愛心離按鍵左邊一樣遠", heartLeftPx, hx.x * kr2.width(), 1f)
+        Decals.save(p, emptyList())
+    }
 }

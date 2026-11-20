@@ -350,8 +350,6 @@ class CatKeyboardView(
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        // 鍵盤大小變了（按鍵高度、快捷列）：背景圖案照分區重新放
-        decals = decals.map(::placeDecal)
         layoutKeys()
         stripCache = null
         panelCache = null
@@ -374,6 +372,8 @@ class CatKeyboardView(
                 x += kw
             }
         }
+        // 鍵盤大小、這一頁的按鍵變了：圖案照分區、靠邊重新放
+        decals = decals.map(::placeDecal)
     }
 
     private fun labelFor(key: Key): String {
@@ -850,30 +850,65 @@ class CatKeyboardView(
     private val bgRect get() = RectF(0f, quickH, width.toFloat(), kbH)
 
     /**
-     * 背景圖案照「分區」放到現在的鍵盤上：最上面那一條（高度固定）、下面的按鍵區（跟著按鍵高度變）。
-     * 沒分區的（舊的記法）照原本的 y、size。鍵盤還沒量好大小時先不動。
+     * 把圖案放到現在的鍵盤上：
+     * - 背景圖案的上下：照「分區」（最上面那一條高度固定、下面的按鍵區跟著按鍵高度變）
+     * - 左右（背景和按鍵上的圖案都是）：照「靠邊」（靠左的貼著左邊、中間的在正中間、靠右的貼著右邊）
+     * 沒記分區、靠邊的（舊的記法）照原本的 y、size、x。鍵盤還沒量好、那顆鍵不在這一頁時先不動。
      */
-    fun placeDecal(d: Decal): Decal {
-        if (!d.onBackground || d.band == 0) return d
-        val h = bgRect.height()
-        val t = topH
-        val k = h - t
-        if (h <= 0f || k <= 0f) return d
-        return if (d.band == 1) d.copy(y = d.by * t / h, size = (d.bs * t / h).coerceAtLeast(0.01f))
-        else d.copy(y = (t + d.by * k) / h, size = (d.bs * k / h).coerceAtLeast(0.01f))
+    fun placeDecal(d0: Decal): Decal {
+        var d = d0
+        if (d.onBackground && d.band != 0) {
+            val h = bgRect.height()
+            val t = topH
+            val k = h - t
+            if (h > 0f && k > 0f) {
+                d = if (d.band == 1) d.copy(y = d.by * t / h, size = (d.bs * t / h).coerceAtLeast(0.01f))
+                else d.copy(y = (t + d.by * k) / h, size = (d.bs * k / h).coerceAtLeast(0.01f))
+            }
+        }
+        if (d.hx != 0) {
+            val r = targetOf(d)?.first ?: return d
+            if (r.width() <= 0f) return d
+            val w = d.size * r.height() // 圖案的寬（px）
+            val cx = when (d.hx) {
+                1 -> r.left + d.ax * w
+                3 -> r.right - d.ax * w
+                else -> r.centerX() + d.ax * w
+            }
+            d = d.copy(x = (cx - r.left) / r.width())
+        }
+        return d
     }
 
-    /** 反過來：照現在鍵盤上的位置，算出背景圖案在哪一區、那一區的幾成（存檔前用） */
-    fun bandDecal(d: Decal): Decal {
-        if (!d.onBackground) return d
-        val h = bgRect.height()
-        val t = topH
-        val k = h - t
-        if (h <= 0f || k <= 0f) return d
-        val cy = d.y * h
-        return if (cy < t) d.copy(band = 1, by = cy / t, bs = d.size * h / t)
-        else d.copy(band = 2, by = (cy - t) / k, bs = d.size * h / k)
+    /** 反過來：照現在鍵盤上的位置，記下分區（背景的上下）和靠邊（左右），存檔前用 */
+    fun encodeDecal(d0: Decal): Decal {
+        val r = targetOf(d0)?.first ?: return d0
+        if (r.width() <= 0f || r.height() <= 0f) return d0
+        var d = d0
+        if (d.onBackground) {
+            val h = r.height()
+            val t = topH
+            val k = h - t
+            if (k > 0f) {
+                val cy = d.y * h
+                d = if (cy < t) d.copy(band = 1, by = cy / t, bs = d.size * h / t)
+                else d.copy(band = 2, by = (cy - t) / k, bs = d.size * h / k)
+            }
+        }
+        val w = d.size * r.height()
+        if (w > 0f) {
+            val cx = r.left + d.x * r.width()
+            d = when {
+                d.x < 1f / 3 -> d.copy(hx = 1, ax = (cx - r.left) / w)
+                d.x > 2f / 3 -> d.copy(hx = 3, ax = (r.right - cx) / w)
+                else -> d.copy(hx = 2, ax = (cx - r.centerX()) / w)
+            }
+        }
+        return d
     }
+
+    /** 舊名字（只算背景的分區＋靠邊） */
+    fun bandDecal(d: Decal): Decal = if (d.onBackground) encodeDecal(d) else d
 
     private fun drawBgDecals(c: Canvas, front: Boolean) {
         if (decals.isEmpty()) return
@@ -1093,7 +1128,7 @@ class CatKeyboardView(
         }
         val moved = ElementAlign.apply(items, op, frame)
         return es.mapNotNull { e ->
-            moved[e.d.id]?.let { (cx, cy) -> e.d.copy(x = (cx - e.target.left) / e.target.width(), y = (cy - e.target.top) / e.target.height(), band = 0) }
+            moved[e.d.id]?.let { (cx, cy) -> e.d.copy(x = (cx - e.target.left) / e.target.width(), y = (cy - e.target.top) / e.target.height(), band = 0, hx = 0) }
         }
     }
 
@@ -1107,8 +1142,8 @@ class CatKeyboardView(
     private fun currentDecal(): Decal? = decalEditId?.let { id -> decals.firstOrNull { it.id == id } }
 
     private fun replaceDecal(d0: Decal, done: Boolean) {
-        // 手指拖過了：位置以畫面上的為準，分區等存檔時再重算
-        val d = if (d0.onBackground) d0.copy(band = 0) else d0
+        // 手指拖過了：位置以畫面上的為準，分區、靠邊等存檔時再重算
+        val d = d0.copy(band = 0, hx = 0)
         decals = decals.map { if (it.id == d.id) d else it }
         invalidate()
         onDecalChanged?.invoke(d, done)
