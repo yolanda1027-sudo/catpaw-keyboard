@@ -232,6 +232,8 @@ class SettingsActivity : Activity() {
         private const val REQ_FONT = 200
         private const val REQ_EXPORT = 300
         private const val REQ_IMPORT = 301
+        /** 主題下載區（GitHub Pages，網站原始檔在 repo 的 store/） */
+        const val STORE_URL = "https://yolanda1027-sudo.github.io/catpaw-keyboard/"
         private const val REQ_MY_STICKER = 400
     }
     private val dp get() = resources.displayMetrics.density
@@ -283,6 +285,16 @@ class SettingsActivity : Activity() {
         haptics = Haptics(this)
         prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
         showPage(savedInstanceState?.getString("page") ?: intent?.getStringExtra("page") ?: "home")
+        // 從下載通知、檔案管理員點主題檔打開（轉螢幕重建時不要再匯入一次）
+        if (savedInstanceState == null) openThemeFile(intent)
+    }
+
+    /** 別的 App 叫我們打開一個主題檔：到主題頁、照平常匯入的流程問一次 */
+    private fun openThemeFile(i: Intent?) {
+        if (i?.action != Intent.ACTION_VIEW) return
+        val uri = i.data ?: return
+        showPage("look")
+        handleImport(uri)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -624,6 +636,11 @@ class SettingsActivity : Activity() {
             }
         }
         root.addView(top)
+        root.addView(Button(this).apply {
+            text = "🛍️ 主題下載區（用瀏覽器打開）"
+            isAllCaps = false
+            setOnClickListener { openStore() }
+        })
         note("點一下套用。每個主題各自記得自己的樣子，換來換去不會互相影響。按「⋯」可以編輯、複製、匯出、改名、刪除。")
         val all = ThemeStore.list(this, prefs)
         val radios = ArrayList<RadioButton>()
@@ -688,6 +705,18 @@ class SettingsActivity : Activity() {
         note("影響之後在主題工作室上傳的圖（背景、按鍵底圖、圖案、動畫圖），還有匯出的主題檔；已經存的圖不會動。\n" +
             "省空間：大張的圖用品質 95 的 WebP，放大看也幾乎看不出差別，照片類大約小 5～6 倍；小圖案用無損 WebP，畫質完全不變。\n" +
             "我的貼圖、功能鍵貼圖一律用 PNG。")
+    }
+
+    /**
+     * 主題下載區：一個網頁（GitHub Pages），用瀏覽器打開。
+     * 鍵盤本身不連網；下載好的主題檔點一下就會回到這裡匯入（manifest 的 VIEW application/json）。
+     */
+    private fun openStore() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(STORE_URL)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(this, "找不到瀏覽器，請手動打開 $STORE_URL", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     /** 刪掉的內建主題：勾想要的加回來（原本的樣子） */
@@ -1018,6 +1047,7 @@ class SettingsActivity : Activity() {
         super.onNewIntent(intent)
         // 從鍵盤上按「上傳貼圖」：直接跳到那一頁
         intent.getStringExtra("page")?.let { showPage(it) }
+        openThemeFile(intent)
     }
 
     /** 我的貼圖：上傳、刪除。用的時候在表情鍵盤的 🖼️ 分類 */

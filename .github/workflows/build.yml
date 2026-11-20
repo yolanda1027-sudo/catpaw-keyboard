@@ -4,6 +4,8 @@ on:
   push:
     # family 分支是給家人的正式版，由 family.yml 打包，不要蓋掉「最新測試版」
     branches-ignore: [family]
+    # 只是在主題下載區放主題，不用重新打包 App
+    paths-ignore: ["store/**", "tools/build_store.py", ".github/workflows/store.yml"]
   workflow_dispatch:
 
 permissions:

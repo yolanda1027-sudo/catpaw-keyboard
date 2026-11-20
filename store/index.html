@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>貓爪鍵盤主題下載區</title>
+<meta name="description" content="貓爪鍵盤的主題，挑喜歡的下載，在 App 裡匯入就能用。">
+<style>
+  :root {
+    --bg: #FFF7F9;
+    --card: #FFFFFF;
+    --text: #4A3F47;
+    --dim: #8E7F89;
+    --accent: #E8628E;
+    --accent-soft: #FCE4EC;
+    --line: #F1DDE4;
+    --shadow: 0 2px 10px rgba(180, 90, 120, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1E1B21;
+      --card: #2A262E;
+      --text: #ECE6EE;
+      --dim: #A79DAB;
+      --accent: #F3A6BC;
+      --accent-soft: #3A2E36;
+      --line: #3A3440;
+      --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1E1B21; --card: #2A262E; --text: #ECE6EE; --dim: #A79DAB;
+    --accent: #F3A6BC; --accent-soft: #3A2E36; --line: #3A3440; --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px 48px; }
+  header { padding: 28px 0 8px; text-align: center; }
+  header .paw { font-size: 40px; line-height: 1; }
+  h1 { font-size: 24px; margin: 8px 0 4px; letter-spacing: .02em; }
+  header p { margin: 0; color: var(--dim); font-size: 15px; }
+
+  details.how {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    margin: 18px 0 8px;
+    box-shadow: var(--shadow);
+  }
+  details.how summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 14px 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  details.how summary::-webkit-details-marker { display: none; }
+  details.how summary::after { content: "＋"; color: var(--accent); font-weight: 700; }
+  details.how[open] summary::after { content: "－"; }
+  details.how ol { margin: 0; padding: 0 16px 14px 36px; }
+  details.how li { margin: 6px 0; }
+  details.how .note { margin: 0; padding: 0 16px 16px; color: var(--dim); font-size: 14px; }
+
+  .count { color: var(--dim); font-size: 14px; margin: 18px 2px 8px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .shot { position: relative; background: var(--accent-soft); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .tabs { display: flex; gap: 6px; padding: 10px 12px 0; }
+  .tabs button {
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--dim);
+    border-radius: 999px;
+    padding: 3px 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .tabs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .name { font-size: 18px; font-weight: 700; margin: 0; overflow-wrap: anywhere; }
+  .desc { margin: 0; font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
+  .meta { color: var(--dim); font-size: 13px; margin: 0; }
+  .dl {
+    margin-top: auto;
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 11px 12px;
+  }
+  :root[data-theme="dark"] .dl { color: #2A262E; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dl { color: #2A262E; } }
+  .dl:active { transform: translateY(1px); }
+
+  .empty, .err {
+    text-align: center;
+    color: var(--dim);
+    background: var(--card);
+    border: 1px dashed var(--line);
+    border-radius: 18px;
+    padding: 36px 16px;
+  }
+  .empty .big { font-size: 34px; }
+  footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 32px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="paw" aria-hidden="true">🐾</div>
+    <h1>貓爪鍵盤主題下載區</h1>
+    <p>挑喜歡的主題下載，在 App 裡匯入就能用</p>
+  </header>
+
+  <details class="how">
+    <summary>怎麼用？</summary>
+    <ol>
+      <li>在喜歡的主題按「下載」。</li>
+      <li>下載好之後，點通知裡的檔案，選「貓爪鍵盤」打開，就會問你要不要匯入。</li>
+      <li>沒跳出來的話：打開貓爪鍵盤 →「主題」→「📥 匯入主題檔」→ 選剛剛下載的檔案（通常在「下載」資料夾）。</li>
+    </ol>
+    <p class="note">匯入的主題會加進主題清單，原本的主題都不會動。不喜歡的話，在主題的「⋯」選「刪除」就好。</p>
+  </details>
+
+  <p class="count" id="count" hidden></p>
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    貓爪鍵盤本身不連網路；主題是你自己下載、自己匯入的。
+  </footer>
+</div>
+
+<script>
+(function () {
+  var grid = document.getElementById("grid");
+  var count = document.getElementById("count");
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function size(n) {
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+    return Math.max(1, Math.round(n / 1024)) + " KB";
+  }
+
+  function day(t) {
+    var d = new Date(t * 1000);
+    return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
+  }
+
+  function card(t) {
+    var c = el("article", "card");
+    if (t.preview) {
+      var tabs = el("div", "tabs");
+      var shot = el("div", "shot");
+      var img = el("img");
+      img.src = t.preview;
+      img.alt = t.name + " 的預覽";
+      img.loading = "lazy";
+      shot.appendChild(img);
+      var pages = [["注音", t.preview]];
+      if (t.previewEn) pages.push(["英文", t.previewEn]);
+      if (pages.length > 1) {
+        pages.forEach(function (p, i) {
+          var b = el("button", null, p[0]);
+          b.type = "button";
+          b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+          b.addEventListener("click", function () {
+            img.src = p[1];
+            tabs.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+          });
+          tabs.appendChild(b);
+        });
+        c.appendChild(tabs);
+      }
+      c.appendChild(shot);
+    }
+    var body = el("div", "body");
+    body.appendChild(el("h2", "name", t.name));
+    if (t.desc) body.appendChild(el("p", "desc", t.desc));
+    body.appendChild(el("p", "meta", size(t.size) + "・" + day(t.added) + " 上架"));
+    var a = el("a", "dl", "下載");
+    a.href = t.file;
+    a.setAttribute("download", t.download || (t.name + ".json"));
+    body.appendChild(a);
+    c.appendChild(body);
+    return c;
+  }
+
+  fetch("themes.json", { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (data) {
+      var list = (data && data.themes) || [];
+      if (!list.length) {
+        var e = el("div", "empty");
+        e.appendChild(el("div", "big", "🧶"));
+        e.appendChild(el("p", null, "還沒有主題，正在努力做中，晚點再來看看～"));
+        grid.replaceWith(e);
+        return;
+      }
+      count.textContent = "共 " + list.length + " 個主題";
+      count.hidden = false;
+      list.forEach(function (t) { grid.appendChild(card(t)); });
+    })
+    .catch(function () {
+      grid.replaceWith(el("div", "err", "主題清單讀不到，重新整理一下試試。"));
+    });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+name: 主題下載區
+
+# store/themes 放了新的主題檔（或改了網頁）就重新做網站，放到 GitHub Pages：
+# https://yolanda1027-sudo.github.io/catpaw-keyboard/
+# 第一次要先到 repo 的 Settings → Pages → Build and deployment → Source 選「GitHub Actions」。
+on:
+  push:
+    paths:
+      - "store/**"
+      - "tools/build_store.py"
+      - ".github/workflows/store.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # 只有預設分支會放上網站（GitHub Pages 預設也只收預設分支）
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 要看每個主題檔是什麼時候加進來的（新的排前面）
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 整理主題檔
+        run: python3 tools/build_store.py prepare store/themes build/store/in
+
+      - name: 畫預覽圖（注音、英文兩頁）
+        env:
+          CATPAW_STORE_DIR: ${{ github.workspace }}/build/store/in
+          CATPAW_PREVIEW_OUT: ${{ github.workspace }}/build/store/out
+        run: ./gradlew --no-daemon testDebugUnitTest --tests '*StorePreviewTest*'
+
+      - name: 做網站
+        run: python3 tools/build_store.py site store build/store _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

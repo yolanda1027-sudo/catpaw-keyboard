@@ -20,6 +20,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- 主題下載區下載的主題檔（.json）：在下載通知、檔案管理員點一下就能匯入 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+            </intent-filter>
         </activity>
 
         <!-- 我的貼圖：鍵盤送圖片給別的 App 時，用這個讓對方讀那一張（不公開，只給暫時權限） -->
