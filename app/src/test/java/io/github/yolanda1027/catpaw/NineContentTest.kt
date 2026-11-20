@@ -35,4 +35,27 @@ class NineContentTest {
             assertEquals("${w}×$h 中間有羊皮紙", 255, Color.alpha(out.getPixel(w / 2, h / 2)))
         }
     }
+
+    /** 切得保守：很淡的陰影留著、最邊邊細細的描邊不會被切到；取消勾選就照整張圖切 */
+    @Test fun conservativeAndCanBeTurnedOff() {
+        // 大張的圖（會跳著看）：最外圈 2px 細描邊，再外面一圈很淡（約 4%）的陰影
+        val big = Bitmap.createBitmap(1600, 1000, Bitmap.Config.ARGB_8888)
+        val c = Canvas(big)
+        c.drawRect(RectF(97f, 97f, 1503f, 903f), Paint().apply { color = Color.argb(10, 0, 0, 0) }) // 淡淡的陰影
+        c.drawRect(RectF(101f, 101f, 1499f, 899f), Paint().apply { color = Color.rgb(200, 150, 60) }) // 描邊
+        c.drawRect(RectF(103f, 103f, 1497f, 897f), Paint().apply { color = Color.rgb(243, 227, 192) })
+        val cr = NineFrame.contentRect(big)
+        assertTrue("淡陰影和描邊都在範圍裡：$cr", cr.left <= 97 && cr.top <= 97 && cr.right >= 1503 && cr.bottom >= 903)
+        // 取消勾選：照整張圖切（左邊會是透明的空白）
+        val bmp = paddedParchment()
+        val whole = NineFrame.contentRect(bmp, trim = false)
+        assertEquals(0, whole.left)
+        val out = Bitmap.createBitmap(230, 245, Bitmap.Config.ARGB_8888)
+        NineFrame.draw(Canvas(out), bmp, 0.3f, 0.3f, RectF(0f, 0f, 230f, 245f), trim = false)
+        assertEquals("不去空白：左邊是透明的", 0, Color.alpha(out.getPixel(4, 122)))
+        // 存檔再讀回來，設定還在
+        val f = ImageFill("a.png", nine = true, trim = false)
+        assertEquals(false, ImageFill.fromJson(org.json.JSONObject(f.toJson().toString()))!!.trim)
+        assertEquals(true, ImageFill.fromJson(org.json.JSONObject(ImageFill("a.png", nine = true).toJson().toString()))!!.trim)
+    }
 }

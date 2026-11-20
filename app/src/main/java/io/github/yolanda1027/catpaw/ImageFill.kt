@@ -46,6 +46,8 @@ data class ImageFill(
      * 同時也留著 zoom、cx、cy、stretch（選的時候在當時的框算好的），舊版 App 看不懂 fit 也會長得差不多。
      */
     val fit: Boolean = false,
+    /** 邊框：去掉四周透明的空白再切（預設要） */
+    val trim: Boolean = true,
 ) {
     val isGif get() = img.endsWith(".gif")
 
@@ -105,6 +107,7 @@ data class ImageFill(
             if (nine) put("nine", true).put("sx", sx.toDouble()).put("sy", sy.toDouble())
             if (stretch != 1f) put("stretch", stretch.toDouble())
             if (fit) put("fit", true)
+            if (!trim) put("trim", false)
         }
 
     /** 這張圖（含拉寬／拉高）最小可以縮到多小 */
@@ -168,6 +171,7 @@ data class ImageFill(
                 sy = f("sy", NineFrame.DEFAULT, NineFrame.MIN, NineFrame.MAX),
                 stretch = f("stretch", 1f, MIN_STRETCH, MAX_STRETCH),
                 fit = o.optBoolean("fit", false) && !nine,
+                trim = o.optBoolean("trim", true),
             )
         }
 
@@ -194,7 +198,7 @@ data class ImageFill(
         fun draw(c: Canvas, fill: ImageFill, frame: RectF, clip: Path?, bmp: Bitmap?, anim: android.graphics.drawable.Drawable?) {
             if (fill.nine) {
                 // 邊框：四個角不變形（會動的 GIF 用第一格）
-                if (bmp != null) NineFrame.draw(c, bmp, fill.sx, fill.sy, frame)
+                if (bmp != null) NineFrame.draw(c, bmp, fill.sx, fill.sy, frame, fill.trim)
                 return
             }
             val iw = anim?.intrinsicWidth?.takeIf { it > 0 } ?: bmp?.width ?: return

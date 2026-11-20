@@ -30,9 +30,14 @@ import kotlin.math.roundToInt
  * @param sx 左右兩邊各保留圖片寬度的幾分之幾（0.05–0.49）
  * @param sy 上下兩邊各保留圖片高度的幾分之幾（0.05–0.49）
  */
-data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = DEFAULT) {
+data class NineFrame(
+    val img: String, val sx: Float = DEFAULT, val sy: Float = DEFAULT,
+    /** 去掉四周透明的空白再切（預設要）；刻意留空白的圖可以關掉，照整張圖切 */
+    val trim: Boolean = true,
+) {
 
     fun toJson(): JSONObject = JSONObject().put("img", img).put("sx", sx.toDouble()).put("sy", sy.toDouble())
+        .apply { if (!trim) put("trim", false) }
 
     companion object {
         const val DEFAULT = 0.3f
@@ -44,7 +49,7 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
             val img = o.optString("img")
             if (!Decals.safeName(img)) return null
             fun f(k: String) = o.optDouble(k, DEFAULT.toDouble()).toFloat().let { if (it.isNaN()) DEFAULT else it }.coerceIn(MIN, MAX)
-            return NineFrame(img, f("sx"), f("sy"))
+            return NineFrame(img, f("sx"), f("sy"), trim = o.optBoolean("trim", true))
         }
 
         /** 不開反鋸齒：九塊拼起來的地方才不會有細縫（圖片本身還是會平滑縮放） */
@@ -58,7 +63,8 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
          * 只切圖片「有畫東西的範圍」：去背圖四周透明的空白不算（不然四個角都是透明的，
          * 按鍵看起來左右被削掉一大塊，變成細細一條）。
          */
-        fun contentRect(bmp: Bitmap): Rect {
+        fun contentRect(bmp: Bitmap, trim: Boolean = true): Rect {
+            if (!trim) return Rect(0, 0, bmp.width, bmp.height)
             val c = ImageFill.contentOf(bmp)
             val l = c.left.toInt().coerceIn(0, bmp.width - 1)
             val t = c.top.toInt().coerceIn(0, bmp.height - 1)
@@ -67,8 +73,8 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
             return Rect(l, t, r, b)
         }
 
-        fun draw(c: Canvas, bmp: Bitmap, sx: Float, sy: Float, dst: RectF) {
-            val cr = contentRect(bmp)
+        fun draw(c: Canvas, bmp: Bitmap, sx: Float, sy: Float, dst: RectF, trim: Boolean = true) {
+            val cr = contentRect(bmp, trim)
             val iw = cr.width()
             val ih = cr.height()
             if (iw < 3 || ih < 3 || dst.width() <= 0f || dst.height() <= 0f) return
@@ -153,6 +159,14 @@ object NineSliceDialog {
         }
         bar("左右的角", initial.sx) { view.frame = view.frame.copy(sx = it) }
         bar("上下的角", initial.sy) { view.frame = view.frame.copy(sy = it) }
+        root.addView(android.widget.CheckBox(a).apply {
+            text = "去掉四周透明的空白（刻意留空白的圖才取消）"
+            setTextColor(Color.WHITE)
+            isChecked = initial.trim
+            setOnCheckedChangeListener { _, on -> view.frame = view.frame.copy(trim = on) }
+            val m = (14 * dp).toInt()
+            setPadding(m / 2, 0, m, 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = (10 * dp).toInt() })
 
         val btns = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -208,7 +222,7 @@ class NineSliceView(
         // 上面：整張圖＋切線（最多佔一半高度）
         val topH = height * 0.5f
         // 只顯示有畫東西的範圍（四周透明的空白切掉），切線跟實際切的地方一樣
-        val cr = NineFrame.contentRect(bmp)
+        val cr = NineFrame.contentRect(bmp, frame.trim)
         val s = min(w / cr.width(), (topH - pad) / cr.height())
         val iw = cr.width() * s
         val ih = cr.height() * s
@@ -234,7 +248,7 @@ class NineSliceView(
         text.textSize = bh * 0.5f
         for (bw in widths) {
             val b = RectF((width - bw) / 2, y, (width + bw) / 2, y + bh)
-            NineFrame.draw(c, bmp, frame.sx, frame.sy, b)
+            NineFrame.draw(c, bmp, frame.sx, frame.sy, b, frame.trim)
             c.drawText(label, b.centerX(), b.centerY() - (text.descent() + text.ascent()) / 2, text)
             y += bh + 12 * dp
         }

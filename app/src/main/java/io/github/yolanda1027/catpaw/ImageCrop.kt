@@ -387,7 +387,7 @@ fun opaqueBounds(bmp: Bitmap): RectF {
         bmp.getPixels(row, 0, w, 0, y, w, 1)
         var x = 0
         while (x < w) {
-            if ((row[x] ushr 24) > 16) {
+            if ((row[x] ushr 24) > 3) { // 只把「幾乎完全透明」（約 1% 以下）當成空白，很淡的陰影、光暈留著
                 if (x < l) l = x
                 if (x > r) r = x
                 if (y < t) t = y
@@ -398,5 +398,7 @@ fun opaqueBounds(bmp: Bitmap): RectF {
         y += step
     }
     if (r < 0) return RectF(0f, 0f, w.toFloat(), h.toFloat())
-    return RectF(l.toFloat(), t.toFloat(), minOf(w, r + step).toFloat(), minOf(h, b + step).toFloat())
+    // 跳著看的話，真正的邊可能在沒看到的那幾格裡：左上往外推到「可能的最外面」，右下多包一格。
+    // 這樣不會切到最邊邊的描邊，也不會多留一大圈（每格都看的小圖就是剛好的範圍）
+    return RectF(maxOf(0, l - step + 1).toFloat(), maxOf(0, t - step + 1).toFloat(), minOf(w, r + step).toFloat(), minOf(h, b + step).toFloat())
 }

@@ -2079,12 +2079,12 @@ class StudioActivity : Activity() {
         val bmp = loadFill(fill.img) ?: return
         val frame = kv.keyboardImageFrame()
         NineSliceDialog.show(
-            this, bmp, NineFrame(fill.img, fill.sx, fill.sy), "", Color.WHITE,
+            this, bmp, NineFrame(fill.img, fill.sx, fill.sy, fill.trim), "", Color.WHITE,
             buttonW = frame.width(), buttonH = frame.height(),
             title = "調整背景圖片的邊角",
             caption = "預覽：鍵盤背景實際的大小，和更窄、更寬的",
         ) { done ->
-            if (done != null) setFill(target, fill.copy(nine = true, fit = false, sx = done.sx, sy = done.sy))
+            if (done != null) setFill(target, fill.copy(nine = true, fit = false, sx = done.sx, sy = done.sy, trim = done.trim))
         }
     }
 
@@ -2102,12 +2102,12 @@ class StudioActivity : Activity() {
         val label = key.label.ifEmpty { KeyStyles.nameOf(key) }
         val textColor = st.text ?: kv.sampleColors(key)?.text ?: Color.BLACK
         NineSliceDialog.show(
-            this, bmp, NineFrame(fill.img, fill.sx, fill.sy), label, textColor,
+            this, bmp, NineFrame(fill.img, fill.sx, fill.sy, fill.trim), label, textColor,
             buttonW = box.width(), buttonH = box.height(),
             title = "調整按鍵圖片的邊角",
             caption = "預覽：這顆鍵實際的大小，和更窄、更寬的",
         ) { done ->
-            if (done != null) setFill(target, fill.copy(nine = true, fit = false, shape = false, sx = done.sx, sy = done.sy))
+            if (done != null) setFill(target, fill.copy(nine = true, fit = false, shape = false, sx = done.sx, sy = done.sy, trim = done.trim))
         }
     }
 

@@ -659,7 +659,7 @@ class CatKeyboardView(
             // 九宮格：四個角不變形；按下去只有圖片本身變暗
             val bmp = fillBitmap(fill.img) ?: return
             c.saveLayer(box, null)
-            NineFrame.draw(c, bmp, fill.sx, fill.sy, box)
+            NineFrame.draw(c, bmp, fill.sx, fill.sy, box, fill.trim)
             if (pressed) c.drawRect(box, pressShadeAtop)
             c.restore()
             return
@@ -1488,7 +1488,7 @@ class CatKeyboardView(
                 // 按鈕圖片（九宮格）：只畫圖片，按下去只有圖片本身變暗
                 val box = theme.styledBox(r)
                 c.saveLayer(box, null)
-                NineFrame.draw(c, frameBmp, frame.sx, frame.sy, box)
+                NineFrame.draw(c, frameBmp, frame.sx, frame.sy, box, frame.trim)
                 if (pressed) c.drawRect(box, pressShadeAtop)
                 c.restore()
                 val main = qs.text ?: native?.text ?: theme.text
@@ -1672,7 +1672,7 @@ class CatKeyboardView(
         val col = lookOf(kr, st)
         if (fill?.nine == true) {
             // 九宮格：泡泡也套同一個框
-            fillBitmap(fill.img)?.let { NineFrame.draw(c, it, fill.sx, fill.sy, box) }
+            fillBitmap(fill.img)?.let { NineFrame.draw(c, it, fill.sx, fill.sy, box, fill.trim) }
         } else if (fill?.shape == true) {
             // 照圖片的形狀：泡泡就是那張圖
             ImageFill.draw(c, fill, box, null, fillBitmap(fill.img), fillAnim(fill))
