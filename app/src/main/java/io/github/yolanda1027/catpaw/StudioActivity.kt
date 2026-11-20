@@ -1274,7 +1274,7 @@ class StudioActivity : Activity() {
         val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
         header("正在編輯：${shapeName(d)}")
         text("貼在：$where", 14f, dim = true)
-        val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖下面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
+        val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖上面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
         section("對齊")
         text("對齊$where" + (if (d.onBackground) "" else "（按鍵看得到的那一塊）"), 13f, dim = true)
@@ -1501,7 +1501,7 @@ class StudioActivity : Activity() {
         val ls = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: LabelStyle()
         header("正在編輯：" + labelName(key, name))
         text("貼在：" + KeyStyles.nameOf(key), 14f, dim = true)
-        text("👆 拖中間或上面的十字＝移動、拖四個角＝放大縮小、拖下面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設、刪除", 14f).setPadding(0, px(8f), 0, px(4f))
+        text("👆 拖中間或下面的十字＝移動、拖四個角＝放大縮小、拖上面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設、刪除", 14f).setPadding(0, px(8f), 0, px(4f))
         section("對齊")
         text("對齊${KeyStyles.nameOf(key)}（按鍵看得到的那一塊）", 13f, dim = true)
         alignButtons(1, distribute = false) { op -> doAlign(key, listOf(LABEL + name), op) }

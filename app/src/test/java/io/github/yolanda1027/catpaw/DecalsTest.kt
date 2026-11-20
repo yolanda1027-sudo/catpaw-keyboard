@@ -153,10 +153,10 @@ class DecalsTest {
         // 右下角往外拖到兩倍距離 → 變兩倍大
         drag(cx + half to cy + half, cx + half * 2 to cy + half * 2)
         assertEquals(d0.size * 2, now().size, 0.02f)
-        // 旋轉把手（框下面 30dp）拖到右邊 → 轉 -90 度（從正下方轉到正右方）
+        // 旋轉把手（框上面 30dp）拖到右邊 → 轉 90 度（從正上方順時針轉到正右方）
         val h2 = now().size * box.height() / 2 + 5 * 2.625f
-        drag(cx to cy + h2 + 30 * 2.625f, cx + 300f to cy)
-        assertEquals(-90f, now().rotation, 1f)
+        drag(cx to cy - h2 - 30 * 2.625f, cx + 300f to cy)
+        assertEquals(90f, now().rotation, 1f)
 
         // 小工具：位置從畫出來的框拿
         @Suppress("UNCHECKED_CAST")

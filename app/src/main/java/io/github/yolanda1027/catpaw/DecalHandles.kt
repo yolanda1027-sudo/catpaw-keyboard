@@ -84,10 +84,11 @@ class DecalHandles(private val dp: Float) {
         f.map(-f.hw, -f.hh), f.map(f.hw, -f.hh), f.map(f.hw, f.hh), f.map(-f.hw, f.hh),
     )
 
-    private fun rotHandle(f: Frame) = f.map(0f, f.hh + rotGap)
+    /** 旋轉把手：在框的上面（跟一般修圖軟體一樣） */
+    private fun rotHandle(f: Frame) = f.map(0f, -(f.hh + rotGap))
 
-    /** 移動把手：在旋轉把手的對面（跟著圖案一起轉） */
-    private fun moveHandle(f: Frame) = f.map(0f, -(f.hh + rotGap))
+    /** 移動把手：在旋轉把手的對面，框的下面（跟著圖案一起轉） */
+    private fun moveHandle(f: Frame) = f.map(0f, f.hh + rotGap)
 
     // ---------- 畫 ----------
 

@@ -18,7 +18,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
 import java.io.File
 
-/** 圖案框的上面（旋轉把手的對面）有移動把手：圖案太小、手指會蓋住時用它拖 */
+/** 圖案框的下面（旋轉把手的對面）有移動把手：圖案太小、手指會蓋住時用它拖 */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -31,7 +31,7 @@ class MoveHandleTest {
         return MotionEvent.obtain(t, t, action, x, y, 0)
     }
 
-    /** 拖移動把手（在框上面：中心往上 半個框高＋5dp 留邊＋30dp） */
+    /** 拖移動把手（在框下面：中心往下 半個框高＋5dp 留邊＋30dp） */
     private fun dragMoveHandle(rotation: Float): Pair<Decal, Decal> {
         val h = DecalHandles(dp)
         val target = RectF(0f, 0f, 1080f, 700f)
@@ -43,9 +43,9 @@ class MoveHandleTest {
         val (_, sh) = Decals.sizeOf(d, target.height(), null)
         val dist = sh / 2 + 5 * dp + 30 * dp
         val a = Math.toRadians(rotation.toDouble())
-        // 圖案自己座標的 (0, -dist) 轉到畫面上
-        val mx = (cx + dist * Math.sin(a)).toFloat()
-        val my = (cy - dist * Math.cos(a)).toFloat()
+        // 圖案自己座標的 (0, dist) 轉到畫面上
+        val mx = (cx - dist * Math.sin(a)).toFloat()
+        val my = (cy + dist * Math.cos(a)).toFloat()
         var last: Decal? = null
         // 拖的過程中最後一次的樣子（放開時會再用 current() 拿「最新的」報一次；這裡 current 回傳舊的，所以不看那次）
         h.onChange = { nd, done -> if (!done) last = nd }
