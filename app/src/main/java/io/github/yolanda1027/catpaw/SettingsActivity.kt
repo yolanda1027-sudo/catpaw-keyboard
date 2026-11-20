@@ -586,7 +586,7 @@ class SettingsActivity : Activity() {
         val (name, parts) = ThemeIO.describe(o)
         android.app.AlertDialog.Builder(this)
             .setTitle("匯入「$name」？")
-            .setMessage("包含：" + parts.joinToString("、") + "\n\n會加進「我的主題」，原本的主題都不會動。")
+            .setMessage("包含：" + parts.joinToString("、") + "\n\n會加進主題清單，原本的主題都不會動。")
             .setPositiveButton("加入") { _, _ ->
                 val (id, warnings) = importAsTheme(o, name)
                 showPage("look")
@@ -624,7 +624,7 @@ class SettingsActivity : Activity() {
             }
         }
         root.addView(top)
-        note("點一下套用。每個主題各自記得自己的樣子，換來換去不會互相影響。按「⋯」可以編輯、複製、匯出、改名。")
+        note("點一下套用。每個主題各自記得自己的樣子，換來換去不會互相影響。按「⋯」可以編輯、複製、匯出、改名、刪除。")
         val all = ThemeStore.list(this, prefs)
         val radios = ArrayList<RadioButton>()
         fun row(t: ThemeStore.Info) {
@@ -654,12 +654,15 @@ class SettingsActivity : Activity() {
             }, LinearLayout.LayoutParams((52 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
             root.addView(line)
         }
-        subTitle("我的主題")
-        val mine = all.filter { !it.builtIn }
-        if (mine.isEmpty()) note("還沒有。按上面的「匯入主題檔」「新增主題」，或在「⋯」選「複製一份」就會出現在這裡。")
-        mine.forEach { row(it) }
-        subTitle("內建主題")
-        all.filter { it.builtIn }.forEach { row(it) }
+        // 不分內建、自己做的：一份清單（自己做的、匯入的放前面）
+        subTitle("主題")
+        (all.filter { !it.builtIn } + all.filter { it.builtIn }).forEach { row(it) }
+        val hidden = ThemeStore.BUILT_IN.map { it.first }.filter { it in ThemeStore.hiddenBuiltIns(prefs) }
+        if (hidden.isNotEmpty()) root.addView(Button(this).apply {
+            text = "↩️ 加回刪掉的內建主題（${hidden.size} 個）"
+            isAllCaps = false
+            setOnClickListener { restoreBuiltInDialog(hidden) }
+        })
 
         // 正在用的主題自己的細節（存在主題裡）
         section("目前主題：" + ThemeStore.nameOf(this, active))
@@ -687,6 +690,21 @@ class SettingsActivity : Activity() {
             "我的貼圖、功能鍵貼圖一律用 PNG。")
     }
 
+    /** 刪掉的內建主題：勾想要的加回來（原本的樣子） */
+    private fun restoreBuiltInDialog(hidden: List<String>) {
+        val names = hidden.map { ThemeStore.builtInTitle(it) }.toTypedArray()
+        val checked = BooleanArray(hidden.size)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("加回內建主題")
+            .setMultiChoiceItems(names, checked) { _, i, on -> checked[i] = on }
+            .setPositiveButton("加回來") { _, _ ->
+                hidden.filterIndexed { i, _ -> checked[i] }.forEach { ThemeStore.restoreBuiltIn(this, prefs, it) }
+                showPage("look")
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
     /** 主題的「⋯」選單 */
     private fun themeMenu(t: ThemeStore.Info) {
         val items = ArrayList<Pair<String, () -> Unit>>()
@@ -706,17 +724,17 @@ class SettingsActivity : Activity() {
             }
         })
         items.add("📤 匯出成主題檔" to { showExportDialog(t.id) })
-        if (!t.builtIn) items.add("✍️ 重新命名" to {
+        items.add("✍️ 重新命名" to {
             askName("重新命名", t.name) { name ->
                 ThemeStore.rename(this, prefs, t.id, name)
                 showPage("look")
             }
         })
-        if (t.builtIn && t.modified) items.add("↩️ 恢復原廠" to {
+        if (t.builtIn && t.modified) items.add("↩️ 恢復成原本的樣子" to {
             android.app.AlertDialog.Builder(this)
-                .setTitle("「${t.name}」恢復原廠？")
+                .setTitle("「${t.name}」恢復成原本的樣子？")
                 .setMessage("這個主題改過的地方（按鍵圖片、圖案、配色、字體…）會全部清掉。")
-                .setPositiveButton("恢復原廠") { _, _ ->
+                .setPositiveButton("恢復") { _, _ ->
                     ThemeStore.resetBuiltIn(this, prefs, t.id)
                     showPage("look")
                 }
@@ -740,10 +758,20 @@ class SettingsActivity : Activity() {
                 })
             }
         }
-        if (!t.builtIn) items.add("🗑 刪除" to {
-            android.app.AlertDialog.Builder(this)
+        items.add("🗑 刪除" to {
+            if (!ThemeStore.canDelete(this, prefs)) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("至少要留一個主題")
+                    .setMessage("鍵盤需要一個主題才能顯示。想換掉它的話，先新增或匯入另一個主題，再刪這個。")
+                    .setPositiveButton("知道了", null)
+                    .show()
+            } else android.app.AlertDialog.Builder(this)
                 .setTitle("刪除「${t.name}」？")
-                .setMessage("刪掉就救不回來了。想留著的話，可以先匯出成主題檔。")
+                .setMessage(
+                    (if (t.id == ThemeStore.activeId(prefs)) "這是正在用的主題，刪掉後鍵盤會換成清單上的第一個主題。\n\n" else "") +
+                        if (t.builtIn) "這是內建主題：之後可以在主題清單最下面「加回刪掉的內建主題」找回來，不過會是原本的樣子，改過的地方不會留著。想留著的話，可以先匯出成主題檔。"
+                        else "刪掉就救不回來了。想留著的話，可以先匯出成主題檔。",
+                )
                 .setPositiveButton("刪除") { _, _ ->
                     ThemeStore.delete(this, prefs, t.id)
                     showPage("look")

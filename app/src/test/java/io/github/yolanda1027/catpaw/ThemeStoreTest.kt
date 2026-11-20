@@ -85,7 +85,10 @@ class ThemeStoreTest {
         ThemeStore.rename(ctx, p, copy, "我的紅")
         assertEquals("我的紅", ThemeStore.nameOf(ctx, copy))
         ThemeStore.delete(ctx, p, copy)
-        assertEquals("刪掉正在用的主題：換回經典深色", "classic", ThemeStore.activeId(p))
+        // 還有另一個「紅色 Enter (2)」：換到清單第一個（自己做的排前面）
+        val next = ThemeStore.activeId(p)
+        assertTrue("刪掉正在用的主題：換到還在的主題", next != copy && ThemeStore.exists(ctx, next))
+        assertEquals("紅色 Enter (2)", ThemeStore.nameOf(ctx, next))
         assertFalse(ThemeStore.exists(ctx, copy))
     }
 

@@ -7,8 +7,10 @@ import java.io.File
 /**
  * 主題庫：每個主題一個檔案（files/themes/<id>.json）。
  *
- * - 內建主題（經典深色、粉紅縫線…）：沒改過就沒有檔案（＝原廠的樣子）；改過才存一份，可以「恢復原廠」。
+ * - 內建主題（經典深色、粉紅縫線…）：沒改過就沒有檔案（＝原廠的樣子）；改過才存一份，可以恢復原本的樣子。
  * - 我的主題：自己新增、匯入、另存的，id 是 "u_數字"。
+ * 清單上兩種一視同仁：都可以改名、刪除。內建主題刪掉＝藏起來（[HIDDEN]），可以再加回來；
+ * 改的名字記在 [NAMES]。這兩個是整支手機的設定，不跟著主題換。
  *
  * 一個主題 = 下面 [LOOK_KEYS] 這些設定的一份快照（底色主題、配色、字體、按鍵高度、按鍵動畫、
  * 按鍵樣式、圖案、功能鍵貼圖）。圖片本身放在 Decals.dir，主題裡只記檔名。
@@ -40,6 +42,23 @@ object ThemeStore {
             listOf("custom" to "自訂配色")
 
     fun isBuiltIn(id: String) = BUILT_IN.any { it.first == id }
+
+    /** 刪掉的內建主題（存在鍵盤的設定檔，不屬於任何主題） */
+    private const val HIDDEN = "hidden_builtin"
+    /** 內建主題改過的名字：{id: 名字} */
+    private const val NAMES = "builtin_names"
+
+    fun hiddenBuiltIns(live: Prefs): Set<String> = live.sp.getStringSet(HIDDEN, emptySet()).orEmpty()
+
+    private fun builtInNames(live: Prefs): JSONObject =
+        try { JSONObject(live.sp.getString(NAMES, "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+
+    /** 刪掉的內建主題加回來（原本的樣子） */
+    fun restoreBuiltIn(ctx: Context, live: Prefs, id: String) {
+        if (!isBuiltIn(id)) return
+        file(ctx, id)?.delete()
+        live.sp.edit().putStringSet(HIDDEN, hiddenBuiltIns(live) - id).commit()
+    }
 
     private fun dir(ctx: Context) = File(ctx.filesDir, "themes").apply { mkdirs() }
     private fun safeId(id: String) = id.matches(Regex("[a-z0-9_]{1,40}"))
@@ -92,12 +111,21 @@ object ThemeStore {
     fun load(ctx: Context, live: Prefs, id: String): JSONObject =
         if (id == activeId(live)) snapshot(live) else stored(ctx, id)?.optJSONObject("snap") ?: factory(id)
 
-    fun nameOf(ctx: Context, id: String): String =
-        BUILT_IN.firstOrNull { it.first == id }?.second ?: stored(ctx, id)?.optString("name")?.takeIf { it.isNotBlank() } ?: "我的主題"
+    fun nameOf(ctx: Context, id: String): String {
+        BUILT_IN.firstOrNull { it.first == id }?.let { (_, def) ->
+            return builtInNames(Prefs(ctx)).optString(id).takeIf { it.isNotBlank() } ?: def
+        }
+        return stored(ctx, id)?.optString("name")?.takeIf { it.isNotBlank() } ?: "我的主題"
+    }
+
+    /** 內建主題原本的名字（「加回內建主題」用） */
+    fun builtInTitle(id: String) = BUILT_IN.firstOrNull { it.first == id }?.second ?: id
 
     fun list(ctx: Context, live: Prefs): List<Info> {
         val active = activeId(live)
-        val builtIn = BUILT_IN.map { (id, name) ->
+        val hidden = hiddenBuiltIns(live)
+        val builtIn = BUILT_IN.filter { it.first !in hidden }.map { (id, _) ->
+            val name = nameOf(ctx, id)
             val modified = if (id == active) !same(snapshot(live), factory(id)) else file(ctx, id)?.exists() == true
             Info(id, name, true, modified)
         }
@@ -108,7 +136,8 @@ object ThemeStore {
         return builtIn + mine
     }
 
-    fun exists(ctx: Context, id: String) = isBuiltIn(id) || file(ctx, id)?.exists() == true
+    fun exists(ctx: Context, id: String) =
+        if (isBuiltIn(id)) id !in hiddenBuiltIns(Prefs(ctx)) else file(ctx, id)?.exists() == true
 
     /**
      * 存一個主題（內建主題存成跟原廠一樣的話，就把檔案刪掉＝沒改過）。
@@ -202,19 +231,39 @@ object ThemeStore {
     }
 
     fun rename(ctx: Context, live: Prefs, id: String, name: String) {
-        if (isBuiltIn(id)) return
+        if (isBuiltIn(id)) {
+            val n = name.trim().take(30)
+            val o = builtInNames(live)
+            if (n.isEmpty() || n == builtInTitle(id)) o.remove(id)
+            else o.put(id, if (n == nameOf(ctx, id)) n else uniqueName(ctx, live, n))
+            live.sp.edit().putString(NAMES, o.toString()).commit()
+            return
+        }
         val snap = load(ctx, live, id)
         write(ctx, id, snap, uniqueName(ctx, live, name).takeIf { name.trim() != nameOf(ctx, id) } ?: name.trim())
     }
 
-    /** 刪掉「我的主題」（正在用的話先換回經典深色） */
+    /** 能不能刪：至少要留一個主題 */
+    fun canDelete(ctx: Context, live: Prefs) = list(ctx, live).size > 1
+
+    /**
+     * 刪掉一個主題（正在用的話先換到清單上的第一個）。
+     * 內建主題＝藏起來、改過的地方清掉，之後可以加回來（原本的樣子）；我的主題＝檔案刪掉。
+     */
     fun delete(ctx: Context, live: Prefs, id: String) {
-        if (isBuiltIn(id)) return
+        val rest = list(ctx, live).filter { it.id != id }
+        if (rest.isEmpty()) return
         if (activeId(live) == id) {
-            live.sp.edit().putString("active_theme", "classic").commit()
-            applyTo(live, stored(ctx, "classic")?.optJSONObject("snap") ?: factory("classic"))
+            // 清單上的第一個（自己做的、匯入的排在前面）
+            val next = (rest.firstOrNull { !it.builtIn } ?: rest.first()).id
+            live.sp.edit().putString("active_theme", next).putLong("stickers_ver", System.currentTimeMillis()).commit()
+            applyTo(live, stored(ctx, next)?.optJSONObject("snap") ?: factory(next))
         }
         file(ctx, id)?.delete()
+        if (isBuiltIn(id)) {
+            val o = builtInNames(live).apply { remove(id) }
+            live.sp.edit().putStringSet(HIDDEN, hiddenBuiltIns(live) + id).putString(NAMES, o.toString()).commit()
+        }
         cleanupImages(ctx)
     }
 
