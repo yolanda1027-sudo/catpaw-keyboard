@@ -102,7 +102,16 @@ data class KeyStyle(
         val out = LinkedHashMap(base)
         for ((k, v) in own) {
             val b = base[k]
-            out[k] = if (b == null) v else v.copy(color = v.color ?: b.color, hidden = v.hidden || b.hidden)
+            if (b == null) { out[k] = v; continue }
+            // 位置、大小、旋轉算一組：單顆自己拖過就整組用自己的；只改了顏色的話，位置照整類的
+            val moved = v.dx != 0f || v.dy != 0f || v.scale != 1f || v.rotation != 0f
+            val g = if (moved) v else b
+            out[k] = LabelStyle(
+                dx = g.dx, dy = g.dy, scale = g.scale, rotation = g.rotation,
+                color = v.color ?: b.color,
+                alpha = if (v.alpha != 1f) v.alpha else b.alpha,
+                hidden = v.hidden || b.hidden,
+            )
         }
         return out
     }

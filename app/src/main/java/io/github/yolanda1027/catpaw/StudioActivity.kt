@@ -17,6 +17,7 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import kotlin.math.roundToInt
 
 /**
  * 貓爪主題工作室：在鍵盤預覽上直接點按鍵來改樣子。
@@ -639,7 +640,9 @@ class StudioActivity : Activity() {
         imageRow(currentId()!!, "底圖", cur.bgImage)
         colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
         // 小字（注音鍵下面的 1、q、a…）：整類一起改；單顆鍵也可以在這裡改，不用點進那個字
-        if (key.sub != null) {
+        val groupKeys = if (groupScope) kv.rows.flatten().filter { it.act != Act.GAP && KeyStyles.groupOf(it) == group } else listOf(key)
+        val hasSub = groupKeys.any { it.sub != null }
+        if (hasSub) {
             colorRow("小字顏色", cur.labels?.get("sub")?.color, kv.labelColorOf(key, "sub") ?: now?.sub ?: Color.GRAY) { v ->
                 update({ st ->
                     val m = (st.labels ?: emptyMap()).toMutableMap()
@@ -680,6 +683,9 @@ class StudioActivity : Activity() {
             setPadding(0, px(6f), 0, px(6f))
             setOnCheckedChangeListener { _, on -> update({ it.copy(hideLabel = if (on) true else null) }) }
         })
+
+        // 整類一起移字：主字（注音、英文字母）、小字（1、q、a…）的位置和大小
+        if (groupScope) groupLabelControls(hasSub)
 
         if (groupScope && styles.map.containsKey(selId)) {
             text("💡 這顆鍵自己還有另外的設定，會優先用它自己的。", 13f, dim = true)
@@ -739,6 +745,35 @@ class StudioActivity : Activity() {
     }
 
     // ---------- 圖案 ----------
+
+    /**
+     * 整類按鍵一起調字的位置、大小（寫在整類的樣式裡）。
+     * 左右用按鍵寬度的 %、上下用按鍵高度的 %，所以寬窄不同的鍵移得一樣「比例」。
+     */
+    private fun groupLabelControls(hasSub: Boolean) {
+        section("字的位置和大小")
+        text("一次移動這一類全部按鍵上的字。單顆鍵自己拖過的字，還是照那顆自己的。", 13f, dim = true)
+        val names = listOf("main" to "主字") + if (hasSub) listOf("sub" to "小字") else emptyList()
+        for ((name, title) in names) {
+            val ls = styles.map[currentId()]?.labels?.get(name) ?: LabelStyle()
+            text(title, 15f, bold = true).setPadding(0, px(12f), 0, 0)
+            fun live(f: (LabelStyle) -> LabelStyle) = update({ st ->
+                val m = (st.labels ?: emptyMap()).toMutableMap()
+                val n = f(m[name] ?: LabelStyle())
+                if (n.isEmpty) m.remove(name) else m[name] = n
+                st.copy(labels = m.takeIf { it.isNotEmpty() })
+            }, rebuild = false)
+            val pct = { v: Int -> if (v == 0) "0（原位置）" else (if (v > 0) "+$v%" else "$v%") }
+            slider("左右（往右是 +）", (ls.dx * 100).roundToInt().coerceIn(-50, 50), -50, 50, pct) { v -> live { it.copy(dx = v / 100f) } }
+            slider("上下（往下是 +）", (ls.dy * 100).roundToInt().coerceIn(-50, 50), -50, 50, pct) { v -> live { it.copy(dy = v / 100f) } }
+            slider("大小", (ls.scale * 100).roundToInt().coerceIn(30, 300), 30, 300, { "$it%" }) { v -> live { it.copy(scale = v / 100f) } }
+            if (ls.dx != 0f || ls.dy != 0f || ls.scale != 1f) button("↺ ${title}回到原本的位置和大小") {
+                live { it.copy(dx = 0f, dy = 0f, scale = 1f) }
+                commitHistory()
+                refresh()
+            }
+        }
+    }
 
     private fun section(s: String) = text(s, 17f, bold = true).setPadding(0, px(22f), 0, px(4f))
 
