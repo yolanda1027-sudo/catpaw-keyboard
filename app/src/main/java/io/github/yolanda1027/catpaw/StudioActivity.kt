@@ -1854,7 +1854,9 @@ class StudioActivity : Activity() {
         val cur = styles.quick ?: QuickBarStyle()
         val now = kv.quickBarColors()
         val hasFrame = cur.frame != null
-        colorRow("整列的底色", cur.strip, now.strip!!, allowTransparent = true) { v -> setQuick({ it.copy(strip = v) }) }
+        // 主題原本的快捷列沒有自己的底色：看到的是鍵盤背景（背景圖片也會透過來），不要顯示成一個顏色
+        colorRow("整列的底色", cur.strip, now.strip!!, allowTransparent = true, unsetText = "沒有底色，看得到鍵盤背景") { v -> setQuick({ it.copy(strip = v) }) }
+        text("選一個顏色，整列就會塗上那個顏色（會蓋住背景圖片）。", 12f, dim = true)
 
         // 按鈕圖片（九宮格）
         val head = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, px(6f), 0, 0) }
@@ -2484,7 +2486,10 @@ class StudioActivity : Activity() {
      * @param now 沒自訂時，這顆鍵現在畫面上的顏色
      * @param allowTransparent 多一顆「透明」（底色、外框用：等於拿掉）
      */
-    private fun colorRow(label: String, value: Int?, now: Int, allowTransparent: Boolean = false, onPick: (Int?) -> Unit) {
+    /**
+     * @param unsetText 沒自訂時本來就是透明的（例如快捷列整列）：說明文字用這個，色塊顯示「透明」，不顯示成一個顏色
+     */
+    private fun colorRow(label: String, value: Int?, now: Int, allowTransparent: Boolean = false, unsetText: String? = null, onPick: (Int?) -> Unit) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -2492,9 +2497,10 @@ class StudioActivity : Activity() {
         }
         val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         names.addView(TextView(this).apply { text = label; textSize = 15f })
-        val clear = value != null && Color.alpha(value) == 0
+        val clear = (value != null && Color.alpha(value) == 0) || (value == null && unsetText != null)
         names.addView(TextView(this).apply {
             text = when {
+                value == null && unsetText != null -> unsetText
                 value == null -> "主題原本的顏色"
                 clear -> "透明（拿掉了）"
                 else -> "已自訂"

@@ -75,6 +75,30 @@ class QuickBarStyleTest {
         assertEquals(style.strip, b.getPixel(w, top + (40 * 2.625f / 2).toInt()))
     }
 
+    /** 有鍵盤背景圖：快捷列沒設底色＝看得到背景圖；設了底色＝整列塗那個顏色（蓋住背景圖） */
+    @Test fun stripOverBackgroundImage() {
+        val p = Prefs(ctx)
+        p.quickBar = true
+        val parchment = Color.parseColor("#F2C48E")
+        val img = Decals.storeBitmap(ctx, Bitmap.createBitmap(200, 120, Bitmap.Config.ARGB_8888).apply { eraseColor(parchment) })
+        val bg = KeyStyle(bgImage = ImageFill(img))
+        fun gap(strip: Int?): Int {
+            KeyStyles.save(p, KeyStyles(quick = strip?.let { QuickBarStyle(strip = it) }).with(KeyStyles.KEYBOARD, bg))
+            val kv = CatKeyboardView(ctx, p, Haptics(ctx))
+            kv.quickItems = p.quickList()
+            kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
+            val b = Bitmap.createBitmap(kv.measuredWidth, kv.measuredHeight, Bitmap.Config.ARGB_8888)
+            kv.draw(Canvas(b))
+            save(b, "quickbar-over-image-" + (if (strip == null) "none" else "dark"))
+            val top = (kv.floatH + 40 * 2.625f).toInt()
+            return b.getPixel(1080 / p.quickList().size, top + (40 * 2.625f / 2).toInt())
+        }
+        assertEquals("沒設底色：看得到背景圖", parchment, gap(null))
+        val dark = Color.parseColor("#23262E")
+        assertEquals("設了底色：蓋住背景圖", dark, gap(dark))
+    }
+
     @Test fun studioPanelUndoAndExport() {
         val p = Prefs(ctx)
         p.theme = "macaron_butter"
