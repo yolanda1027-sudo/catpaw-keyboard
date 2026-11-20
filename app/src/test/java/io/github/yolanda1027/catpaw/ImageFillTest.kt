@@ -159,6 +159,7 @@ class ImageFillTest {
         ShadowLooper.idleMainLooper()
         val help = ShadowDialog.getLatestDialog() as Dialog
         assertTrue(find(help.window!!.decorView) { it is TextView && it.text.toString().contains("照原圖比例") } != null)
+        assertTrue("說明右邊那張是橫放", find(help.window!!.decorView) { it is TextView && it.text.toString().contains("手機轉橫") } != null)
         render(help.window!!.decorView, "fill-mode-help")
         help.dismiss()
         ShadowLooper.idleMainLooper()
@@ -190,7 +191,18 @@ class ImageFillTest {
         req = shadowOf(a).nextStartedActivityForResult
         shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(bgGif)))
         ShadowLooper.idleMainLooper()
-        pickMode((ShadowDialog.getLatestDialog() as Dialog).window!!.decorView, "照片、花紋")
+        val askBg = ShadowDialog.getLatestDialog() as Dialog
+        render(askBg.window!!.decorView, "fill-mode-dialog-bg")
+        // 預覽：左邊直放、右邊橫放（螢幕長邊 891 ÷ 短邊 411 ≈ 2.17 倍寬，高度一樣）
+        val pv = find(askBg.window!!.decorView) { it is android.widget.ImageView && it.drawable is android.graphics.drawable.BitmapDrawable } as android.widget.ImageView
+        val pb = (pv.drawable as android.graphics.drawable.BitmapDrawable).bitmap
+        val dark = (0 until pb.width).map { x -> Color.alpha(pb.getPixel(x, pb.height / 3)) > 0 }
+        val runs = mutableListOf<Int>(); var n = 0
+        for (o in dark) { if (o) n++ else if (n > 0) { runs += n; n = 0 } }; if (n > 0) runs += n
+        val big = runs.filter { it > 10 }
+        assertEquals("兩張預覽", 2, big.size)
+        assertEquals(891f / 411f, big[1].toFloat() / big[0], 0.1f)
+        pickMode(askBg.window!!.decorView, "照片、花紋")
         crop = ShadowDialog.getLatestDialog() as Dialog
         render(crop.window!!.decorView, "fill-crop-bg")
         button(crop.window!!.decorView, "完成").performClick()

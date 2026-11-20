@@ -2003,25 +2003,47 @@ class StudioActivity : Activity() {
             ?.let { android.graphics.BitmapFactory.decodeFile(it.path) }
 
     /**
-     * 一種放法的預覽：現在的框，和比例不一樣的框（換到別的手機、別的按鍵大概會這樣）。
-     * 背景：另一個是矮一點的（沒開快捷列）；按鍵：另一個是寬一點的。
+     * 手機轉橫的時候，框會變寬幾倍：鍵盤的寬度變成螢幕的長邊，高度不變（按鍵高度一樣）。
+     * 按鍵之間的空隙是固定的 dp，所以按鍵本身變寬的倍數比螢幕再多一點點。
+     */
+    private fun landscapeWidth(frame: RectF, isKeyboard: Boolean): Float {
+        val dm = resources.displayMetrics
+        val long = maxOf(dm.widthPixels, dm.heightPixels).toFloat()
+        val short = minOf(dm.widthPixels, dm.heightPixels).toFloat()
+        val ratio = long / short
+        if (isKeyboard) return frame.width() * ratio
+        val gap = 5 * dm.density // 一顆鍵左右的空隙（大約）
+        return (frame.width() + gap) * ratio - gap
+    }
+
+    /**
+     * 一種放法的預覽：左邊是現在（直放）的框，右邊是手機橫放時的框（同一個按鍵或背景變寬）。
+     * 照片會被裁多少、整張會被拉多寬，選的時候就看得到。
      */
     private fun modePreview(fill: ImageFill, bmp: android.graphics.Bitmap, frame: RectF, corner: Float, isKeyboard: Boolean): android.graphics.Bitmap {
-        val h = px(if (isKeyboard) 46f else 40f).toFloat()
-        val frames = listOf(frame.width() / frame.height(), if (isKeyboard) frame.width() / (frame.height() * 0.86f) else frame.width() * 1.6f / frame.height())
-        val gap = px(6f).toFloat()
-        val ws = frames.map { it * h }
-        val out = android.graphics.Bitmap.createBitmap((ws.sum() + gap).toInt() + 2, h.toInt() + 2, android.graphics.Bitmap.Config.ARGB_8888)
+        val ratios = listOf(frame.width() / frame.height(), landscapeWidth(frame, isKeyboard) / frame.height())
+        val gap = px(8f).toFloat()
+        // 背景橫放會很寬：整排最多 170dp 寬，放不下就整個縮矮一點
+        val h = minOf(px(if (isKeyboard) 46f else 40f).toFloat(), (px(170f) - gap) / ratios.sum())
+        val ws = ratios.map { it * h }
+        val tag = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF8A8590.toInt()
+            textSize = px(10f).toFloat()
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+        val tagH = px(14f).toFloat()
+        val out = android.graphics.Bitmap.createBitmap((ws.sum() + gap).toInt() + 2, (h + tagH).toInt() + 2, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(out)
         val base = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF55505A.toInt() }
         var x = 1f
-        for (w in ws) {
+        for ((i, w) in ws.withIndex()) {
             val r = RectF(x, 1f, x + w, 1f + h)
             val rad = if (fill.shape || fill.nine) 0f else corner * minOf(r.width(), r.height())
             if (!fill.shape && !fill.nine) c.drawRoundRect(r, rad, rad, base)
             val clip = if (fill.shape || fill.nine) null else android.graphics.Path().apply { addRoundRect(r, rad, rad, android.graphics.Path.Direction.CW) }
             // 照片模式：換到別的框時，cover 的裁切照比例算（跟鍵盤真的畫法一樣）
             ImageFill.draw(c, fill, r, clip, bmp, null)
+            c.drawText(if (i == 0) "直放" else "橫放時", r.centerX(), r.bottom + tagH - px(3f), tag)
             x += w + gap
         }
         return out
@@ -2080,7 +2102,7 @@ class StudioActivity : Activity() {
     /** 「?」：三種放法的說明 */
     private fun modeHelp(isKeyboard: Boolean) {
         val msg = ImageFill.Mode.values().joinToString("\n\n") { "【${it.title}】\n${it.hint}" } +
-            "\n\n預覽：左邊是" + (if (isKeyboard) "現在的鍵盤背景，右邊是矮一點的（例如沒開快捷列的手機）。" else "這顆鍵，右邊是寬一點的鍵。")
+            "\n\n預覽：左邊是" + (if (isKeyboard) "現在的鍵盤背景" else "這顆鍵") + "，右邊是手機轉橫的時候（鍵盤變寬、高度不變）。"
         android.app.AlertDialog.Builder(this).setTitle("放法說明").setMessage(msg).setPositiveButton("知道了", null).show()
     }
 
