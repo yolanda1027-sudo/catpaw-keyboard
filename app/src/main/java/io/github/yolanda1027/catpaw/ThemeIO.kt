@@ -100,7 +100,7 @@ object ThemeIO {
         }
         if (Part.KEYS in parts) {
             val ks = KeyStyles.load(prefs)
-            if (ks.map.isNotEmpty() || ks.topBar != null || ks.quick != null) o.put("keyStyles", ks.toJson())
+            if (ks.map.isNotEmpty() || ks.topBar != null || ks.quick != null || ks.popup != null) o.put("keyStyles", ks.toJson())
         }
         if (Part.DECALS in parts) {
             val list = Decals.load(prefs)
@@ -248,7 +248,7 @@ object ThemeIO {
                     val n = rename[f.img]
                     if (n != null) q.copy(frame = f.copy(img = n)) else { lostImage = true; q.copy(frame = null) }
                 } ?: q
-            }, loaded.pageTops))
+            }, loaded.pageTops, loaded.popup))
             if (lostImage) warnings.add("有底圖的圖片壞掉了，那幾顆鍵先用底色")
         }
         o.optJSONObject("decals")?.let {

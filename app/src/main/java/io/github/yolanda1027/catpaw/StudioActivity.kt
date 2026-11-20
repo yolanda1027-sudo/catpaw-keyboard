@@ -60,6 +60,8 @@ class StudioActivity : Activity() {
     private var topSelected = false
     /** 正在改快捷符號列的顏色 */
     private var quickSelected = false
+    /** 正在改「長按選單、泡泡」的顏色（整個主題一組） */
+    private var popupSelected = false
     /** 選到的圖案 */
     private var decalSel: String? = null
     /** 從相簿選圖片時，要貼到哪 */
@@ -111,6 +113,7 @@ class StudioActivity : Activity() {
                 bgSelected = false
                 topSelected = false
                 quickSelected = false
+                popupSelected = false
                 decalSel = null
                 if (animMode == GLOBAL) animMode = null
                 refresh()
@@ -122,6 +125,7 @@ class StudioActivity : Activity() {
                 decalSel = null
                 animMode = null
                 quickSelected = false
+                popupSelected = false
                 topSelected = true
                 refresh()
             }
@@ -354,7 +358,7 @@ class StudioActivity : Activity() {
             decalSel != null -> decalSel = null // 圖案、按鍵上的字 → 回到那顆鍵（或鍵盤背景）
             animMode != null -> animMode = null // 按鍵動畫 → 回到那顆鍵（或首頁）
             selected != null -> { selected = null; groupScope = false }
-            bgSelected || topSelected || quickSelected -> { bgSelected = false; topSelected = false; quickSelected = false }
+            bgSelected || topSelected || quickSelected || popupSelected -> { bgSelected = false; topSelected = false; quickSelected = false; popupSelected = false }
             overview -> overview = false
             else -> return false
         }
@@ -434,6 +438,7 @@ class StudioActivity : Activity() {
         bgSelected = false
         topSelected = false
         quickSelected = false
+        popupSelected = false
         decalSel = null
         refresh()
     }
@@ -609,9 +614,10 @@ class StudioActivity : Activity() {
         if (decalSel?.startsWith(LABEL) == true && sk != null && !bgSelected && !groupScope) { labelPanel(sk, decalSel!!.removePrefix(LABEL)); return }
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
-        if (overview && !topSelected && !quickSelected && !bgSelected && selected == null) { overviewPanel(); return }
+        if (overview && !topSelected && !quickSelected && !popupSelected && !bgSelected && selected == null) { overviewPanel(); return }
         if (topSelected) { topBarPanel(); return }
         if (quickSelected) { quickBarPanel(); return }
+        if (popupSelected) { popupPanel(); return }
         if (bgSelected) { bgPanel(); return }
         val key = selected
         if (key == null) {
@@ -645,6 +651,7 @@ class StudioActivity : Activity() {
 
             section("全部頁面")
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
+            button("💬 長按選單、按下時泡泡的顏色" + if (styles.popup != null) "（已設計）" else "") { popupSelected = true; refresh() }
             val nAll = overviewCount()
             if (nAll > 0) button("🔍 設計總覽：這個主題有 $nAll 項設計 ›") { overview = true; refresh() }
 
@@ -864,6 +871,10 @@ class StudioActivity : Activity() {
                 )
                 out.add(Item(p.id, "快捷符號列", parts.joinToString("、")) { goPage(p.id) { quickSelected = true } })
             }
+            if (p.id.isEmpty()) styles.popup?.let { q ->
+                val parts = listOfNotNull(if (q.menuSet) "長按選單" else null, if (q.bubbleSet) "放大字泡泡" else null)
+                out.add(Item(p.id, "長按選單、泡泡（每一頁都一樣）", parts.joinToString("、")) { goPage(p.id) { popupSelected = true } })
+            }
             // 按鍵：整類排前面，再來單顆
             val keys = styles.keyEntries.filterKeys { KeyStyles.pageOf(it) == p.id }
                 .toList().sortedBy { if (KeyStyles.baseOf(it.first).startsWith("@")) 0 else 1 }
@@ -968,6 +979,7 @@ class StudioActivity : Activity() {
         decalSel = d.id
         topSelected = false
         quickSelected = false
+        popupSelected = false
         if (d.onBackground) {
             bgSelected = true
             selected = null
@@ -1651,7 +1663,8 @@ class StudioActivity : Activity() {
             val hasBgImage = styles.map.keys.any { KeyStyles.baseOf(it) == KeyStyles.KEYBOARD }
             val hasTop = styles.topBar != null || styles.pageTops.isNotEmpty()
             val hasQuick = styles.quick != null
-            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop && !hasQuick) {
+            val hasPopup = styles.popup != null
+            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop && !hasQuick && !hasPopup) {
                 android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
                 return@button
             }
@@ -1661,6 +1674,7 @@ class StudioActivity : Activity() {
                 if (hasBgImage) add("・鍵盤背景圖片")
                 if (hasTop) add("・上方列（中／En）的顏色")
                 if (hasQuick) add("・快捷符號列的顏色")
+                if (hasPopup) add("・長按選單、泡泡的顏色")
             }
             val dialog = AlertDialog.Builder(this)
                 .setTitle("恢復主題預設？")
@@ -1681,6 +1695,7 @@ class StudioActivity : Activity() {
         bgSelected = false
         topSelected = false
         quickSelected = false
+        popupSelected = false
         animMode = null
         groupScope = false
         ThemeStore.restoreParts(prefs, origin, ThemeStore.STUDIO_KEYS)
@@ -1699,6 +1714,7 @@ class StudioActivity : Activity() {
         bgSelected = false
         topSelected = false
         quickSelected = false
+        popupSelected = false
         animMode = null
         groupScope = false
         styles = KeyStyles.EMPTY
@@ -1845,6 +1861,55 @@ class StudioActivity : Activity() {
         KeyStyles.save(prefs, styles)
         kv.setKeyStylesLive(styles)
         if (rebuild) refresh()
+    }
+
+    private fun setPopup(change: (PopupStyle) -> PopupStyle?) {
+        styles = styles.withPopup(change(styles.popup ?: PopupStyle()))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        refresh()
+    }
+
+    /** 長按選單、放大字泡泡的顏色（整個主題一組）：上面畫一個樣本，下面選顏色 */
+    private fun popupPanel() {
+        kv.editHighlight = null
+        header("正在編輯：長按選單、泡泡")
+        text("整個主題共用一組，每一頁都一樣。沒設的照原本的樣子（跟著按鍵的顏色）。", 13f, dim = true)
+        // 樣本用這一頁的一顆字鍵（注音頁是 ㄜ 那顆）
+        val key = kv.rows.flatten().let { ks -> ks.firstOrNull { it.label == "ㄜ" } ?: ks.firstOrNull { it.act == Act.ZHUYIN || it.act == Act.TEXT } }
+        val items = if (key == null) listOf("A", "あ", "a") else listOf(key.sub?.uppercase() ?: key.label.uppercase(), key.label, key.sub ?: key.label.lowercase()).distinct()
+        val sel = items.size / 2
+        panel.addView(object : View(this) {
+            override fun onDraw(c: android.graphics.Canvas) {
+                val h = height.toFloat()
+                val bw = h * 0.72f
+                kv.drawBubbleSample(c, RectF(px(4f).toFloat(), 0f, px(4f) + bw, h), key, key?.label ?: "あ")
+                val left = px(4f) + bw + px(18f)
+                val w = minOf(width - left - px(4f), h * 0.8f * items.size)
+                kv.drawPopupSample(c, RectF(left, h * 0.18f, left + w, h * 0.18f + h * 0.66f), items, sel, key)
+            }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(72f)).apply { topMargin = px(10f) })
+        text("左邊：按下時跳出的放大字　右邊：長按的選單", 12f, dim = true)
+
+        val cur = styles.popup ?: PopupStyle()
+        val menu = kv.popupMenuColors(key)
+        section("長按選單")
+        colorRow("底色", cur.bg, menu[0]) { v -> setPopup { it.copy(bg = v) } }
+        colorRow("選中那一格", cur.sel, menu[1]) { v -> setPopup { it.copy(sel = v) } }
+        colorRow("字", cur.text, menu[2]) { v -> setPopup { it.copy(text = v) } }
+        colorRow("選中那一格的字", cur.selText, menu[3]) { v -> setPopup { it.copy(selText = v) } }
+        if (cur.selText == null) text("選中那一格的字沒設：自動用黑或白，看起來比較清楚的那個。", 12f, dim = true)
+
+        val bubble = kv.bubbleColors(key)
+        section("按下時跳出的放大字")
+        colorRow("底色", cur.bubbleBg, bubble[0]) { v -> setPopup { it.copy(bubbleBg = v) } }
+        colorRow("字", cur.bubbleText, bubble[1]) { v -> setPopup { it.copy(bubbleText = v) } }
+        text("設了底色，泡泡就變成一個純色的圓角泡泡（不畫按鍵的底圖）。設定裡「按下時跳出放大的字」關著的話，打字時不會出現。", 12f, dim = true)
+
+        if (styles.popup != null) {
+            section("重來")
+            button("全部改回原本的樣子") { setPopup { null } }
+        }
     }
 
     private fun quickBarPanel() {

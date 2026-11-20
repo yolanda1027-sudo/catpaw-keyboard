@@ -423,7 +423,7 @@ object ThemeStore {
             val map = idMaps[target]
             m[target] = if (map != null && st.order != null) st.copy(order = st.order.map { map[it] ?: it }) else st
         }
-        var out = KeyStyles(m, ks.topBar, ks.quick, ks.pageTops)
+        var out = KeyStyles(m, ks.topBar, ks.quick, ks.pageTops, ks.popup)
         ks.topBar?.let { out = out.withTopBarFor("en", it) }
         KeyStyles.save(p, out)
         if (copies.isNotEmpty()) Decals.save(p, ds + copies)

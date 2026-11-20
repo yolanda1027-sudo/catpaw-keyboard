@@ -278,6 +278,46 @@ data class QuickBarStyle(
 }
 
 /**
+ * 長按選單、按下時跳出的放大字泡泡的顏色（整個主題共用一組，每一頁都一樣）。
+ * 沒設的就照原本的規則（跟著按鍵的顏色、主題原本的顏色）。
+ */
+data class PopupStyle(
+    /** 長按選單：底色、選中那一格、字 */
+    val bg: Int? = null,
+    val sel: Int? = null,
+    val text: Int? = null,
+    /** 選中那一格的字（沒設：自動挑跟選中底色對比清楚的黑或白） */
+    val selText: Int? = null,
+    /** 按下時跳出的放大字泡泡：底色、字 */
+    val bubbleBg: Int? = null,
+    val bubbleText: Int? = null,
+) {
+    val isEmpty get() = bg == null && sel == null && text == null && selText == null && bubbleBg == null && bubbleText == null
+    val menuSet get() = bg != null || sel != null || text != null || selText != null
+    val bubbleSet get() = bubbleBg != null || bubbleText != null
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        fun hex(c: Int) = String.format("#%08X", c)
+        bg?.let { put("bg", hex(it)) }
+        sel?.let { put("sel", hex(it)) }
+        text?.let { put("text", hex(it)) }
+        selText?.let { put("selText", hex(it)) }
+        bubbleBg?.let { put("bubbleBg", hex(it)) }
+        bubbleText?.let { put("bubbleText", hex(it)) }
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject?): PopupStyle? {
+            if (o == null) return null
+            fun col(k: String): Int? = o.optString(k).takeIf { it.isNotEmpty() }?.let {
+                try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null }
+            }
+            return PopupStyle(col("bg"), col("sel"), col("text"), col("selText"), col("bubbleBg"), col("bubbleText")).takeIf { !it.isEmpty }
+        }
+    }
+}
+
+/**
  * 所有按鍵樣式。用「代號」對應：
  * - 單顆鍵：注音鍵 zy:ㄅ、其他字鍵 t:q、功能鍵 enter / backspace / space …
  * - 一整類：@zhuyin（所有注音鍵）、@char、@func、@space、@enter
@@ -290,6 +330,8 @@ class KeyStyles(
     val quick: QuickBarStyle? = null,
     /** 其他頁（符號、表情…）自己的上方列，key 是頁的代號 */
     val pageTops: Map<String, TopBarStyle> = emptyMap(),
+    /** 長按選單、放大字泡泡的顏色（整個主題一組） */
+    val popup: PopupStyle? = null,
 ) {
 
     /** 鍵盤的每一頁（主題工作室可以各自設計）；"" 是注音和英文鍵盤 */
@@ -320,22 +362,25 @@ class KeyStyles(
     fun with(id: String, style: KeyStyle?): KeyStyles {
         val m = LinkedHashMap(map)
         if (style == null || style.isEmpty) m.remove(id) else m[id] = style
-        return KeyStyles(m, topBar, quick, pageTops)
+        return KeyStyles(m, topBar, quick, pageTops, popup)
     }
 
-    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty }, quick, pageTops)
-    fun withQuick(q: QuickBarStyle?): KeyStyles = KeyStyles(map, topBar, q?.takeIf { !it.isEmpty }, pageTops)
+    fun withTopBar(t: TopBarStyle?): KeyStyles = KeyStyles(map, t?.takeIf { !it.isEmpty }, quick, pageTops, popup)
+    fun withQuick(q: QuickBarStyle?): KeyStyles = KeyStyles(map, topBar, q?.takeIf { !it.isEmpty }, pageTops, popup)
+    fun withPopup(p: PopupStyle?): KeyStyles = KeyStyles(map, topBar, quick, pageTops, p?.takeIf { !it.isEmpty })
     /** 只換按鍵的部分（上方列、快捷列的顏色留著） */
-    fun withMap(m: Map<String, KeyStyle>): KeyStyles = KeyStyles(m, topBar, quick, pageTops)
+    fun withMap(m: Map<String, KeyStyle>): KeyStyles = KeyStyles(m, topBar, quick, pageTops, popup)
 
     /** 一樣的設定（上一步用來比對有沒有改） */
-    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar && other.quick == quick && other.pageTops == pageTops
-    override fun hashCode() = ((map.hashCode() * 31 + (topBar?.hashCode() ?: 0)) * 31 + (quick?.hashCode() ?: 0)) * 31 + pageTops.hashCode()
+    override fun equals(other: Any?) = other is KeyStyles && other.map == map && other.topBar == topBar && other.quick == quick &&
+        other.pageTops == pageTops && other.popup == popup
+    override fun hashCode() = (((map.hashCode() * 31 + (topBar?.hashCode() ?: 0)) * 31 + (quick?.hashCode() ?: 0)) * 31 + pageTops.hashCode()) * 31 + (popup?.hashCode() ?: 0)
 
     fun toJson(): JSONObject = JSONObject().apply {
         for ((k, v) in map) put(k, v.toJson())
         topBar?.let { put(TOP_BAR, it.toJson()) }
         quick?.let { put(QUICK, it.toJson()) }
+        popup?.let { put(POPUP, it.toJson()) }
         for ((p, t) in pageTops) put(scoped(p, TOP_BAR), t.toJson())
     }
 
@@ -352,7 +397,7 @@ class KeyStyles(
         if (page.isEmpty()) return withTopBar(t)
         val m = LinkedHashMap(pageTops)
         if (t == null || t.isEmpty) m.remove(page) else m[page] = t
-        return KeyStyles(map, topBar, quick, m)
+        return KeyStyles(map, topBar, quick, m, popup)
     }
 
     /**
@@ -368,7 +413,7 @@ class KeyStyles(
             if (target == id) continue
             if (st == null) m.remove(target) else m[target] = st
         }
-        return KeyStyles(m, topBar, quick, pageTops)
+        return KeyStyles(m, topBar, quick, pageTops, popup)
     }
 
     /** 上方列套用到所有頁面 */
@@ -416,6 +461,8 @@ class KeyStyles(
         const val TOP_BAR = "@topbar"
         /** 快捷符號列的顏色（存檔裡的代號） */
         const val QUICK = "@quick"
+        /** 長按選單、放大字泡泡的顏色（存檔裡的代號） */
+        const val POPUP = "@popup"
 
         /** 按鍵的代號（帶頁面：符號頁的刪除鍵是 sym/backspace） */
         fun idOf(key: Key): String = scoped(key.page, when (key.act) {
@@ -454,7 +501,7 @@ class KeyStyles(
             val m = LinkedHashMap<String, KeyStyle>()
             val tops = LinkedHashMap<String, TopBarStyle>()
             for (k in o.keys()) {
-                if (k == TOP_BAR || k == QUICK) continue
+                if (k == TOP_BAR || k == QUICK || k == POPUP) continue
                 if (baseOf(k) == TOP_BAR) {
                     TopBarStyle.fromJson(o.optJSONObject(k))?.let { tops[pageOf(k)] = it }
                     continue
@@ -462,7 +509,10 @@ class KeyStyles(
                 val s = o.optJSONObject(k)?.let { KeyStyle.fromJson(it) } ?: continue
                 if (!s.isEmpty) m[k] = s
             }
-            return KeyStyles(m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)), QuickBarStyle.fromJson(o.optJSONObject(QUICK)), tops)
+            return KeyStyles(
+                m, TopBarStyle.fromJson(o.optJSONObject(TOP_BAR)), QuickBarStyle.fromJson(o.optJSONObject(QUICK)), tops,
+                PopupStyle.fromJson(o.optJSONObject(POPUP)),
+            )
         }
 
         fun load(prefs: Prefs): KeyStyles = try {
