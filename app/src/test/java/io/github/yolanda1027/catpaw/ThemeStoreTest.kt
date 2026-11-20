@@ -187,20 +187,19 @@ class ThemeStoreTest {
         assertFalse(a.actionBar!!.title.toString().endsWith("•"))
     }
 
-    @Test fun studioEditsOtherThemeAndAsksToApply() {
+    @Test fun studioEditsOtherThemeWithoutApplying() {
         val a = studio(Intent().putExtra(StudioActivity.EXTRA_THEME, "stitch"))
         val work = Prefs(ctx, ThemeStore.WORK)
         assertEquals("工作室打開的是粉紅縫線", "stitch", work.theme)
         assertEquals("classic", live().theme)
         Decals.save(work, listOf(Decal("d1", Decal.BG, "shape:heart")))
         call(a, "save", null)
-        // 不是正在用的主題：問要不要套用；鍵盤還沒變
-        val d = ShadowAlertDialog.getLatestAlertDialog()
-        assertTrue(d.isShowing)
+        // 編輯歸編輯、套用歸套用：只存進粉紅縫線，不問、鍵盤不換
+        assertTrue(ShadowAlertDialog.getLatestAlertDialog()?.isShowing != true)
+        assertEquals("classic", ThemeStore.activeId(live()))
         assertTrue(Decals.load(live()).isEmpty())
-        d.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick()
-        org.robolectric.shadows.ShadowLooper.idleMainLooper()
-        assertEquals("stitch", ThemeStore.activeId(live()))
+        // 之後在主題清單點它才套用：存的東西都在
+        ThemeStore.applyTheme(ctx, live(), "stitch")
         assertEquals(1, Decals.load(live()).size)
     }
 

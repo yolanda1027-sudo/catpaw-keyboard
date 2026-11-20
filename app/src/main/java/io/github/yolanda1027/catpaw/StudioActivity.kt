@@ -228,14 +228,40 @@ class StudioActivity : Activity() {
     private fun updateTitle() {
         val dirty = ::prefs.isInitialized && ThemeStore.isDirty(prefs)
         actionBar?.title = "✏️ " + ThemeStore.nameOf(this, themeId) + if (dirty) " •" else ""
+        // 編輯歸編輯、套用歸套用：標出鍵盤現在用的是哪個
+        val active = ThemeStore.activeId(live)
+        actionBar?.subtitle = if (active == themeId) "鍵盤正在用這個主題" else "鍵盤正在用：" + ThemeStore.nameOf(this, active)
+    }
+
+    /** 換一個主題來編輯（只是編輯，鍵盤用的主題不會變） */
+    private fun pickThemeToEdit() {
+        val all = ThemeStore.list(this, live)
+        val active = ThemeStore.activeId(live)
+        val ordered = all.filter { !it.builtIn } + all.filter { it.builtIn }
+        val labels = ordered.map { t ->
+            (if (t.id == themeId) "✏️ " else "") + t.name + if (t.id == active) "（鍵盤正在用）" else ""
+        }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("要編輯哪個主題？")
+            .setItems(labels) { _, i ->
+                val id = ordered[i].id
+                if (id == themeId) return@setItems
+                confirmLeave {
+                    themeId = id
+                    prefs = ThemeStore.openWork(this, live, id)
+                    recreate()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun save(then: (() -> Unit)? = null) {
         commitHistory()
         ThemeStore.saveWork(this, live, themeId, prefs)
-        android.widget.Toast.makeText(this, "已儲存「${ThemeStore.nameOf(this, themeId)}」", android.widget.Toast.LENGTH_SHORT).show()
+        savedToast()
         updateTitle()
-        askApply(then)
+        then?.invoke()
     }
 
     private fun saveAs(then: (() -> Unit)? = null) {
@@ -253,26 +279,24 @@ class StudioActivity : Activity() {
             .setPositiveButton("存成新主題") { _, _ ->
                 themeId = ThemeStore.create(this, live, input.text.toString(), ThemeStore.snapshot(prefs))
                 ThemeStore.markSaved(prefs)
-                android.widget.Toast.makeText(this, "已存成「${ThemeStore.nameOf(this, themeId)}」", android.widget.Toast.LENGTH_SHORT).show()
+                savedToast("已存成")
                 updateTitle()
-                askApply(then)
+                then?.invoke()
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    /** 存好的不是正在用的主題：問要不要套到鍵盤上 */
-    private fun askApply(then: (() -> Unit)?) {
-        if (themeId == ThemeStore.activeId(live)) { then?.invoke(); return }
-        android.app.AlertDialog.Builder(this)
-            .setMessage("要把「${ThemeStore.nameOf(this, themeId)}」套用到鍵盤嗎？")
-            .setPositiveButton("套用") { _, _ ->
-                ThemeStore.applyTheme(this, live, themeId)
-                then?.invoke()
-            }
-            .setNegativeButton("先不要") { _, _ -> then?.invoke() }
-            .setOnCancelListener { then?.invoke() }
-            .show()
+    /**
+     * 存好了：只存，不換鍵盤用的主題（編輯歸編輯、套用歸套用）。
+     * 存的是鍵盤正在用的主題的話，鍵盤當然跟著變；不是的話提醒一下去哪裡套用。
+     */
+    private fun savedToast(verb: String = "已儲存") {
+        val name = ThemeStore.nameOf(this, themeId)
+        val active = ThemeStore.activeId(live)
+        val msg = if (active == themeId) "$verb「$name」，鍵盤已經換成新的樣子"
+        else "$verb「$name」。鍵盤還是用「${ThemeStore.nameOf(this, active)}」，要換的話到主題清單點它"
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
     }
 
     /** 有沒存的修改時先問：儲存／不儲存／取消 */
@@ -528,6 +552,7 @@ class StudioActivity : Activity() {
         }
         menu.add(0, MENU_SAVE, 2, "儲存").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
         menu.add(0, MENU_SAVE_AS, 3, "另存新檔").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(0, MENU_OPEN, 4, "換一個主題編輯").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
         return true
     }
 
@@ -537,6 +562,7 @@ class StudioActivity : Activity() {
             MENU_REDO -> redo()
             MENU_SAVE -> save()
             MENU_SAVE_AS -> saveAs()
+            MENU_OPEN -> pickThemeToEdit()
             else -> return super.onOptionsItemSelected(item)
         }
         return true
@@ -591,7 +617,14 @@ class StudioActivity : Activity() {
         if (key == null) {
             kv.editHighlight = null
             text("正在設計：${TABS.first { it.first == tab }.second}頁", 18f, bold = true).setPadding(0, px(10f), 0, 0)
-            text("👆 點上面鍵盤的按鍵（或最上面那一列）改它的樣子。改好按右上角「儲存」才會套用到鍵盤。", 14f).setPadding(0, px(6f), 0, px(2f))
+            val active = ThemeStore.activeId(live)
+            text(
+                "👆 點上面鍵盤的按鍵（或最上面那一列）改它的樣子。改好按右上角「儲存」才會存起來" +
+                    if (active == themeId) "，鍵盤正在用這個主題，存了就會換成新的樣子。"
+                    else "；鍵盤現在用的是「${ThemeStore.nameOf(this, active)}」，存了也不會換，要用的話到主題清單點它。",
+                14f,
+            ).setPadding(0, px(6f), 0, px(2f))
+            button("🎨 換一個主題編輯（鍵盤用的主題不會變）") { pickThemeToEdit() }
             // 一整類一起改：只列這一頁有的、而且不只一顆的類別
             // 只看這個分頁上的鍵：注音分頁列注音鍵，英文分頁列英文鍵
             val pageKeys = kv.rows.flatten()
@@ -2414,6 +2447,7 @@ class StudioActivity : Activity() {
         private const val MENU_REDO = 2
         private const val MENU_SAVE = 3
         private const val MENU_SAVE_AS = 4
+        private const val MENU_OPEN = 5
         /** 要編輯哪個主題（ThemeStore 的 id）；沒給就是正在用的主題 */
         const val EXTRA_THEME = "theme_id"
         /** true = 從設定打開的，離開時回設定 */
