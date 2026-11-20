@@ -329,7 +329,7 @@ class CatKeyboardView(
         globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
         effectBitmaps.clear()
         stopEffectAnims()
-        decals = Decals.load(prefs)
+        decals = Decals.load(prefs).map(::placeDecal)
         decalBitmaps = Decals.bitmaps(context, decals, decalBitmaps)
         nativeCache.clear()
         styledCache.clear()
@@ -350,6 +350,8 @@ class CatKeyboardView(
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        // 鍵盤大小變了（按鍵高度、快捷列）：背景圖案照分區重新放
+        decals = decals.map(::placeDecal)
         layoutKeys()
         stripCache = null
         panelCache = null
@@ -847,6 +849,32 @@ class CatKeyboardView(
      */
     private val bgRect get() = RectF(0f, quickH, width.toFloat(), kbH)
 
+    /**
+     * 背景圖案照「分區」放到現在的鍵盤上：最上面那一條（高度固定）、下面的按鍵區（跟著按鍵高度變）。
+     * 沒分區的（舊的記法）照原本的 y、size。鍵盤還沒量好大小時先不動。
+     */
+    fun placeDecal(d: Decal): Decal {
+        if (!d.onBackground || d.band == 0) return d
+        val h = bgRect.height()
+        val t = topH
+        val k = h - t
+        if (h <= 0f || k <= 0f) return d
+        return if (d.band == 1) d.copy(y = d.by * t / h, size = (d.bs * t / h).coerceAtLeast(0.01f))
+        else d.copy(y = (t + d.by * k) / h, size = (d.bs * k / h).coerceAtLeast(0.01f))
+    }
+
+    /** 反過來：照現在鍵盤上的位置，算出背景圖案在哪一區、那一區的幾成（存檔前用） */
+    fun bandDecal(d: Decal): Decal {
+        if (!d.onBackground) return d
+        val h = bgRect.height()
+        val t = topH
+        val k = h - t
+        if (h <= 0f || k <= 0f) return d
+        val cy = d.y * h
+        return if (cy < t) d.copy(band = 1, by = cy / t, bs = d.size * h / t)
+        else d.copy(band = 2, by = (cy - t) / k, bs = d.size * h / k)
+    }
+
     private fun drawBgDecals(c: Canvas, front: Boolean) {
         if (decals.isEmpty()) return
         val r = bgRect
@@ -981,7 +1009,7 @@ class CatKeyboardView(
 
     /** 主題工作室改了圖案（拖曳、滑桿）：直接換掉，不用重讀設定 */
     fun setDecalsLive(list: List<Decal>) {
-        decals = list
+        decals = list.map(::placeDecal)
         decalBitmaps = Decals.bitmaps(context, list, decalBitmaps)
         invalidate()
     }
@@ -1065,7 +1093,7 @@ class CatKeyboardView(
         }
         val moved = ElementAlign.apply(items, op, frame)
         return es.mapNotNull { e ->
-            moved[e.d.id]?.let { (cx, cy) -> e.d.copy(x = (cx - e.target.left) / e.target.width(), y = (cy - e.target.top) / e.target.height()) }
+            moved[e.d.id]?.let { (cx, cy) -> e.d.copy(x = (cx - e.target.left) / e.target.width(), y = (cy - e.target.top) / e.target.height(), band = 0) }
         }
     }
 
@@ -1078,7 +1106,9 @@ class CatKeyboardView(
 
     private fun currentDecal(): Decal? = decalEditId?.let { id -> decals.firstOrNull { it.id == id } }
 
-    private fun replaceDecal(d: Decal, done: Boolean) {
+    private fun replaceDecal(d0: Decal, done: Boolean) {
+        // 手指拖過了：位置以畫面上的為準，分區等存檔時再重算
+        val d = if (d0.onBackground) d0.copy(band = 0) else d0
         decals = decals.map { if (it.id == d.id) d else it }
         invalidate()
         onDecalChanged?.invoke(d, done)

@@ -50,6 +50,15 @@ data class Decal(
     val outlineStyle: String = "solid",
     /** 縫線離邊緣多遠（圖案短邊的幾分之幾；0 = 貼在最外面的邊上） */
     val outlineInset: Float = 0.09f,
+    /**
+     * 背景圖案分區記位置：0 = 沒有（照 y、size 佔整個背景的比例，舊的記法）；
+     * 1 = 在最上面那一條（上方列／快捷列，高度固定）；2 = 在按鍵區（跟著按鍵高度變）。
+     * by：在那一區的幾成高的地方；bs：大小是那一區高度的幾倍。
+     * 有分區的話畫的時候照現在的鍵盤重新算 y、size；y、size 也照樣存著，舊版 App 看得懂。
+     */
+    val band: Int = 0,
+    val by: Float = 0f,
+    val bs: Float = 0f,
 ) {
     /** 內建圖案要怎麼畫 */
     fun shapeStyle(): ShapeStyle =
@@ -80,6 +89,7 @@ data class Decal(
                 put("outlineStyle", outlineStyle)
                 put("outlineInset", outlineInset.toDouble())
             }
+            if (band != 0) put("band", band).put("by", by.toDouble()).put("bs", bs.toDouble())
         }
 
     companion object {
@@ -114,6 +124,9 @@ data class Decal(
                 outlineWidth = f("outlineWidth", 0.06f, 0.005f, 0.3f),
                 outlineStyle = o.optString("outlineStyle", "solid").takeIf { st -> DecalShapes.DASHES.any { it.first == st } } ?: "solid",
                 outlineInset = f("outlineInset", 0.09f, 0f, 0.3f),
+                band = o.optInt("band", 0).takeIf { it in 0..2 } ?: 0,
+                by = f("by", 0f, -5f, 6f),
+                bs = f("bs", 0f, 0f, 40f),
             )
         }
     }
