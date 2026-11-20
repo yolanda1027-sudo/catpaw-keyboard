@@ -83,13 +83,29 @@ data class KeyStyle(
     fun over(base: KeyStyle?): KeyStyle = if (base == null) this else KeyStyle(
         bg ?: base.bg, text ?: base.text, border ?: base.border, radius ?: base.radius, hideLabel ?: base.hideLabel,
         effect ?: base.effect,
-        labels ?: base.labels,
+        mergeLabels(labels, base.labels),
         order ?: base.order,
         bgImage ?: base.bgImage,
         borderWidth ?: base.borderWidth,
         borderStyle ?: base.borderStyle,
         borderInset ?: base.borderInset,
     )
+
+    /**
+     * 單顆鍵自己的字的設定，疊在整類的上面：一個字一個字合併，不是整包換掉。
+     * 例如整類設了小字顏色、這顆鍵自己移了主字的位置，小字的顏色照樣跟整類一樣。
+     * 同一個字兩邊都有：位置、大小、角度、透明度照單顆的，顏色單顆沒設就用整類的。
+     */
+    private fun mergeLabels(own: Map<String, LabelStyle>?, base: Map<String, LabelStyle>?): Map<String, LabelStyle>? {
+        if (own == null) return base
+        if (base == null) return own
+        val out = LinkedHashMap(base)
+        for ((k, v) in own) {
+            val b = base[k]
+            out[k] = if (b == null) v else v.copy(color = v.color ?: b.color, hidden = v.hidden || b.hidden)
+        }
+        return out
+    }
 
     fun toJson(): JSONObject = JSONObject().apply {
         bg?.let { put("bg", hex(it)) }

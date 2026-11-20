@@ -638,6 +638,17 @@ class StudioActivity : Activity() {
         greyIf(shapeMode) { colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) } }
         imageRow(currentId()!!, "底圖", cur.bgImage)
         colorRow("文字顏色", cur.text, now?.text ?: Color.BLACK) { v -> update({ it.copy(text = v) }) }
+        // 小字（注音鍵下面的 1、q、a…）：整類一起改；單顆鍵也可以在這裡改，不用點進那個字
+        if (key.sub != null) {
+            colorRow("小字顏色", cur.labels?.get("sub")?.color, kv.labelColorOf(key, "sub") ?: now?.sub ?: Color.GRAY) { v ->
+                update({ st ->
+                    val m = (st.labels ?: emptyMap()).toMutableMap()
+                    val ls = (m["sub"] ?: LabelStyle()).copy(color = v)
+                    if (ls.isEmpty) m.remove("sub") else m["sub"] = ls
+                    st.copy(labels = m.takeIf { it.isNotEmpty() })
+                })
+            }
+        }
         greyIf(shapeMode) {
             colorRow("外框顏色", cur.border, now?.border ?: Color.GRAY, allowTransparent = true) { v -> update({ it.copy(border = v) }) }
             borderControls(cur, eff, now)
