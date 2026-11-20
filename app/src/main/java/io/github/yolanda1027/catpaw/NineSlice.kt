@@ -54,9 +54,23 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
          * 把框圖畫進 dst。角落照「圖片高度剛好等於框的高度」的比例縮放；
          * 框太窄、左右兩個角放不下時再一起縮小（角還是不變形）。
          */
+        /**
+         * 只切圖片「有畫東西的範圍」：去背圖四周透明的空白不算（不然四個角都是透明的，
+         * 按鍵看起來左右被削掉一大塊，變成細細一條）。
+         */
+        fun contentRect(bmp: Bitmap): Rect {
+            val c = ImageFill.contentOf(bmp)
+            val l = c.left.toInt().coerceIn(0, bmp.width - 1)
+            val t = c.top.toInt().coerceIn(0, bmp.height - 1)
+            val r = kotlin.math.ceil(c.right.toDouble()).toInt().coerceIn(l + 1, bmp.width)
+            val b = kotlin.math.ceil(c.bottom.toDouble()).toInt().coerceIn(t + 1, bmp.height)
+            return Rect(l, t, r, b)
+        }
+
         fun draw(c: Canvas, bmp: Bitmap, sx: Float, sy: Float, dst: RectF) {
-            val iw = bmp.width
-            val ih = bmp.height
+            val cr = contentRect(bmp)
+            val iw = cr.width()
+            val ih = cr.height()
             if (iw < 3 || ih < 3 || dst.width() <= 0f || dst.height() <= 0f) return
             val l = (iw * sx).roundToInt().coerceIn(1, iw / 2)
             val r = l
@@ -72,8 +86,8 @@ data class NineFrame(val img: String, val sx: Float = DEFAULT, val sy: Float = D
             fun px(v: Float) = Math.round(v).toFloat()
             val xs = floatArrayOf(px(dst.left), px(dst.left + dl), px(dst.right - dr), px(dst.right))
             val ys = floatArrayOf(px(dst.top), px(dst.top + dt), px(dst.bottom - db), px(dst.bottom))
-            val sxs = intArrayOf(0, l, iw - r, iw)
-            val sys = intArrayOf(0, t, ih - b, ih)
+            val sxs = intArrayOf(cr.left, cr.left + l, cr.right - r, cr.right)
+            val sys = intArrayOf(cr.top, cr.top + t, cr.bottom - b, cr.bottom)
             val s = Rect()
             val d = RectF()
             for (row in 0..2) for (col in 0..2) {
@@ -193,12 +207,14 @@ class NineSliceView(
         val w = width - pad * 2
         // 上面：整張圖＋切線（最多佔一半高度）
         val topH = height * 0.5f
-        val s = min(w / bmp.width, (topH - pad) / bmp.height)
-        val iw = bmp.width * s
-        val ih = bmp.height * s
+        // 只顯示有畫東西的範圍（四周透明的空白切掉），切線跟實際切的地方一樣
+        val cr = NineFrame.contentRect(bmp)
+        val s = min(w / cr.width(), (topH - pad) / cr.height())
+        val iw = cr.width() * s
+        val ih = cr.height() * s
         val r = RectF((width - iw) / 2, pad, (width + iw) / 2, pad + ih)
         drawChecker(c, r)
-        c.drawBitmap(bmp, null, r, img)
+        c.drawBitmap(bmp, cr, r, img)
         val gx = iw * frame.sx
         val gy = ih * frame.sy
         c.drawLine(r.left + gx, r.top - 6 * dp, r.left + gx, r.bottom + 6 * dp, guide)
