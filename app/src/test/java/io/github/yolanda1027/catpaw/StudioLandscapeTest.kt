@@ -32,7 +32,7 @@ class StudioLandscapeTest {
     @Test fun sideBySide() {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
         val root = a.window.decorView
-        val w = 2339; val h = 1079
+        val w = 2339; val h = 900 // 比較矮：扣掉狀態列、導覽列之後，鍵盤一定放不下
         root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
         root.layout(0, 0, w, h)
         ShadowLooper.idleMainLooper()
@@ -43,7 +43,8 @@ class StudioLandscapeTest {
         assertTrue("設定面板有高度：${panelScroll.height}", panelScroll.height > 400)
         val stage = kv.parent as View
         val left = stage.parent as View
-        assertTrue("左邊鍵盤縮小到放得下：${stage.height} × ${stage.scaleY} ≤ ${left.height}", stage.height * stage.scaleY <= left.height + 1)
+        assertTrue("鍵盤沒有被裁掉：stage ${stage.height} ≥ 鍵盤 ${kv.height}", stage.height >= kv.height)
+        assertTrue("整個鍵盤縮小到放得下：${kv.height} × ${stage.scaleY} ≤ ${left.height}", kv.height * stage.scaleY <= left.height + 1)
         // 截圖
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         root.draw(Canvas(bmp))

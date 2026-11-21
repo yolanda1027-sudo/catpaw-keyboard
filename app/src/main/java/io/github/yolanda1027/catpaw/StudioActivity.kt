@@ -217,18 +217,28 @@ class StudioActivity : Activity() {
             outer.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
             // 左邊：鍵盤預覽。比左邊那塊高的話整個等比例縮小（觸控也跟著縮放，拖圖案照常）
-            val left = android.widget.FrameLayout(this)
-            left.addView(stage, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
-            fun fit() {
-                if (left.height <= 0 || stage.height <= 0) return
-                val k = minOf(1f, left.height.toFloat() / stage.height)
-                stage.pivotX = stage.width / 2f
-                stage.pivotY = 0f
-                stage.scaleX = k
-                stage.scaleY = k
+            // 鍵盤要量「真正的高度」（不能被左邊這塊的高度限制住，不然會以為放得下、下面直接被切掉），
+            // 再整個等比例縮小到放得下
+            val left = object : android.widget.FrameLayout(this) {
+                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                    super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+                    stage.measure(
+                        View.MeasureSpec.makeMeasureSpec(measuredWidth, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    )
+                }
+                override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+                    stage.layout(0, 0, stage.measuredWidth, stage.measuredHeight)
+                    val h = b - t
+                    if (h <= 0 || stage.measuredHeight <= 0) return
+                    val k = minOf(1f, h.toFloat() / stage.measuredHeight)
+                    stage.pivotX = stage.measuredWidth / 2f
+                    stage.pivotY = 0f
+                    stage.scaleX = k
+                    stage.scaleY = k
+                }
             }
-            left.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
-            stage.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
+            left.addView(stage, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
             // 右邊：分頁＋可以上下滑的設定面板
             val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             right.addView(tabsBar)
