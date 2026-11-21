@@ -257,7 +257,8 @@ class CatKeyboardView(
         val anchor = if (o.actions != null) downX else kr.rect.centerX()
         var left = anchor - optW * (o.default + 0.5f)
         left = left.coerceIn(0f, max(0f, width - w))
-        val bottom = kr.rect.top + keyH * 0.45f
+        // 整個選單浮在按鍵上面（像 Google 注音），手指才不會擋到選項；太上面放不下才往下壓
+        val bottom = kr.rect.top - keyH * 0.3f
         val top = max(-floatH, bottom - keyH * 1.15f)
         return RectF(left, top, left + w, top + keyH * 1.15f)
     }
