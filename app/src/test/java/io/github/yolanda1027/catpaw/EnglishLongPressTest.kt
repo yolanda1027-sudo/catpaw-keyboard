@@ -52,20 +52,26 @@ class EnglishLongPressTest {
         return got
     }
 
-    @Test fun releaseRightAwayTypesTheSymbol() {
-        assertEquals("@", longPressA(0, null)?.text)
+    @Test fun releaseRightAwayTypesTheSameLetter() {
+        // 長按直接放開：打原本的字（小寫是小寫、開 Shift 是大寫）
+        assertEquals("a", longPressA(0, null)?.text)
+        assertEquals("A", longPressA(1, null)?.text)
     }
 
     @Test fun slideToUppercase() {
-        // 選項：@（54–162）、a（162–270）、A（270–378）
-        val k = longPressA(0, 324f)!!
+        // 選項：@（0–108）、a（108–216）、A（216–324）；a 在最左邊，選單被推回螢幕內
+        val k = longPressA(0, 270f)!!
         assertEquals("A", k.text)
         assertTrue(k.exact)
     }
 
+    @Test fun slideLeftToSymbol() {
+        assertEquals("@", longPressA(0, 54f)?.text)
+    }
+
     @Test fun lowercaseStaysLowercaseEvenWithShift() {
         // 開大寫時選項變成 @ A a；選最右邊的 a，打出來就是小寫（exact = true，服務不會再轉大寫）
-        val k = longPressA(1, 324f)!!
+        val k = longPressA(1, 270f)!!
         assertEquals("a", k.text)
         assertTrue(k.exact)
     }

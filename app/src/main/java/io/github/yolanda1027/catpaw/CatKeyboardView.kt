@@ -236,10 +236,11 @@ class CatKeyboardView(
         } else {
             val l = key.label
             if (key.act == Act.TEXT && l.length == 1 && l[0].isLetter()) {
-                // 英文字母：符號、現在的大小寫、另一種大小寫（例如 @ a A），預設停在符號
+                // 英文字母：符號、現在的大小寫、另一種大小寫（例如 @ a A），
+                // 預設停在原本要打的字（小寫就是小寫、開 Shift 就是大寫），長按放開不會打錯字
                 val now = labelFor(key)
                 val other = if (now == l.uppercase()) l.lowercase() else l.uppercase()
-                PopupOptions(listOf(sub, now, other), default = 0, main = 1)
+                PopupOptions(listOf(sub, now, other), default = 1, main = 1)
             } else {
                 // 數字、符號：預設停在數字／符號（長按放開＝打數字，跟以前一樣）
                 PopupOptions(listOf(sub, key.label), default = 0, main = 1)
