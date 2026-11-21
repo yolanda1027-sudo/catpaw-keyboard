@@ -59,7 +59,14 @@ def fit_text(d, text, max_w, size):
     return f(size)
 
 
-def draw_top_zhen(d, a):
+# 每一張版型圖寫上是哪一頁（注音、英文長得很像，不寫會搞混）
+TITLES = {
+    "zhuyin": "注音鍵盤", "english": "英文鍵盤", "symbol": "符號頁", "kaomoji": "顏文字頁",
+    "emoji": "表情符號頁", "mystickers": "我的貼圖頁", "clipboard": "剪貼簿頁", "numpad": "數字頁",
+}
+
+
+def draw_top_zhen(d, a, title):
     """注音、英文頁：中／En、剪貼簿、▽"""
     tab = W * 0.2
     d.rounded_rectangle((8 * DP, 7 * DP, tab - 8 * DP, TOP - 7 * DP), radius=(TOP - 14 * DP) / 2, outline=COL["top"] + (a,), width=3)
@@ -68,7 +75,7 @@ def draw_top_zhen(d, a):
     for cx, t in ((W - tab * 1.2, "剪貼簿"), (W - tab * 0.4, "▽")):
         d.ellipse((cx - TOP * 0.3, TOP / 2 - TOP * 0.3, cx + TOP * 0.3, TOP / 2 + TOP * 0.3), outline=COL["top"] + (a,), width=2)
         d.text((cx, TOP / 2), t, font=f(TOP * (0.18 if len(t) > 1 else 0.3)), fill=COL["top"] + (a,), anchor="mm")
-    d.text((W * 0.5, TOP / 2), f"上方列 1080×{round(TOP)}", font=f(26), fill=COL["top"] + (a,), anchor="mm")
+    d.text((W * 0.5, TOP / 2), f"{title}・上方列 1080×{round(TOP)}", font=f(26), fill=COL["top"] + (a,), anchor="mm")
 
 
 def draw_top_tabs(d, a, tabs, sel):
@@ -98,7 +105,7 @@ def draw(name, page, quick, file, overlay):
     d.rectangle((0, 0, W - 1, TOP), outline=COL["top"] + (a,), width=3, fill=None if overlay else COL["top"] + (40,))
     top_note = None
     if page["tabs"] == "zhen":
-        draw_top_zhen(d, a)
+        draw_top_zhen(d, a, TITLES[name])
     else:
         top_note = draw_top_tabs(d, a, page["tabs"], SELECTED_TAB.get(name, 0))
 
@@ -130,8 +137,8 @@ def draw(name, page, quick, file, overlay):
     bottom = h - PAD_BOTTOM
     d.rectangle((0, bottom, W - 1, h - 1), fill=COL["pad"] + (40,))
     d.text((W - 10, h - PAD_BOTTOM / 2), f"整張 1080×{h}", font=f(18), fill=COL["line"] + (220,), anchor="rm")
-    if top_note:
-        d.text((10, h - PAD_BOTTOM / 2), "上面藍色：" + top_note, font=f(18), fill=COL["top"] + (255,), anchor="lm")
+    note = f"【{TITLES[name]}】" + (f"　上面藍色：{top_note}" if top_note else "")
+    d.text((10, h - PAD_BOTTOM / 2), note, font=f(18), fill=COL["top"] + (255,), anchor="lm")
     im.save(f"{OUT}/{file}.png")
     return h
 
