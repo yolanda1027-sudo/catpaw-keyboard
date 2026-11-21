@@ -376,7 +376,7 @@ class CatKeyboardView(
         theme = Themes.byName(prefs.theme, dp, prefs)
         stickers = Stickers.load(context, prefs)
         keyStyles = KeyStyles.load(prefs)
-        globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
+        globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect, prefs.pressEffectColor)
         effectBitmaps.clear()
         stopEffectAnims()
         decals = Decals.load(prefs).map(::placeDecal)
@@ -976,7 +976,14 @@ class CatKeyboardView(
     // ---------- 按鍵動畫 ----------
 
     /** 全部按鍵共用的動畫（設定頁選的）；每次按都讀一次太慢，換設定時才重讀 */
-    private var globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect)
+    private var globalEffect = KeyEffect(prefs.pressEffect, prefs.customEffect, prefs.pressEffectColor)
+
+    /** 這個動畫沒自己選顏色時的顏色（主題工作室顯示用） */
+    fun effectDefaultColor(kind: String): Int {
+        val bg = theme.bg
+        val dark = (android.graphics.Color.red(bg) * 299 + android.graphics.Color.green(bg) * 587 + android.graphics.Color.blue(bg) * 114) / 1000 < 128
+        return PressEffects.defaultColor(kind, theme.popupSelBg, dark)
+    }
 
     /** 這顆鍵要用的動畫：主題工作室有單獨設定就用它，不然用全部按鍵共用的 */
     fun effectFor(key: Key): KeyEffect = keyStyles.resolve(key)?.effect ?: globalEffect
@@ -991,7 +998,7 @@ class CatKeyboardView(
         } else {
             val bg = theme.bg
             val dark = (android.graphics.Color.red(bg) * 299 + android.graphics.Color.green(bg) * 587 + android.graphics.Color.blue(bg) * 114) / 1000 < 128
-            effects.add(e.kind, kr.rect, theme.popupSelBg, dark)
+            effects.add(e.kind, kr.rect, theme.popupSelBg, dark, e.color)
         }
         invalidate()
     }

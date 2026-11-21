@@ -69,6 +69,7 @@ object ThemeIO {
         val effectImages = HashSet<String>()
         if (Part.EFFECT in parts) {
             o.put("effect", prefs.pressEffect)
+            prefs.pressEffectColor?.let { o.put("effectColor", String.format("#%08X", it)) }
             if (prefs.pressEffect == "custom") {
                 val c = prefs.customEffect
                 o.put("customEffect", c.toJson())
@@ -182,6 +183,8 @@ object ThemeIO {
         if (o.has("effect")) {
             val e = o.optString("effect")
             if (PressEffects.ALL.any { it.first == e }) prefs.pressEffect = e
+            prefs.pressEffectColor = o.optString("effectColor").takeIf { it.isNotEmpty() }
+                ?.let { try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null } }
         }
 
         o.optJSONObject("stickers")?.let { st ->

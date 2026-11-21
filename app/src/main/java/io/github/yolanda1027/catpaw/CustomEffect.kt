@@ -69,8 +69,16 @@ data class CustomEffect(
  * 某顆鍵（或一整類鍵）的按鍵動畫：
  * kind = 內建動畫的代號（hearts、spell…）、"none"（不要動畫）、"custom"（用 custom 的設定）
  */
-data class KeyEffect(val kind: String, val custom: CustomEffect? = null) {
-    fun toJson(): JSONObject = JSONObject().put("kind", kind).apply { custom?.let { put("custom", it.toJson()) } }
+data class KeyEffect(
+    val kind: String,
+    val custom: CustomEffect? = null,
+    /** 內建動畫自己選的顏色（沒選＝照原本的顏色） */
+    val color: Int? = null,
+) {
+    fun toJson(): JSONObject = JSONObject().put("kind", kind).apply {
+        custom?.let { put("custom", it.toJson()) }
+        color?.let { put("color", String.format("#%08X", it)) }
+    }
 
     companion object {
         fun fromJson(o: JSONObject?): KeyEffect? {
@@ -78,7 +86,9 @@ data class KeyEffect(val kind: String, val custom: CustomEffect? = null) {
             val kind = o.optString("kind")
             if (kind != "custom" && PressEffects.ALL.none { it.first == kind }) return null
             val c = CustomEffect.fromJson(o.optJSONObject("custom"))
-            return KeyEffect(kind, if (kind == "custom") c ?: CustomEffect() else null)
+            val color = o.optString("color").takeIf { it.isNotEmpty() && kind in PressEffects.COLORABLE }
+                ?.let { try { android.graphics.Color.parseColor(it) } catch (_: Exception) { null } }
+            return KeyEffect(kind, if (kind == "custom") c ?: CustomEffect() else null, color)
         }
     }
 }

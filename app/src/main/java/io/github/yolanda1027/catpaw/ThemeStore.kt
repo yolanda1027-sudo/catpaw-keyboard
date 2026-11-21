@@ -31,7 +31,7 @@ object ThemeStore {
     val LOOK_KEYS = listOf(
         "theme", "c_bg", "c_key", "c_text", "c_sub", "c_accent",
         "key_height_dp", "font_zh", "font_zhuyin", "font_en", "cand_font", "key_font",
-        "press_effect", "custom_effect", "key_styles", "decals", "func_stickers",
+        "press_effect", "press_effect_color", "custom_effect", "key_styles", "decals", "func_stickers",
     )
 
     data class Info(val id: String, val name: String, val builtIn: Boolean, val modified: Boolean)

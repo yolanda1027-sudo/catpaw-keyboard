@@ -44,6 +44,28 @@ class PressEffects(private val dp: Float) {
             "custom" to "自訂動畫 🎨（在主題工作室調）",
         )
         private const val MAX_PARTICLES = 80
+
+        /** 可以自己換顏色的內建動畫（彩虹泡泡本來就是彩虹、彈一下沒有顏色） */
+        val COLORABLE = setOf("heart", "paw", "star", "hearts", "sparkle", "flower", "butterfly", "ripple", "snow", "note", "spell")
+
+        /** 沒自己選顏色時，這個動畫的主要顏色（工作室顯示用） */
+        fun defaultColor(kind: String, accent: Int, dark: Boolean): Int = when (kind) {
+            "heart", "paw", "star" -> vividOf(accent)
+            "hearts" -> Color.parseColor("#FF7EAA")
+            "sparkle", "spell" -> Color.parseColor("#F5B82E")
+            "flower" -> Color.parseColor("#6FA3E8")
+            "butterfly" -> Color.parseColor("#F7A1C4")
+            "ripple" -> if (dark) Color.parseColor("#BFE0FF") else Color.parseColor("#3D7BC4")
+            else -> if (dark) Color.WHITE else Color.parseColor("#3E4A6B")
+        }
+
+        private fun vividOf(c: Int): Int {
+            val hsv = FloatArray(3)
+            Color.colorToHSV(c, hsv)
+            hsv[1] = maxOf(hsv[1], 0.55f)
+            hsv[2] = minOf(hsv[2], 0.95f)
+            return Color.HSVToColor(hsv)
+        }
     }
 
     private enum class Shape { HEART, PAW, STAR, SPARKLE, FLOWER, BUTTERFLY, RING, BUBBLE, SNOW, NOTE, DOT, CUSTOM }
@@ -83,32 +105,35 @@ class PressEffects(private val dp: Float) {
 
     private fun r(a: Float, b: Float) = a + rnd.nextFloat() * (b - a)
 
-    /** 在按鍵 rect 上觸發動畫；dark = 主題底色是不是深色（決定雪花、漣漪、音符用白的還黑的） */
-    fun add(kind: String, rect: RectF, accent: Int, dark: Boolean) {
+    /**
+     * 在按鍵 rect 上觸發動畫；dark = 主題底色是不是深色（決定雪花、漣漪、音符用白的還黑的）
+     * @param color 自己選的顏色（沒選＝照動畫原本的顏色，貓爪、愛心、星星跟著主題）
+     */
+    fun add(kind: String, rect: RectF, accent: Int, dark: Boolean, color: Int? = null) {
         val now = SystemClock.uptimeMillis()
         val cx = rect.centerX()
         val cy = rect.centerY()
         val top = rect.top + rect.height() * 0.2f
-        val ink = if (dark) Color.WHITE else Color.parseColor("#3E4A6B")
+        val ink = color ?: if (dark) Color.WHITE else Color.parseColor("#3E4A6B")
         fun add(p: P) = particles.add(p)
         when (kind) {
             "none" -> return
             "bounce" -> bounces.add(Bounce(RectF(rect), now))
             "heart", "paw", "star" -> add(P(
                 when (kind) { "heart" -> Shape.HEART; "paw" -> Shape.PAW; else -> Shape.STAR },
-                cx, top, 0f, -rect.height() * 2.1f, 0f, 11 * dp, vivid(accent), now, 520,
+                cx, top, 0f, -rect.height() * 2.1f, 0f, 11 * dp, color ?: vivid(accent), now, 520,
                 sway = 4 * dp, phase = r(0f, 6f),
             ))
             "hearts" -> repeat(6) { i ->
                 add(P(Shape.HEART, cx + r(-8f, 8f) * dp, top, r(-25f, 25f) * dp, -r(150f, 240f) * dp, 0f,
-                    r(5f, 8.5f) * dp, Color.parseColor("#FF7EAA"), now + i * 45L, 650,
+                    r(5f, 8.5f) * dp, color ?: Color.parseColor("#FF7EAA"), now + i * 45L, 650,
                     sway = r(2f, 5f) * dp, phase = r(0f, 6f), outline = false))
             }
             "sparkle" -> repeat(7) {
                 val a = r(0f, 2 * PI.toFloat())
                 val v = r(60f, 150f) * dp
                 add(P(Shape.SPARKLE, cx, cy, cos(a) * v, sin(a) * v - 40 * dp, 60 * dp,
-                    r(4f, 8f) * dp, Color.parseColor("#F5B82E"), now + rnd.nextLong(0, 60), 650,
+                    r(4f, 8f) * dp, color ?: Color.parseColor("#F5B82E"), now + rnd.nextLong(0, 60), 650,
                     phase = r(0f, 6f), outline = false))
             }
             "flower" -> repeat(5) { i ->
@@ -116,11 +141,11 @@ class PressEffects(private val dp: Float) {
                 val a = -PI.toFloat() * (0.1f + 0.8f * i / 4f) + r(-0.15f, 0.15f)
                 val v = r(90f, 160f) * dp
                 add(P(Shape.FLOWER, cx, cy, cos(a) * v, sin(a) * v, 20 * dp,
-                    r(8f, 11f) * dp, Color.parseColor("#6FA3E8"), now + rnd.nextLong(0, 80), 950,
+                    r(8f, 11f) * dp, color ?: Color.parseColor("#6FA3E8"), now + rnd.nextLong(0, 80), 950,
                     rot0 = r(0f, 72f), vrot = r(-180f, 180f), sway = r(3f, 8f) * dp, phase = r(0f, 6f), outline = false))
             }
             "butterfly" -> {
-                val colors = listOf(Color.parseColor("#F7A1C4"), Color.WHITE)
+                val colors = listOf(color ?: Color.parseColor("#F7A1C4"), Color.WHITE)
                 colors.forEachIndexed { i, col ->
                     add(P(Shape.BUTTERFLY, cx + (if (i == 0) -8 else 8) * dp, cy, (if (i == 0) -30f else 30f) * dp,
                         -r(80f, 120f) * dp, 0f, r(10f, 12f) * dp, col, now + i * 70L, 1100,
@@ -128,11 +153,11 @@ class PressEffects(private val dp: Float) {
                 }
                 repeat(4) {
                     add(P(Shape.SPARKLE, cx + r(-14f, 14f) * dp, cy + r(-6f, 6f) * dp, r(-30f, 30f) * dp, -r(40f, 90f) * dp, 0f,
-                        r(2.5f, 4f) * dp, Color.parseColor("#F7A1C4"), now + rnd.nextLong(0, 200), 700, phase = r(0f, 6f), outline = false))
+                        r(2.5f, 4f) * dp, color ?: Color.parseColor("#F7A1C4"), now + rnd.nextLong(0, 200), 700, phase = r(0f, 6f), outline = false))
                 }
             }
             "ripple" -> {
-                val col = if (dark) Color.parseColor("#BFE0FF") else Color.parseColor("#3D7BC4")
+                val col = color ?: if (dark) Color.parseColor("#BFE0FF") else Color.parseColor("#3D7BC4")
                 repeat(3) { i -> add(P(Shape.RING, cx, cy, 0f, 0f, 0f, 30 * dp, col, now + i * 110L, 650, outline = false)) }
                 repeat(4) {
                     val a = r(-PI.toFloat() * 0.9f, -PI.toFloat() * 0.1f)
@@ -157,7 +182,7 @@ class PressEffects(private val dp: Float) {
             }
             "spell" -> {
                 // 魔杖火花：金色、白色的閃光往上噴開，帶幾顆小星星
-                val gold = Color.parseColor("#F5C542")
+                val gold = color ?: Color.parseColor("#F5C542")
                 repeat(9) {
                     val a = r(-PI.toFloat() * 0.92f, -PI.toFloat() * 0.08f)
                     val v = r(110f, 230f) * dp

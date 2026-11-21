@@ -2449,7 +2449,7 @@ class StudioActivity : Activity() {
 
     /** 正在調的那一份動畫設定（null = 單顆鍵跟全部按鍵一樣） */
     private fun currentEffect(): KeyEffect? =
-        if (animMode == GLOBAL) KeyEffect(prefs.pressEffect, prefs.customEffect)
+        if (animMode == GLOBAL) KeyEffect(prefs.pressEffect, prefs.customEffect, prefs.pressEffectColor)
         else styles.map[currentId()]?.effect
 
     private fun currentCustom(): CustomEffect = currentEffect()?.custom ?: prefs.customEffect
@@ -2459,6 +2459,7 @@ class StudioActivity : Activity() {
             if (e != null) {
                 prefs.pressEffect = e.kind
                 e.custom?.let { prefs.customEffect = it }
+                prefs.pressEffectColor = e.color
             }
             kv.reloadPrefs()
             refresh()
@@ -2523,11 +2524,21 @@ class StudioActivity : Activity() {
             setEffect(when (kind) {
                 "same" -> null
                 "custom" -> KeyEffect("custom", cur?.custom ?: prefs.customEffect)
-                else -> KeyEffect(kind)
+                // 換成別的內建動畫：選過的顏色留著
+                else -> KeyEffect(kind, color = cur?.color?.takeIf { kind in PressEffects.COLORABLE })
             })
         }
 
         if (cur?.kind == "custom") customEditor(cur.custom ?: CustomEffect())
+        if (cur != null && cur.kind in PressEffects.COLORABLE) {
+            section("動畫顏色")
+            colorRow("顏色", cur.color, kv.effectDefaultColor(cur.kind)) { v -> setEffect(cur.copy(color = v)) }
+            text(
+                if (cur.color == null) "沒選的話：貓爪、愛心、星星跟著主題的顏色，其他照動畫原本的顏色。"
+                else "按「改回原色」就回到動畫原本的顏色。",
+                12f, dim = true,
+            )
+        }
         section("選一種動畫")
         panel.addView(rg)
     }

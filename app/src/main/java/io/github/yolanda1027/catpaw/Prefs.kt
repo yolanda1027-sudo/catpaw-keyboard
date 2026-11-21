@@ -165,6 +165,11 @@ class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
     var customSub: Int get() = color("c_sub", "#B59AAB"); set(v) = setColor("c_sub", v)
     var customAccent: Int get() = color("c_accent", "#F49AB7"); set(v) = setColor("c_accent", v)
 
+    /** 內建按鍵動畫自己選的顏色（沒選＝照動畫原本的顏色）；跟著主題存 */
+    var pressEffectColor: Int?
+        get() = if (sp.contains("press_effect_color")) sp.getInt("press_effect_color", 0) else null
+        set(v) { if (v == null) sp.edit().remove("press_effect_color").apply() else sp.edit().putInt("press_effect_color", v).apply() }
+
     /** none / bounce / heart / paw / star */
     var pressEffect: String
         get() = sp.getString("press_effect", "none") ?: "none"
