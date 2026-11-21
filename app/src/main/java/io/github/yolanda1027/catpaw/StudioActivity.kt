@@ -1801,10 +1801,26 @@ class StudioActivity : Activity() {
         kv.setKeyStylesLive(styles)
     }
 
+    /**
+     * 上方列面板上的字：每一頁上方列長得不一樣（注音、英文是「中／En」，其他頁是分類列），
+     * 照這一頁真的看得到的東西寫：(選中的那塊, 選中的文字, 沒選中的文字, 圖示)
+     */
+    private fun topBarWords(): List<String> = when (tab) {
+        "zh" -> listOf("「中」底下那塊", "選中的「中」、候選字", "沒選中的「En」", "剪貼簿、▽")
+        "en" -> listOf("「En」底下那塊", "選中的「En」、建議字", "沒選中的「中」", "剪貼簿、▽")
+        "sym", "emo", "stk" -> listOf("選中的分類底下那塊", "選中的分類", "沒選中的分類", "🕒 最近使用")
+        else -> listOf("選中的分類底下那塊", "選中的分類", "沒選中的分類", "這一頁的圖示")
+    }
+
     private fun topBarPanel() {
         kv.editHighlight = null
         header("正在編輯：上方列")
-        text("「中／En」那一列。打字時會變成選字列、切到符號時是分類列，顏色都照這裡的。", 13f, dim = true)
+        val words = topBarWords()
+        text(
+            if (tab == "zh" || tab == "en") "「中／En」那一列。打字時會變成選字列，顏色都照這裡的。這一頁的上方列跟其他頁分開設計。"
+            else "這一頁最上面的分類列。這一頁的上方列跟其他頁分開設計。",
+            13f, dim = true,
+        )
         val cur = styles.topBarFor(page) ?: TopBarStyle()
         val now = kv.topBarColors()
         colorRow("底色", cur.bg, now.bg!!, allowTransparent = true) { v ->
@@ -1815,7 +1831,7 @@ class StudioActivity : Activity() {
             if (bg != null && wasClear != (kv.keyboardImageFrame().top == 0f)) askRecropBackground(bg)
         }
         text("透明：看得到下面的鍵盤背景；有背景圖片的話，圖片會往上鋪滿整個鍵盤（範圍變高，可以到「鍵盤背景」按「裁切」重新調整）。", 12f, dim = true)
-        colorRow("選中的底色（「中」底下那塊）", cur.tab, now.tab!!, allowTransparent = true) { v -> setTopBar { it.copy(tab = v) } }
+        colorRow("選中的底色（${words[0]}）", cur.tab, now.tab!!, allowTransparent = true) { v -> setTopBar { it.copy(tab = v) } }
         colorRow("選中那塊的外框", cur.tabBorder, now.tabBorder!!, allowTransparent = true) { v -> setTopBar { it.copy(tabBorder = v) } }
         borderEditor(
             style = cur.tabBorderStyle, width = cur.tabBorderWidth, inset = cur.tabBorderInset,
@@ -1826,9 +1842,9 @@ class StudioActivity : Activity() {
             onInset = { d -> setTopBarLive { it.copy(tabBorderInset = d) } },
             onReset = { setTopBar { it.copy(tabBorderStyle = null, tabBorderWidth = null, tabBorderInset = null) } },
         )
-        colorRow("文字（選中的「中」、候選字）", cur.text, now.text!!) { v -> setTopBar { it.copy(text = v) } }
-        colorRow("文字（沒選中的「En」）", cur.textDim, now.textDim!!) { v -> setTopBar { it.copy(textDim = v) } }
-        colorRow("圖示（剪貼簿、▽）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
+        colorRow("文字（${words[1]}）", cur.text, now.text!!) { v -> setTopBar { it.copy(text = v) } }
+        colorRow("文字（${words[2]}）", cur.textDim, now.textDim!!) { v -> setTopBar { it.copy(textDim = v) } }
+        colorRow("圖示（${words[3]}）", cur.icon, now.icon!!) { v -> setTopBar { it.copy(icon = v) } }
         if (styles.topBarFor(page) != null) {
             section("其他頁")
             button("📋 這一頁的上方列套用到所有頁面") { confirmAllPages("這一頁上方列的設計") { copyTopBarToAllPages() } }

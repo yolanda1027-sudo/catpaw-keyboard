@@ -98,6 +98,24 @@ class TopBarStyleTest {
         assertEquals(Color.parseColor("#7BC6A4"), b.getPixel(b.width / 2, kv.floatH.toInt() + 6))
     }
 
+    /** 上方列面板的字照這一頁寫：英文頁是「En」，符號頁是分類 */
+    @Test fun studioTopBarWordsPerPage() {
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        val switch = StudioActivity::class.java.getDeclaredMethod("switchTab", String::class.java).apply { isAccessible = true }
+        val root = a.window.decorView
+        switch.invoke(a, "en")
+        kv.onTopBarPicked!!.invoke()
+        ShadowLooper.idleMainLooper()
+        for (label in listOf("選中的底色（「En」底下那塊）", "文字（選中的「En」、建議字）", "文字（沒選中的「中」）", "圖示（剪貼簿、▽）"))
+            assertNotNull(label, find(root) { it is TextView && it.text == label })
+        switch.invoke(a, "sym")
+        kv.onTopBarPicked!!.invoke()
+        ShadowLooper.idleMainLooper()
+        for (label in listOf("選中的底色（選中的分類底下那塊）", "文字（選中的分類）", "文字（沒選中的分類）", "圖示（🕒 最近使用）"))
+            assertNotNull(label, find(root) { it is TextView && it.text == label })
+    }
+
     @Test fun studioTopBarPanelUndoAndExport() {
         val p = Prefs(ctx)
         p.theme = "macaron_butter"
