@@ -62,6 +62,9 @@ class StudioActivity : Activity() {
     private var quickSelected = false
     /** 正在改「長按選單、泡泡」的顏色（整個主題一組） */
     private var popupSelected = false
+    /** 手機橫放：鍵盤在左邊、設定在右邊（說明文字的「上面」要改成「左邊」） */
+    private var landscape = false
+    private val previewWhere get() = if (landscape) "左邊" else "上面"
     /** 正在改「頁數條」（整個主題一組） */
     private var pageBarSelected = false
     /** 選到的圖案 */
@@ -101,10 +104,13 @@ class StudioActivity : Activity() {
             tabButtons[id] = b
             tabs.addView(b, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
-        outer.addView(android.widget.HorizontalScrollView(this).apply {
+        val tabsBar = android.widget.HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             addView(tabs)
-        })
+        }
+        // 手機橫放：螢幕太矮，上下排的話下面的設定面板會被擠到沒有高度（滑不動）→ 改成左右並排
+        landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        if (!landscape) outer.addView(tabsBar)
 
         kv = CatKeyboardView(this, prefs, Haptics(this)).apply {
             // 快捷符號列有開的話預覽也放上去，看起來才跟實際打字時一樣
@@ -202,13 +208,36 @@ class StudioActivity : Activity() {
             visibility = View.GONE
         }
         stage.addView(zoomBox, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
-        outer.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
         panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(px(20f), px(8f), px(20f), px(48f))
         }
-        outer.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        if (!landscape) {
+            outer.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            outer.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        } else {
+            // 左邊：鍵盤預覽。比左邊那塊高的話整個等比例縮小（觸控也跟著縮放，拖圖案照常）
+            val left = android.widget.FrameLayout(this)
+            left.addView(stage, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+            fun fit() {
+                if (left.height <= 0 || stage.height <= 0) return
+                val k = minOf(1f, left.height.toFloat() / stage.height)
+                stage.pivotX = stage.width / 2f
+                stage.pivotY = 0f
+                stage.scaleX = k
+                stage.scaleY = k
+            }
+            left.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
+            stage.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
+            // 右邊：分頁＋可以上下滑的設定面板
+            val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            right.addView(tabsBar)
+            right.addView(ScrollView(this).apply { addView(panel) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(left, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.56f))
+            row.addView(right, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.44f))
+            outer.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
         Ui.fitSystemBars(outer)
         setContentView(outer)
         Ui.matchSystemBarIcons(this)
@@ -633,7 +662,7 @@ class StudioActivity : Activity() {
             text("正在設計：${TABS.first { it.first == tab }.second}頁", 18f, bold = true).setPadding(0, px(10f), 0, 0)
             val active = ThemeStore.activeId(live)
             text(
-                "👆 點上面鍵盤的按鍵（或最上面那一列）改它的樣子。改好按右上角「儲存」才會存起來" +
+                "👆 點${previewWhere}鍵盤的按鍵（或最上面那一列）改它的樣子。改好按右上角「儲存」才會存起來" +
                     if (active == themeId) "，鍵盤正在用這個主題，存了就會換成新的樣子。"
                     else "；鍵盤現在用的是「${ThemeStore.nameOf(this, active)}」，存了也不會換，要用的話到主題清單點它。",
                 14f,
@@ -765,7 +794,7 @@ class StudioActivity : Activity() {
 
         if (!groupScope) {
             section("這顆鍵上的圖案")
-            text("💡 上面放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
+            text("💡 ${previewWhere}放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
             decalList(selId)
             val order = kv.elementOrder(key)
             if (order.isNotEmpty()) {
