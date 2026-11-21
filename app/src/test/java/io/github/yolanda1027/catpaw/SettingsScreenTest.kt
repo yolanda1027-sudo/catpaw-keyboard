@@ -31,9 +31,9 @@ class SettingsScreenTest {
     }
 
     private fun showPage(a: SettingsActivity, id: String) {
-        val m = SettingsActivity::class.java.getDeclaredMethod("showPage", String::class.java)
+        val m = SettingsActivity::class.java.getDeclaredMethod("showPage", String::class.java, Boolean::class.javaPrimitiveType)
         m.isAccessible = true
-        m.invoke(a, id)
+        m.invoke(a, id, false)
     }
 
     @Test fun pages() {

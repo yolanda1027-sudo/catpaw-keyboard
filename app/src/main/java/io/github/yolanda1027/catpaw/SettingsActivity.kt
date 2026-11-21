@@ -274,6 +274,9 @@ class SettingsActivity : Activity() {
     private fun parentOf(id: String) = pages.firstOrNull { it.id == id }?.parent ?: "home"
     private var scroll: ScrollView? = null
 
+    /** 每一頁滑到哪裡（按返回回到上一層、同一頁重新整理時，接著停在原本的位置） */
+    private val scrollMemory = HashMap<String, Int>()
+
     internal var page = "home"
         private set
 
@@ -284,7 +287,8 @@ class SettingsActivity : Activity() {
         prefs.migrate()
         haptics = Haptics(this)
         prefs.sp.registerOnSharedPreferenceChangeListener(previewListener)
-        showPage(savedInstanceState?.getString("page") ?: intent?.getStringExtra("page") ?: "home")
+        savedInstanceState?.getString("page")?.let { scrollMemory[it] = savedInstanceState.getInt("scrollY") }
+        showPage(savedInstanceState?.getString("page") ?: intent?.getStringExtra("page") ?: "home", restoreScroll = savedInstanceState != null)
         // 從下載通知、檔案管理員點主題檔打開（轉螢幕重建時不要再匯入一次）
         if (savedInstanceState == null) openThemeFile(intent)
     }
@@ -300,6 +304,7 @@ class SettingsActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString("page", page) // 換字體會重新整理畫面，要記得停在哪一頁
+        scroll?.let { outState.putInt("scrollY", it.scrollY) }
     }
 
     /**
@@ -340,8 +345,15 @@ class SettingsActivity : Activity() {
         return super.onOptionsItemSelected(item)
     }
 
-    /** 換頁：有需要的頁面，預覽鍵盤固定在最上面，下面的設定可以捲動 */
-    private fun showPage(id: String) {
+    /**
+     * 換頁：有需要的頁面，預覽鍵盤固定在最上面，下面的設定可以捲動。
+     * 回到上一層、或同一頁重新整理（例如刪了一個主題）時，停在原本滑到的地方；點進新的一頁從最上面開始。
+     */
+    private fun showPage(id: String, restoreScroll: Boolean = false) {
+        val old = if (::root.isInitialized) page else null
+        old?.let { o -> scroll?.let { scrollMemory[o] = it.scrollY } }
+        val goingBack = restoreScroll || id == old || (old != null && id == parentOf(old))
+        if (!goingBack) scrollMemory.remove(id)
         page = id
         val info = pages.firstOrNull { it.id == id }
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -386,6 +398,7 @@ class SettingsActivity : Activity() {
             else -> pageHome()
         }
         updateStatus()
+        scrollMemory[id]?.takeIf { goingBack && it > 0 }?.let { y -> sv.post { sv.scrollTo(0, y) } }
     }
 
     private fun pageHome() {
