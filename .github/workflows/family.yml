@@ -94,3 +94,7 @@ jobs:
             --latest \
             --title "家人版 v${{ steps.ver.outputs.name }}（建置 ${{ steps.ver.outputs.code }}）" \
             --notes "給家人用的「貓爪鍵盤」。安裝過的手機直接下載新的 APK 安裝就會更新，主題和設定都會留著。（跟「貓爪鍵盤 測試版」是兩個不同的 App，可以同時裝。）commit：$(git rev-parse HEAD)"
+          # 新版 gh 會先建成草稿、傳完檔案才公開；有時候停在草稿，下載連結就 404。這裡一定要公開
+          gh release edit family --draft=false
+          # 確認真的公開了（還是草稿就讓這次建置失敗，才看得出來）
+          test "$(gh release view family --json isDraft --jq .isDraft)" = "false"

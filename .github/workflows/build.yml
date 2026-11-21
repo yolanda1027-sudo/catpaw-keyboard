@@ -46,3 +46,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "最新測試版 #${{ github.run_number }}" \
             --notes "測試版（App 名稱：貓爪鍵盤 測試版），可以跟 Google Play 正式版同時安裝。分支：${{ github.ref_name }}　commit：${{ github.sha }}"
+          # 新版 gh 會先建成草稿、傳完檔案才公開；有時候停在草稿，下載連結就 404。這裡一定要公開
+          gh release edit dev-build --draft=false
+          # 確認真的公開了（還是草稿就讓這次建置失敗，才看得出來）
+          test "$(gh release view dev-build --json isDraft --jq .isDraft)" = "false"
