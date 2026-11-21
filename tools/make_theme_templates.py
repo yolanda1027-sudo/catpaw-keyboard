@@ -66,16 +66,18 @@ TITLES = {
 }
 
 
-def draw_top_zhen(d, a, title):
-    """注音、英文頁：中／En、剪貼簿、▽"""
+def draw_top_zhen(d, a, title, sel):
+    """注音、英文頁：中／En、剪貼簿、▽。sel＝0 框住「中」（注音），1 框住「En」（英文）"""
     tab = W * 0.2
-    d.rounded_rectangle((8 * DP, 7 * DP, tab - 8 * DP, TOP - 7 * DP), radius=(TOP - 14 * DP) / 2, outline=COL["top"] + (a,), width=3)
+    x0 = tab * sel
+    d.rounded_rectangle((x0 + 8 * DP, 7 * DP, x0 + tab - 8 * DP, TOP - 7 * DP), radius=(TOP - 14 * DP) / 2, outline=COL["top"] + (a,), width=3)
     d.text((tab / 2, TOP / 2), "中", font=f(TOP * 0.45), fill=COL["top"] + (a,), anchor="mm")
     d.text((tab * 1.5, TOP / 2), "En", font=f(TOP * 0.4), fill=COL["top"] + (a,), anchor="mm")
     for cx, t in ((W - tab * 1.2, "剪貼簿"), (W - tab * 0.4, "▽")):
         d.ellipse((cx - TOP * 0.3, TOP / 2 - TOP * 0.3, cx + TOP * 0.3, TOP / 2 + TOP * 0.3), outline=COL["top"] + (a,), width=2)
         d.text((cx, TOP / 2), t, font=f(TOP * (0.18 if len(t) > 1 else 0.3)), fill=COL["top"] + (a,), anchor="mm")
-    d.text((W * 0.5, TOP / 2), f"{title}・上方列 1080×{round(TOP)}", font=f(26), fill=COL["top"] + (a,), anchor="mm")
+    # 字放在 En 和剪貼簿中間（En 被框起來時才不會撞到）
+    d.text(((tab * 2 + W - tab * 1.2 - TOP * 0.3) / 2, TOP / 2), f"{title}・上方列 1080×{round(TOP)}", font=f(23), fill=COL["top"] + (a,), anchor="mm")
 
 
 def draw_top_tabs(d, a, tabs, sel):
@@ -105,7 +107,7 @@ def draw(name, page, quick, file, overlay):
     d.rectangle((0, 0, W - 1, TOP), outline=COL["top"] + (a,), width=3, fill=None if overlay else COL["top"] + (40,))
     top_note = None
     if page["tabs"] == "zhen":
-        draw_top_zhen(d, a, TITLES[name])
+        draw_top_zhen(d, a, TITLES[name], 1 if name == "english" else 0)
     else:
         top_note = draw_top_tabs(d, a, page["tabs"], SELECTED_TAB.get(name, 0))
 
