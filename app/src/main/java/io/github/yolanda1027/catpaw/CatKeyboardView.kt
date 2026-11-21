@@ -1656,29 +1656,63 @@ class CatKeyboardView(
     private fun drawPageIndicator(c: Canvas, w: Float) {
         if (symbolTabs == null || symbolPageCount <= 1) return
         val y = topH + quickH + padTop + rowH * (rows.size - 1) - 1.5f * dp
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 3 * dp }
         if (verticalPaging) {
             // 上下滑：右邊一條直的捲軸
             val top = topH + quickH + padTop
-            val x = w - 2.5f * dp
-            p.strokeCap = android.graphics.Paint.Cap.ROUND
-            p.color = theme.textDim
-            p.alpha = 60
-            c.drawLine(x, top, x, y, p)
-            p.color = theme.popupSelBg
-            val seg = (y - top) / symbolPageCount
             val pos = (symbolPage - pageOffset / pagingGridH).coerceIn(0f, (symbolPageCount - 1).toFloat())
-            c.drawLine(x, top + seg * pos, x, top + seg * (pos + 1), p)
+            drawPageBar(c, w - 2.5f * dp, top, w - 2.5f * dp, y, pos, symbolPageCount, vertical = true, maxX = w)
             return
         }
-        p.color = theme.textDim
-        p.alpha = 60
-        c.drawLine(0f, y, w, y, p)
-        p.color = theme.popupSelBg
-        val seg = w / symbolPageCount
         // 跟著手指滑動的進度一起移動
         val pos = (symbolPage - pageOffset / w).coerceIn(0f, (symbolPageCount - 1).toFloat())
-        c.drawLine(seg * pos, y, seg * (pos + 1), y, p)
+        drawPageBar(c, 0f, y, w, y, pos, symbolPageCount, vertical = false, maxX = w)
+    }
+
+    /** 頁數條的兩個顏色：底線、目前那一段（主題工作室顯示用；沒設照主題） */
+    fun pageBarColors(): IntArray {
+        val pb = keyStyles.pageBar
+        return intArrayOf(pb?.track ?: ((60 shl 24) or (theme.textDim and 0xFFFFFF)), pb?.bar ?: theme.popupSelBg)
+    }
+
+    /** 頁數條的小圖示大小 */
+    private val thumbH get() = 20 * dp
+
+    /**
+     * 畫一條頁數條：(x0,y0)→(x1,y1) 是整條底線，pos 是目前在第幾頁（滑動中可以是小數）。
+     * 有小圖示就把圖示放在目前那一段的正中間，沒有就畫目前那一段。
+     */
+    private fun drawPageBar(c: Canvas, x0: Float, y0: Float, x1: Float, y1: Float, pos: Float, count: Int, vertical: Boolean, maxX: Float) {
+        val (track, bar) = pageBarColors().let { it[0] to it[1] }
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            strokeWidth = 3 * dp
+            strokeCap = if (vertical) android.graphics.Paint.Cap.ROUND else android.graphics.Paint.Cap.BUTT
+            color = track
+        }
+        c.drawLine(x0, y0, x1, y1, p)
+        val len = if (vertical) y1 - y0 else x1 - x0
+        val seg = len / count
+        val thumb = keyStyles.pageBar?.thumb?.let { fillBitmap(it) }
+        if (thumb != null && thumb.width > 0 && thumb.height > 0) {
+            // 小圖示：高度固定，寬度照比例（太寬的話限制在兩倍高）
+            val h = thumbH
+            val tw = (h * thumb.width / thumb.height).coerceAtMost(h * 2)
+            val th = tw * thumb.height / thumb.width
+            val mid = seg * (pos + 0.5f)
+            val cx = if (vertical) (x0).coerceAtMost(maxX - tw / 2 - 1 * dp) else (x0 + mid).coerceIn(tw / 2, maxX - tw / 2)
+            val cy = if (vertical) y0 + mid else y0
+            c.drawBitmap(thumb, null, RectF(cx - tw / 2, cy - th / 2, cx + tw / 2, cy + th / 2), thumbPaint)
+            return
+        }
+        p.color = bar
+        if (vertical) c.drawLine(x0, y0 + seg * pos, x1, y0 + seg * (pos + 1), p)
+        else c.drawLine(x0 + seg * pos, y0, x0 + seg * (pos + 1), y1, p)
+    }
+
+    private val thumbPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+
+    /** 主題工作室的頁數條面板：畫一條樣本（3 頁，停在第 2 頁） */
+    fun drawPageBarSample(c: Canvas, w: Float, h: Float) {
+        drawPageBar(c, 0f, h / 2, w, h / 2, 1f, 3, vertical = false, maxX = w)
     }
 
     private fun drawTopBar(c: Canvas, w: Float) {

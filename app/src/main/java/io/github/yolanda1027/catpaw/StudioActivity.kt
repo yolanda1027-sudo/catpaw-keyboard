@@ -62,6 +62,8 @@ class StudioActivity : Activity() {
     private var quickSelected = false
     /** 正在改「長按選單、泡泡」的顏色（整個主題一組） */
     private var popupSelected = false
+    /** 正在改「頁數條」（整個主題一組） */
+    private var pageBarSelected = false
     /** 選到的圖案 */
     private var decalSel: String? = null
     /** 從相簿選圖片時，要貼到哪 */
@@ -114,6 +116,7 @@ class StudioActivity : Activity() {
                 topSelected = false
                 quickSelected = false
                 popupSelected = false
+                pageBarSelected = false
                 decalSel = null
                 if (animMode == GLOBAL) animMode = null
                 refresh()
@@ -126,6 +129,7 @@ class StudioActivity : Activity() {
                 animMode = null
                 quickSelected = false
                 popupSelected = false
+                pageBarSelected = false
                 topSelected = true
                 refresh()
             }
@@ -358,7 +362,9 @@ class StudioActivity : Activity() {
             decalSel != null -> decalSel = null // 圖案、按鍵上的字 → 回到那顆鍵（或鍵盤背景）
             animMode != null -> animMode = null // 按鍵動畫 → 回到那顆鍵（或首頁）
             selected != null -> { selected = null; groupScope = false }
-            bgSelected || topSelected || quickSelected || popupSelected -> { bgSelected = false; topSelected = false; quickSelected = false; popupSelected = false }
+            bgSelected || topSelected || quickSelected || popupSelected || pageBarSelected -> {
+                bgSelected = false; topSelected = false; quickSelected = false; popupSelected = false; pageBarSelected = false
+            }
             overview -> overview = false
             else -> return false
         }
@@ -439,6 +445,7 @@ class StudioActivity : Activity() {
         topSelected = false
         quickSelected = false
         popupSelected = false
+        pageBarSelected = false
         decalSel = null
         refresh()
     }
@@ -614,10 +621,11 @@ class StudioActivity : Activity() {
         if (decalSel?.startsWith(LABEL) == true && sk != null && !bgSelected && !groupScope) { labelPanel(sk, decalSel!!.removePrefix(LABEL)); return }
         decals.firstOrNull { it.id == decalSel }?.let { decalPanel(it); return }
         decalSel = null
-        if (overview && !topSelected && !quickSelected && !popupSelected && !bgSelected && selected == null) { overviewPanel(); return }
+        if (overview && !topSelected && !quickSelected && !popupSelected && !pageBarSelected && !bgSelected && selected == null) { overviewPanel(); return }
         if (topSelected) { topBarPanel(); return }
         if (quickSelected) { quickBarPanel(); return }
         if (popupSelected) { popupPanel(); return }
+        if (pageBarSelected) { pageBarPanel(); return }
         if (bgSelected) { bgPanel(); return }
         val key = selected
         if (key == null) {
@@ -652,6 +660,7 @@ class StudioActivity : Activity() {
             section("全部頁面")
             button("✨ 按鍵動畫（全部按鍵）") { animMode = GLOBAL; refresh() }
             button("💬 長按選單、按下時泡泡的顏色" + if (styles.popup != null) "（已設計）" else "") { popupSelected = true; refresh() }
+            button("📍 頁數條（符號、表情、剪貼簿）" + if (styles.pageBar != null) "（已設計）" else "") { pageBarSelected = true; refresh() }
             val nAll = overviewCount()
             if (nAll > 0) button("🔍 設計總覽：這個主題有 $nAll 項設計 ›") { overview = true; refresh() }
 
@@ -875,6 +884,10 @@ class StudioActivity : Activity() {
                 val parts = listOfNotNull(if (q.menuSet) "長按選單" else null, if (q.bubbleSet) "放大字泡泡" else null)
                 out.add(Item(p.id, "長按選單、泡泡（每一頁都一樣）", parts.joinToString("、")) { goPage(p.id) { popupSelected = true } })
             }
+            if (p.id.isEmpty()) styles.pageBar?.let { b ->
+                val parts = listOfNotNull(if (b.thumb != null) "小圖示" else null, if (b.track != null || b.bar != null) "顏色" else null)
+                out.add(Item(p.id, "頁數條（每一頁都一樣）", parts.joinToString("、")) { goPage(p.id) { pageBarSelected = true } })
+            }
             // 按鍵：整類排前面，再來單顆
             val keys = styles.keyEntries.filterKeys { KeyStyles.pageOf(it) == p.id }
                 .toList().sortedBy { if (KeyStyles.baseOf(it.first).startsWith("@")) 0 else 1 }
@@ -980,6 +993,7 @@ class StudioActivity : Activity() {
         topSelected = false
         quickSelected = false
         popupSelected = false
+        pageBarSelected = false
         if (d.onBackground) {
             bgSelected = true
             selected = null
@@ -1257,6 +1271,23 @@ class StudioActivity : Activity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (Eyedropper.onResult(this, requestCode, resultCode, data)) return
+        if (requestCode == REQ_PAGE_THUMB) {
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) return
+            // 小圖示：靜態圖就好（GIF 只留第一格），存小一點
+            val name = try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val bytes = input.readBytes()
+                    if (bytes.size > 40 * 1024 * 1024) null else Decals.storeBytes(this, bytes, keepGif = false, maxPx = 256)
+                }
+            } catch (_: Exception) { null }
+            if (name == null) {
+                android.widget.Toast.makeText(this, "這個檔案讀不出來，換一張圖試試", android.widget.Toast.LENGTH_LONG).show()
+                return
+            }
+            setPageBar { it.copy(thumb = name) }
+            return
+        }
         if (requestCode == REQ_QUICK_FRAME) {
             val uri = data?.data
             if (resultCode != RESULT_OK || uri == null) return
@@ -1664,7 +1695,8 @@ class StudioActivity : Activity() {
             val hasTop = styles.topBar != null || styles.pageTops.isNotEmpty()
             val hasQuick = styles.quick != null
             val hasPopup = styles.popup != null
-            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop && !hasQuick && !hasPopup) {
+            val hasPageBar = styles.pageBar != null
+            if (nDecals == 0 && nStyles == 0 && !hasBgImage && !hasTop && !hasQuick && !hasPopup && !hasPageBar) {
                 android.widget.Toast.makeText(this, "目前已經是主題預設的樣子了", android.widget.Toast.LENGTH_SHORT).show()
                 return@button
             }
@@ -1675,6 +1707,7 @@ class StudioActivity : Activity() {
                 if (hasTop) add("・上方列（中／En）的顏色")
                 if (hasQuick) add("・快捷符號列的顏色")
                 if (hasPopup) add("・長按選單、泡泡的顏色")
+                if (hasPageBar) add("・頁數條")
             }
             val dialog = AlertDialog.Builder(this)
                 .setTitle("恢復主題預設？")
@@ -1696,6 +1729,7 @@ class StudioActivity : Activity() {
         topSelected = false
         quickSelected = false
         popupSelected = false
+        pageBarSelected = false
         animMode = null
         groupScope = false
         ThemeStore.restoreParts(prefs, origin, ThemeStore.STUDIO_KEYS)
@@ -1715,6 +1749,7 @@ class StudioActivity : Activity() {
         topSelected = false
         quickSelected = false
         popupSelected = false
+        pageBarSelected = false
         animMode = null
         groupScope = false
         styles = KeyStyles.EMPTY
@@ -1861,6 +1896,65 @@ class StudioActivity : Activity() {
         KeyStyles.save(prefs, styles)
         kv.setKeyStylesLive(styles)
         if (rebuild) refresh()
+    }
+
+    private fun setPageBar(change: (PageBarStyle) -> PageBarStyle?) {
+        styles = styles.withPageBar(change(styles.pageBar ?: PageBarStyle()))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        refresh()
+    }
+
+    /** 頁數條：符號、表情最後一排上面的那條線、剪貼簿右邊的捲軸（整個主題一組） */
+    private fun pageBarPanel() {
+        kv.editHighlight = null
+        header("正在編輯：頁數條")
+        text("符號、表情最後一排上面那條線，告訴你現在在第幾頁；剪貼簿是右邊那條直的。整個主題共用一組。", 13f, dim = true)
+        // 樣本：3 頁，停在第 2 頁
+        panel.addView(object : View(this) {
+            override fun onDraw(c: android.graphics.Canvas) {
+                c.drawColor(kv.sampleColors(kv.rows.flatten().firstOrNull { it.act != Act.GAP } ?: return)?.bg ?: Color.DKGRAY)
+                kv.drawPageBarSample(c, width.toFloat(), height.toFloat())
+            }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(40f)).apply { topMargin = px(10f) })
+        text("樣本：一共 3 頁，現在在第 2 頁", 12f, dim = true)
+
+        val cur = styles.pageBar ?: PageBarStyle()
+        val now = kv.pageBarColors()
+        section("小圖示")
+        text(
+            if (cur.thumb == null) "沒有：目前那一段畫成一條橫線。上傳一張去背 PNG（例如貓爪、金色飛賊），就換成小圖示跟著頁數跑。"
+            else "已設定：目前那一段換成這張圖（高度約 20dp，寬度照比例）。",
+            13f, dim = true,
+        )
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun b(label: String, onClick: () -> Unit) = row.addView(Button(this).apply {
+            text = label
+            isAllCaps = false
+            setOnClickListener { onClick() }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(3f), px(2f), px(3f)) })
+        b(if (cur.thumb == null) "📷 上傳小圖示" else "📷 換一張") {
+            val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_PAGE_THUMB)
+        }
+        if (cur.thumb != null) b("拿掉，改回橫線") { setPageBar { it.copy(thumb = null) } }
+        panel.addView(row)
+
+        section("顏色")
+        colorRow("底線", cur.track, now[0], allowTransparent = true) { v -> setPageBar { it.copy(track = v) } }
+        greyIf(cur.thumb != null) {
+            colorRow("目前那一段", cur.bar, now[1]) { v -> setPageBar { it.copy(bar = v) } }
+        }
+        if (cur.thumb != null) text("💡「目前那一段」是灰的：現在用小圖示。", 12f, dim = true)
+
+        if (styles.pageBar != null) {
+            section("重來")
+            button("全部改回原本的樣子") { setPageBar { null } }
+        }
     }
 
     private fun setPopup(change: (PopupStyle) -> PopupStyle?) {
@@ -2545,6 +2639,7 @@ class StudioActivity : Activity() {
         private const val REQ_EFFECT_IMAGE = 501
         private const val REQ_FILL = 502
         private const val REQ_QUICK_FRAME = 503
+        private const val REQ_PAGE_THUMB = 504
         private const val GLOBAL = "global"
         private const val KEY = "key"
         /** 工作室上面的分頁 */

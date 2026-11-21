@@ -100,7 +100,7 @@ object ThemeIO {
         }
         if (Part.KEYS in parts) {
             val ks = KeyStyles.load(prefs)
-            if (ks.map.isNotEmpty() || ks.topBar != null || ks.quick != null || ks.popup != null) o.put("keyStyles", ks.toJson())
+            if (ks.map.isNotEmpty() || ks.topBar != null || ks.quick != null || ks.popup != null || ks.pageBar != null) o.put("keyStyles", ks.toJson())
         }
         if (Part.DECALS in parts) {
             val list = Decals.load(prefs)
@@ -248,7 +248,13 @@ object ThemeIO {
                     val n = rename[f.img]
                     if (n != null) q.copy(frame = f.copy(img = n)) else { lostImage = true; q.copy(frame = null) }
                 } ?: q
-            }, loaded.pageTops, loaded.popup))
+            }, loaded.pageTops, loaded.popup, loaded.pageBar?.let { b ->
+                // 頁數條的小圖示：換成新存的檔名；壞掉就拿掉（顏色留著）
+                b.thumb?.let { t ->
+                    val n = rename[t]
+                    if (n != null) b.copy(thumb = n) else { lostImage = true; b.copy(thumb = null) }
+                } ?: b
+            }))
             if (lostImage) warnings.add("有底圖的圖片壞掉了，那幾顆鍵先用底色")
         }
         o.optJSONObject("decals")?.let {
