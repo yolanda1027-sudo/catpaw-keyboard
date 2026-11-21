@@ -1134,7 +1134,7 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.clipboardHistory = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
-        note("只存在這支手機裡；密碼管理 App 複製的密碼不會被記錄。")
+        note("只存在這支手機裡；密碼管理 App 複製的密碼不會被記錄。\n關掉的話：鍵盤上方的剪貼簿按鈕會藏起來，也不會再記新的；已經記下的（含釘選的）先留著，再打開就回來。想一起刪掉可以用最下面的「清除」。")
 
         // 沒釘選的留多久（釘選的一直留著）
         subTitle("沒釘選的留多久")

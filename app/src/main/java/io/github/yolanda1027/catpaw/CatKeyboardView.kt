@@ -1592,6 +1592,10 @@ class CatKeyboardView(
     private var pagingPointer = -1
     private var pageAnim: android.animation.ValueAnimator? = null
 
+    /** 上方列要不要有剪貼簿按鈕（設定裡關掉剪貼簿就藏起來） */
+    var showClipboard = true
+        set(v) { if (field != v) { field = v; stripCache = null; invalidate() } }
+
     /** 上下滑換頁（剪貼簿）：往上滑＝下一頁；其他頁是左右滑 */
     var verticalPaging = false
         set(v) { if (field != v) { field = v; pageAnim?.cancel(); pageOffset = 0f } }
@@ -1701,8 +1705,8 @@ class CatKeyboardView(
         }
         theme.drawText(c, "En", tabW * 1.5f, topH / 2, topH * 0.46f, if (isChinese) topDim else topText)
 
-        // 剪貼簿按鈕（在 ▽ 左邊）
-        theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, topIcon)
+        // 剪貼簿按鈕（在 ▽ 左邊）：設定裡關掉剪貼簿就不顯示
+        if (showClipboard) theme.drawIcon(c, Icon.CLIPBOARD, w - tabW * 1.2f, topH / 2, topH * 0.6f, topIcon)
         // 右邊的 ▽：收起鍵盤
         val cx = w - tabW * 0.4f
         val cy = topH / 2
@@ -1999,7 +2003,7 @@ class CatKeyboardView(
             x < tabW -> { haptics.perform(this, prefs); l.onTabChinese() }
             x < tabW * 2 -> { haptics.perform(this, prefs); l.onTabEnglish() }
             x > width - tabW * 0.8f -> { haptics.perform(this, prefs); l.onHide() }
-            x > width - tabW * 1.6f -> { haptics.perform(this, prefs); l.onClipboard() }
+            x > width - tabW * 1.6f && showClipboard -> { haptics.perform(this, prefs); l.onClipboard() }
         }
     }
 

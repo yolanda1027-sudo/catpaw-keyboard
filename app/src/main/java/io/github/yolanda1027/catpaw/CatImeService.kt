@@ -158,6 +158,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             }
             "en_suggest" -> updateEnglish()
             "bottom_pad_dp" -> kv?.requestApplyInsets() // 設定裡調了「鍵盤最下面多留空間」
+            "clipboard_history" -> { // 剪貼簿關掉：按鈕藏起來；正在看剪貼簿的話回到鍵盤
+                if (!prefs.clipboardHistory && page == Page.CLIP) page = Page.MAIN
+                refresh()
+            }
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
                 File(filesDir, "clips.json").delete()
                 clips = ClipHistory.open(this)
@@ -396,6 +400,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.itemActions = { k -> itemActionsFor(k) }
         v.isPinned = { k -> recentKind()?.let { kind -> k.act == Act.TEXT && k.text in pinned(kind) } == true }
         // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
+        v.showClipboard = prefs.clipboardHistory
         // 剪貼簿：上下滑換頁（像一份清單）；其他頁左右滑
         v.verticalPaging = page == Page.CLIP
         v.morePagesBefore = page == Page.EMOJI && emojiCat > firstEmojiCat()
@@ -964,6 +969,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     }
 
     override fun onClipboard() {
+        if (!prefs.clipboardHistory) return
         if (isComposing) commitComposingAll()
         captureClipboard()
         page = Page.CLIP
