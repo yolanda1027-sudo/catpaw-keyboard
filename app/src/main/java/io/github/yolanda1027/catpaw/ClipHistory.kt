@@ -7,10 +7,10 @@ import java.io.File
 /**
  * 剪貼簿紀錄：最近複製過的文字。
  * - 釘選的會一直留著
- * - 沒釘選的超過 1 小時自動刪掉（跟 Gboard 一樣，避免密碼之類的東西一直留著）
+ * - 沒釘選的超過留存時間（設定裡選，預設 1 小時，跟 Gboard 一樣）自動刪掉，避免密碼之類的東西一直留著
  * 只存在這支手機裡（App 的私人資料夾），不會上傳。
  */
-class ClipHistory(private val file: File) {
+class ClipHistory(private val file: File, private val expireMs: Long = EXPIRE_MS) {
 
     data class Item(val text: String, val time: Long, val pinned: Boolean)
 
@@ -31,7 +31,7 @@ class ClipHistory(private val file: File) {
 
     /** 釘選的在前（照使用者排的順序），其他照時間新到舊 */
     fun all(now: Long = System.currentTimeMillis()): List<Item> {
-        if (items.removeAll { !it.pinned && now - it.time > EXPIRE_MS }) save()
+        if (items.removeAll { !it.pinned && now - it.time > expireMs }) save()
         return items.filter { it.pinned } + items.filter { !it.pinned }
     }
 
@@ -108,6 +108,14 @@ class ClipHistory(private val file: File) {
 
     companion object {
         const val EXPIRE_MS = 60 * 60 * 1000L
+        /** 設定裡可以選的留存時間（小時） */
+        val KEEP_HOURS = listOf(1, 8, 12, 24, 72, 168, 336)
+
+        fun keepLabel(h: Int) = if (h < 24) "$h 小時" else "${h / 24} 天"
+
+        /** 照設定的留存時間打開剪貼簿紀錄（鍵盤、設定頁都要用這個，不然會照預設的 1 小時刪掉） */
+        fun open(ctx: android.content.Context): ClipHistory =
+            ClipHistory(File(ctx.filesDir, "clips.json"), Prefs(ctx).clipKeepHours * 60 * 60 * 1000L)
         const val MAX_ITEMS = 20
         const val MAX_LEN = 5000
     }

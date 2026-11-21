@@ -262,7 +262,7 @@ class SettingsActivity : Activity() {
         PageInfo("haptic", "🎵 手感", "震動、長按時間、按下時放大的字", false, group = "打字"),
         PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、英文建議字、清除學習紀錄", false, group = "打字"),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true, group = "打字"),
-        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、釘選的順序、清除", false, group = "打字"),
+        PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、留多久、釘選的順序、清除", false, group = "打字"),
         PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false, group = "打字"),
         PageInfo("tips", "💡 小提示", "一些好用的小技巧", false, group = "其他"),
         PageInfo("privacy", "🔒 隱私權", "打的字只留在手機裡：存了什麼、怎麼刪", false, group = "其他"),
@@ -1134,19 +1134,26 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.clipboardHistory = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
-        note("只存在這支手機裡。沒釘選的 1 小時後會自動刪掉；密碼管理 App 複製的密碼不會被記錄。")
+        note("只存在這支手機裡；密碼管理 App 複製的密碼不會被記錄。")
+
+        // 沒釘選的留多久（釘選的一直留著）
+        subTitle("沒釘選的留多久")
+        radios(
+            ClipHistory.KEEP_HOURS.map { it.toString() to ClipHistory.keepLabel(it) + if (it == 1) "（預設）" else "" },
+            prefs.clipKeepHours.toString(),
+        ) { prefs.clipKeepHours = it.toInt() }
+        note("超過這個時間，沒釘選的紀錄會自動刪掉；想一直留著的就長按釘選。沒釘選的最多留 ${ClipHistory.MAX_ITEMS} 筆，更多的話先刪最舊的。")
 
         // 釘選的順序：鍵盤上照這個順序排在最前面
         subTitle("釘選的順序")
-        val file = java.io.File(filesDir, "clips.json")
-        val pinned = ClipHistory(file).all().filter { it.pinned }
+        val pinned = ClipHistory.open(this).all().filter { it.pinned }
         if (pinned.isEmpty()) {
             note("還沒有釘選的。在鍵盤的剪貼簿長按一筆，手指滑到「釘選」再放開。")
         } else {
             note("用 ↑ ↓ 調整順序，鍵盤的剪貼簿會照這個順序排在最前面。")
             // 每次按都重新讀檔再改：鍵盤那邊剛記下的新紀錄才不會被蓋掉
             fun change(action: String, text: String) {
-                ClipHistory(file).action(action, text)
+                ClipHistory.open(this).action(action, text)
                 prefs.sp.edit().putLong("clips_changed", System.currentTimeMillis()).apply()
                 showPage("clip")
             }

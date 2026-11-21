@@ -86,7 +86,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         prefs.sp.registerOnSharedPreferenceChangeListener(this)
         Symbols.loadKaomoji(assets.open("kaomoji.txt").bufferedReader().use { it.readText() })
         Emojis.load(assets.open("emoji.txt").bufferedReader().use { it.readText() })
-        clips = ClipHistory(File(filesDir, "clips.json"))
+        clips = ClipHistory.open(this)
         getSystemService(ClipboardManager::class.java)?.addPrimaryClipChangedListener(clipListener)
         // 讓鍵盤上方放注音小框框的那條區域是透明的
         window.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -160,10 +160,10 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             "bottom_pad_dp" -> kv?.requestApplyInsets() // 設定裡調了「鍵盤最下面多留空間」
             "clear_clips" -> { // 設定頁按了「清除剪貼簿紀錄」
                 File(filesDir, "clips.json").delete()
-                clips = ClipHistory(File(filesDir, "clips.json"))
+                clips = ClipHistory.open(this)
             }
-            "clips_changed" -> { // 設定頁排了釘選的順序、解除釘選、刪除：重新讀
-                clips = ClipHistory(File(filesDir, "clips.json"))
+            "clips_changed", "clip_keep_hours" -> { // 設定頁排了釘選的順序、解除釘選、刪除、改了留存時間：重新讀
+                clips = ClipHistory.open(this)
                 if (page == Page.CLIP) refresh()
             }
             else -> kv?.reloadPrefs()
@@ -396,6 +396,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.itemActions = { k -> itemActionsFor(k) }
         v.isPinned = { k -> recentKind()?.let { kind -> k.act == Act.TEXT && k.text in pinned(kind) } == true }
         // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
+        // 剪貼簿：上下滑換頁（像一份清單）；其他頁左右滑
+        v.verticalPaging = page == Page.CLIP
         v.morePagesBefore = page == Page.EMOJI && emojiCat > firstEmojiCat()
         v.morePagesAfter = page == Page.EMOJI && emojiCat >= firstEmojiCat() && emojiCat < Emojis.groups.size + 1
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {

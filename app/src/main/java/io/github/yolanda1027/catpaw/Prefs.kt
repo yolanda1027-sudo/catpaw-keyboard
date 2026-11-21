@@ -144,6 +144,11 @@ class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
         get() = sp.getInt("bottom_pad_dp", 0)
         set(v) = sp.edit().putInt("bottom_pad_dp", v).apply()
 
+    /** 剪貼簿沒釘選的紀錄留多久（小時）：1、8、12、24、72、168、336 */
+    var clipKeepHours: Int
+        get() = sp.getInt("clip_keep_hours", 1).takeIf { it in ClipHistory.KEEP_HOURS } ?: 1
+        set(v) = sp.edit().putInt("clip_keep_hours", v).apply()
+
     /** 記錄剪貼簿（點鍵盤上方的剪貼簿按鈕可以看到、貼上） */
     var clipboardHistory: Boolean
         get() = sp.getBoolean("clipboard_history", true)
