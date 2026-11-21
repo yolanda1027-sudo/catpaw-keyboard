@@ -2363,7 +2363,8 @@ class StudioActivity : Activity() {
             this, bmp, NineFrame(fill.img, fill.sx, fill.sy, fill.trim), "", Color.WHITE,
             buttonW = frame.width(), buttonH = frame.height(),
             title = "調整背景圖片的邊角",
-            caption = "預覽：鍵盤背景實際的大小，和更窄、更寬的",
+            caption = "預覽：鍵盤背景直放、橫放時的樣子",
+            samples = listOf(frame.width() to "直放（鍵盤背景實際的大小）", landscapeWidth(frame, isKeyboard = true) to "手機橫放時"),
         ) { done ->
             if (done != null) setFill(target, fill.copy(nine = true, fit = false, sx = done.sx, sy = done.sy, trim = done.trim))
         }
@@ -2380,13 +2381,15 @@ class StudioActivity : Activity() {
         val key = selected ?: return
         val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
         val box = kv.keyImageFrame(key, st)?.first ?: return
-        val label = key.label.ifEmpty { KeyStyles.nameOf(key) }
+        // 圖示鍵（表情、刪除…）沒有字：預覽就不寫字（寫名字的話太長，會跑出按鍵外面）
+        val label = key.label
         val textColor = st.text ?: kv.sampleColors(key)?.text ?: Color.BLACK
         NineSliceDialog.show(
             this, bmp, NineFrame(fill.img, fill.sx, fill.sy, fill.trim), label, textColor,
             buttonW = box.width(), buttonH = box.height(),
             title = "調整按鍵圖片的邊角",
-            caption = "預覽：這顆鍵實際的大小，和更窄、更寬的",
+            caption = "預覽：這顆鍵直放、橫放時的樣子",
+            samples = listOf(box.width() to "直放（這顆鍵實際的大小）", landscapeWidth(box, isKeyboard = false) to "手機橫放時"),
         ) { done ->
             if (done != null) setFill(target, fill.copy(nine = true, fit = false, shape = false, sx = done.sx, sy = done.sy, trim = done.trim))
         }

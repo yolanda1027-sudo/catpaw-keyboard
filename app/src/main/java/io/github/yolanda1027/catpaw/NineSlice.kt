@@ -111,10 +111,12 @@ data class NineFrame(
 object NineSliceDialog {
     /**
      * @param buttonW 快捷列一顆按鈕實際的寬（預覽用；0 = 不知道）
+     * @param samples 預覽要畫哪幾種寬度（px）和每一個的說明；沒給 = 快捷列那種「更窄、實際、更寬」三顆
      */
     fun show(
         a: Activity, bmp: Bitmap, initial: NineFrame, label: String, textColor: Int, buttonW: Float = 0f,
         buttonH: Float = 0f, title: String = "調整按鈕圖片的邊角", caption: String = "預覽：快捷列按鈕實際的大小，和更窄、更寬的",
+        samples: List<Pair<Float, String>>? = null,
         done: (NineFrame?) -> Unit,
     ): Dialog {
         val dp = a.resources.displayMetrics.density
@@ -134,7 +136,7 @@ object NineSliceDialog {
         }
         root.addView(label(title, 17f))
         root.addView(label("虛線外面的四個角不會變形，按鈕變寬變窄時只拉長中間那段", 13f, 0.75f))
-        val view = NineSliceView(a, bmp, initial, label, textColor, buttonW, buttonH, caption)
+        val view = NineSliceView(a, bmp, initial, label, textColor, buttonW, buttonH, caption, samples)
         root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         fun bar(title: String, value: Float, set: (Float) -> Unit) {
@@ -200,6 +202,8 @@ class NineSliceView(
     private val buttonW: Float = 0f,
     private val buttonH: Float = 0f,
     private val captionText: String = "預覽：快捷列按鈕實際的大小，和更窄、更寬的",
+    /** 預覽要畫的寬度（px）和說明；null = 快捷列那種三顆 */
+    private val samples: List<Pair<Float, String>>? = null,
 ) : View(ctx) {
     var frame: NineFrame = initial
         set(v) { field = v; invalidate() }
@@ -242,9 +246,25 @@ class NineSliceView(
         var y = r.bottom + 34 * dp
         c.drawText(captionText, width / 2f, y, caption)
         y += 14 * dp
+        text.color = textColor
+        if (samples != null) {
+            // 真的會出現的大小（直放、橫放）：太寬放不下就整組一起縮小，比例不變
+            val k = min(1f, w / (samples.maxOfOrNull { it.first } ?: w))
+            val h = bh * k
+            text.textSize = h * 0.5f
+            val small = Paint(caption).apply { textSize = 12 * dp }
+            for ((bw0, note) in samples) {
+                val bw = bw0 * k
+                val b = RectF((width - bw) / 2, y, (width + bw) / 2, y + h)
+                NineFrame.draw(c, bmp, frame.sx, frame.sy, b, frame.trim)
+                if (label.isNotEmpty()) c.drawText(label, b.centerX(), b.centerY() - (text.descent() + text.ascent()) / 2, text)
+                c.drawText(note, width / 2f, b.bottom + 16 * dp, small)
+                y += h + 30 * dp
+            }
+            return
+        }
         val real = if (buttonW > 0f) min(buttonW, w) else w * 0.24f
         val widths = floatArrayOf(real * 0.7f, real, min(w, real * 2.6f))
-        text.color = textColor
         text.textSize = bh * 0.5f
         for (bw in widths) {
             val b = RectF((width - bw) / 2, y, (width + bw) / 2, y + bh)
