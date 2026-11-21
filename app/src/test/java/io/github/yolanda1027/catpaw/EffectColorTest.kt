@@ -79,6 +79,12 @@ class EffectColorTest {
         assertNotNull(views(a.window.decorView).firstOrNull { it is TextView && it.text == "動畫顏色" })
         set.invoke(a, KeyEffect("paw", color = mint))
         assertEquals(mint, Prefs(ctx, ThemeStore.WORK).pressEffectColor)
+        // 「試按看看」：冒出來的貓爪是選的顏色（不是主題的粉紅）
+        val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        val fx = CatKeyboardView::class.java.getDeclaredField("effects").apply { isAccessible = true }.get(kv) as PressEffects
+        (PressEffects::class.java.getDeclaredField("particles").apply { isAccessible = true }.get(fx) as MutableList<*>).clear()
+        StudioActivity::class.java.getDeclaredMethod("playPreview").apply { isAccessible = true }.invoke(a)
+        assertEquals(listOf(mint), colors(fx))
         // 改回原色
         set.invoke(a, KeyEffect("paw"))
         assertNull(Prefs(ctx, ThemeStore.WORK).pressEffectColor)

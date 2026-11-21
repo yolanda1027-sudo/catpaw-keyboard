@@ -2486,7 +2486,7 @@ class StudioActivity : Activity() {
         if (animMode == GLOBAL) {
             // 全部按鍵：在中間附近的鍵放（用全部按鍵共用的那一種，就算那顆鍵有自己的動畫）
             val key = kv.rows.getOrNull(1)?.getOrNull(4) ?: return
-            kv.previewEffect(key, KeyEffect(prefs.pressEffect, prefs.customEffect))
+            kv.previewEffect(key, KeyEffect(prefs.pressEffect, prefs.customEffect, prefs.pressEffectColor))
         } else {
             selected?.let { kv.previewEffect(it) }
         }
