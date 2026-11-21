@@ -1948,9 +1948,15 @@ class StudioActivity : Activity() {
         }
         cur.frame?.let { f ->
             fb("📐 調整邊角") { openNineSlice(f) }
-            fb("拿掉") { setQuick({ it.copy(frame = null) }) }
+            fb("拿掉") { setQuick({ it.copy(frame = null, frameAlpha = null) }) }
         }
         panel.addView(frameRow)
+        if (hasFrame) {
+            val fa = Math.round((cur.frameAlpha ?: 1f) * 100)
+            slider("按鈕圖片透明度", fa, 0, 100, { if (it == 0) "0%（完全透明）" else "$it%" }) { v ->
+                setQuick({ it.copy(frameAlpha = (v / 100f).takeIf { a -> a < 1f }) }, rebuild = false)
+            }
+        }
 
         colorRow("文字顏色", cur.text, now.text!!) { v -> setQuick({ it.copy(text = v) }) }
         greyIf(hasFrame) {
@@ -2058,6 +2064,15 @@ class StudioActivity : Activity() {
         }
         panel.addView(row)
         if (fill == null) return
+        // 圖片的透明度：拖的時候即時看，放開才算一步（可以「上一步」）
+        slider("圖片透明度", Math.round(fill.alpha * 100), 0, 100, { if (it == 0) "0%（完全透明）" else "$it%" }) { v ->
+            setFillLive(target, (styles.map[target]?.bgImage ?: fill).copy(alpha = v / 100f))
+        }
+        text(
+            if (KeyStyles.baseOf(target) == KeyStyles.KEYBOARD) "淡一點會透出主題原本的底色。"
+            else "淡一點會透出這顆鍵的底色；想透出鍵盤背景，把「底色」設成透明。",
+            12f, dim = true,
+        )
         val bmp = loadFill(fill.img) ?: return
         // 放法：三選一，每一種都用這張圖畫預覽
         panel.addView(titleWithHelp("放法", 14f, KeyStyles.baseOf(target) == KeyStyles.KEYBOARD).apply { setPadding(0, px(8f), 0, 0) })
@@ -2277,6 +2292,14 @@ class StudioActivity : Activity() {
         ) { done ->
             if (done != null) setFill(target, fill.copy(nine = true, fit = false, shape = false, sx = done.sx, sy = done.sy, trim = done.trim))
         }
+    }
+
+    /** 拖滑桿時：只改圖片設定、重畫鍵盤，不重建下面的面板（滑桿才不會被換掉） */
+    private fun setFillLive(target: String, fill: ImageFill) {
+        styles = styles.with(target, (styles.map[target] ?: KeyStyle()).copy(bgImage = fill))
+        KeyStyles.save(prefs, styles)
+        kv.setKeyStylesLive(styles)
+        zoom.invalidate()
     }
 
     private fun setFill(target: String, fill: ImageFill?) {
@@ -2568,6 +2591,7 @@ class StudioActivity : Activity() {
                 value == null && unsetText != null -> unsetText
                 value == null -> "主題原本的顏色"
                 clear -> "透明（拿掉了）"
+                Color.alpha(value) < 255 -> "已自訂，透明度 ${Math.round(Color.alpha(value) * 100f / 255f)}%"
                 else -> "已自訂"
             }
             textSize = 12f
@@ -2583,8 +2607,8 @@ class StudioActivity : Activity() {
             setOnClickListener { onPick(Color.TRANSPARENT) }
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = px(6f) })
         val shown = value ?: now
-        // 透明的話，選色器從「本來的顏色」開始
-        val start = if (clear) now else shown
+        // 透明的話，選色器從「本來的顏色」開始；半透明的照原本的透明度
+        val start = if (clear || Color.alpha(shown) == 0) now or (0xFF shl 24) else shown
         val chip = TextView(this).apply {
             gravity = Gravity.CENTER
             textSize = 12f
@@ -2595,7 +2619,8 @@ class StudioActivity : Activity() {
                 setStroke(px(1.5f), 0x33000000)
             }
             contentDescription = "$label：" + if (clear) "透明" else String.format("#%06X", 0xFFFFFF and shown)
-            setOnClickListener { ColorDialog.show(this@StudioActivity, label, start or (0xFF shl 24)) { onPick(it) } }
+            // 選色視窗下面有「透明度」：拉到 0% 就是透明
+            setOnClickListener { ColorDialog.show(this@StudioActivity, label, start, withAlpha = true) { onPick(it) } }
         }
         row.addView(chip, LinearLayout.LayoutParams(px(72f), px(40f)))
         val reset = Button(this).apply {

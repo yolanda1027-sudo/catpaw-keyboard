@@ -236,9 +236,11 @@ data class QuickBarStyle(
     val borderInset: Float? = null,
     /** 按鈕圖片（九宮格）：有的話按鈕就畫這張，底色、外框、圓角交給圖片 */
     val frame: NineFrame? = null,
+    /** 按鈕圖片的透明度（沒設＝不透明） */
+    val frameAlpha: Float? = null,
 ) {
     val isEmpty get() = strip == null && bg == null && text == null && border == null && radius == null &&
-        borderWidth == null && borderStyle == null && borderInset == null && frame == null
+        borderWidth == null && borderStyle == null && borderInset == null && frame == null && frameAlpha == null
     /** 按鈕換成自訂的形狀（改了底色、外框或圓角） */
     val isShaped get() = bg != null || border != null || radius != null || borderWidth != null || borderStyle != null || borderInset != null
 
@@ -256,6 +258,7 @@ data class QuickBarStyle(
         borderStyle?.let { put("borderStyle", it) }
         borderInset?.let { put("borderInset", it.toDouble()) }
         frame?.let { put("frame", it.toJson()) }
+        frameAlpha?.let { put("frameAlpha", it.toDouble()) }
     }
 
     companion object {
@@ -272,6 +275,7 @@ data class QuickBarStyle(
                 borderStyle = o.optString("borderStyle").takeIf { s -> KeyStyle.BORDER_STYLES.any { it.first == s } },
                 borderInset = num("borderInset", 0f, 12f),
                 frame = NineFrame.fromJson(o.optJSONObject("frame")),
+                frameAlpha = num("frameAlpha", 0f, 1f),
             ).takeIf { !it.isEmpty }
         }
     }

@@ -48,7 +48,12 @@ data class ImageFill(
     val fit: Boolean = false,
     /** 邊框：去掉四周透明的空白再切（預設要） */
     val trim: Boolean = true,
+    /** 透明度（1 = 不透明、0 = 完全透明）：圖片淡淡的，透出後面的背景 */
+    val alpha: Float = 1f,
 ) {
+    /** 畫的時候用的透明度（0–255） */
+    val alpha255 get() = (alpha.coerceIn(0f, 1f) * 255).toInt()
+
     val isGif get() = img.endsWith(".gif")
 
     /** 放法：照片、花紋／邊框／整張都要看到 */
@@ -108,6 +113,7 @@ data class ImageFill(
             if (stretch != 1f) put("stretch", stretch.toDouble())
             if (fit) put("fit", true)
             if (!trim) put("trim", false)
+            if (alpha < 1f) put("alpha", alpha.toDouble())
         }
 
     /** 這張圖（含拉寬／拉高）最小可以縮到多小 */
@@ -172,6 +178,7 @@ data class ImageFill(
                 stretch = f("stretch", 1f, MIN_STRETCH, MAX_STRETCH),
                 fit = o.optBoolean("fit", false) && !nine,
                 trim = o.optBoolean("trim", true),
+                alpha = f("alpha", 1f, 0f, 1f),
             )
         }
 
@@ -196,6 +203,16 @@ data class ImageFill(
          * @param anim 會動的 GIF；有的話用它，沒有就用 bmp
          */
         fun draw(c: Canvas, fill: ImageFill, frame: RectF, clip: Path?, bmp: Bitmap?, anim: android.graphics.drawable.Drawable?) {
+            val a = fill.alpha255
+            if (a >= 255) { drawOpaque(c, fill, frame, clip, bmp, anim); return }
+            if (a <= 0) return
+            // 半透明：整張先畫到一層，再一起變淡（九宮格的接縫才不會一格一格疊出深淺）
+            c.saveLayerAlpha(frame, a)
+            drawOpaque(c, fill, frame, clip, bmp, anim)
+            c.restore()
+        }
+
+        private fun drawOpaque(c: Canvas, fill: ImageFill, frame: RectF, clip: Path?, bmp: Bitmap?, anim: android.graphics.drawable.Drawable?) {
             if (fill.nine) {
                 // 邊框：四個角不變形（會動的 GIF 用第一格）
                 if (bmp != null) NineFrame.draw(c, bmp, fill.sx, fill.sy, frame, fill.trim)

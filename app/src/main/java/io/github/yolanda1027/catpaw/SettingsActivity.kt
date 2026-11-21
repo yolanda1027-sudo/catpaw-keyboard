@@ -223,7 +223,7 @@ class SettingsActivity : Activity() {
 
     /** 選色器視窗：大色塊＋彩虹條、新舊顏色對照、色碼欄 */
     private fun showColorPicker(label: String, initial: Int, onPick: (Int) -> Unit) =
-        ColorDialog.show(this, label, initial, onPick)
+        ColorDialog.show(this, label, initial, onPick = onPick)
 
     companion object {
         /** 隱私權政策（商店頁填的也是這個網址；HEAD = repo 的預設分支） */

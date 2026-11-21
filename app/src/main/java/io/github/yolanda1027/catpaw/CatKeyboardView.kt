@@ -708,15 +708,16 @@ class CatKeyboardView(
         if (fill.nine) {
             // 九宮格：四個角不變形；按下去只有圖片本身變暗
             val bmp = fillBitmap(fill.img) ?: return
-            c.saveLayer(box, null)
+            c.saveLayerAlpha(box, fill.alpha255)
             NineFrame.draw(c, bmp, fill.sx, fill.sy, box, fill.trim)
             if (pressed) c.drawRect(box, pressShadeAtop)
             c.restore()
             return
         }
         if (fill.shape) {
-            c.saveLayer(box, null)
-            ImageFill.draw(c, fill, box, null, fillBitmap(fill.img), fillAnim(fill))
+            // 透明度用這一層一起套（裡面的圖就當不透明的畫，才不會淡兩次）
+            c.saveLayerAlpha(box, fill.alpha255)
+            ImageFill.draw(c, fill.copy(alpha = 1f), box, null, fillBitmap(fill.img), fillAnim(fill))
             if (pressed) c.drawRect(box, pressShadeAtop)
             c.restore()
             return
@@ -1538,7 +1539,7 @@ class CatKeyboardView(
             if (qs != null && frame != null && frameBmp != null) {
                 // 按鈕圖片（九宮格）：只畫圖片，按下去只有圖片本身變暗
                 val box = theme.styledBox(r)
-                c.saveLayer(box, null)
+                c.saveLayerAlpha(box, ((qs.frameAlpha ?: 1f) * 255).toInt())
                 NineFrame.draw(c, frameBmp, frame.sx, frame.sy, box, frame.trim)
                 if (pressed) c.drawRect(box, pressShadeAtop)
                 c.restore()
@@ -1773,7 +1774,11 @@ class CatKeyboardView(
         val col = lookOf(kr, st)
         if (fill?.nine == true) {
             // 九宮格：泡泡也套同一個框
-            fillBitmap(fill.img)?.let { NineFrame.draw(c, it, fill.sx, fill.sy, box, fill.trim) }
+            fillBitmap(fill.img)?.let {
+                c.saveLayerAlpha(box, fill.alpha255)
+                NineFrame.draw(c, it, fill.sx, fill.sy, box, fill.trim)
+                c.restore()
+            }
         } else if (fill?.shape == true) {
             // 照圖片的形狀：泡泡就是那張圖
             ImageFill.draw(c, fill, box, null, fillBitmap(fill.img), fillAnim(fill))
