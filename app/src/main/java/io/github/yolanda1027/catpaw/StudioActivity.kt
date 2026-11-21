@@ -2321,21 +2321,25 @@ class StudioActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(px(20f), px(16f), px(20f), 0) }
         val isKeyboard = KeyStyles.baseOf(target) == KeyStyles.KEYBOARD
         box.addView(titleWithHelp("這張圖要怎麼放？", 19f, isKeyboard).apply { setPadding(0, 0, 0, px(8f)) })
-        var dialog: android.app.AlertDialog? = null
-        modeChooser(box, target, fill, bmp, preselect) { m ->
-            dialog?.setOnDismissListener(null)
-            dialog?.dismiss()
-            applyMode(target, fill, m, bmp, afterUpload = true)
+        // 點選項只是選起來（框框跟著換），按「確認」才套用
+        var chosen = preselect
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun build() {
+            list.removeAllViews()
+            modeChooser(list, target, fill, bmp, chosen) { m -> chosen = m; build() }
         }
+        build()
+        box.addView(list)
         box.addView(TextView(this).apply {
-            text = "選了之後，還是可以在編輯頁面的「放法」改"
+            text = "按「確認」之後，還是可以在編輯頁面的「放法」改"
             textSize = 12f
             alpha = 0.6f
             setPadding(0, px(6f), 0, 0)
         })
-        dialog = android.app.AlertDialog.Builder(this)
+        android.app.AlertDialog.Builder(this)
             .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setNegativeButton("取消", null)
+            .setPositiveButton("確認") { _, _ -> applyMode(target, fill, chosen, bmp, afterUpload = true) }
             .show()
     }
 

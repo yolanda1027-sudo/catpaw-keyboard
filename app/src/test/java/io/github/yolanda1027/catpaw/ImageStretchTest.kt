@@ -71,6 +71,14 @@ class ImageStretchTest {
         val t = find(v) { it is TextView && (it.text.toString() == title || it.text.toString() == "✓ $title") } ?: error("找不到放法：$title")
         (t.parent.parent as View).performClick()
         ShadowLooper.idleMainLooper()
+        // 上傳後問「這張圖要怎麼放？」：點選項只是選起來，要按「確認」才套用
+        val d = org.robolectric.shadows.ShadowDialog.getShownDialogs().filterIsInstance<android.app.AlertDialog>()
+            .lastOrNull { it.window?.decorView === v.rootView }
+        val ok = d?.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+        if (d != null && d.isShowing && ok != null && ok.text.toString() == "確認") {
+            ok.performClick()
+            ShadowLooper.idleMainLooper()
+        }
     }
 
     private fun find(v: View, pred: (View) -> Boolean): View? {
