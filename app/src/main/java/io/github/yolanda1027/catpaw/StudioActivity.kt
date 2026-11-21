@@ -1923,7 +1923,7 @@ class StudioActivity : Activity() {
         val now = kv.pageBarColors()
         section("小圖示")
         text(
-            if (cur.thumb == null) "沒有：目前那一段畫成一條橫線。上傳一張去背 PNG（例如貓爪、金色飛賊），就換成小圖示跟著頁數跑。"
+            if (cur.thumb == null) "沒有：目前那一段畫成一條橫線。上傳一張去背 PNG（例如貓爪），就換成小圖示跟著頁數跑。"
             else "已設定：目前那一段換成這張圖（高度約 20dp，寬度照比例）。",
             13f, dim = true,
         )
