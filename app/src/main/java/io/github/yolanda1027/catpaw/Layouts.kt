@@ -135,8 +135,14 @@ object Layouts {
         enter.copy(weight = 1.25f),
     )
 
-    fun clipRows(items: List<ClipHistory.Item>, page: Int): List<List<Key>> {
-        val pageItems = items.drop(page * CLIPS_PER_PAGE).take(CLIPS_PER_PAGE)
+    /** 剪貼簿：整份清單（鍵盤上一次看得到 CLIPS_PER_PAGE 筆，上下捲動看其他的） */
+    fun clipRows(items: List<ClipHistory.Item>): List<List<Key>> = clipRowsOf(items)
+
+    /** 只拿某一頁（主題範本、測試用） */
+    fun clipRows(items: List<ClipHistory.Item>, page: Int): List<List<Key>> =
+        clipRowsOf(items.drop(page * CLIPS_PER_PAGE).take(CLIPS_PER_PAGE))
+
+    private fun clipRowsOf(pageItems: List<ClipHistory.Item>): List<List<Key>> {
         val rows = pageItems.map { item ->
             val oneLine = item.text.replace(Regex("\\s+"), " ").trim()
             listOf(Key((if (item.pinned) "📌 " else "") + oneLine, Act.CLIP, text = item.text, weight = 10f, style = Style.CLIP))

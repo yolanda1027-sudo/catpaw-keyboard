@@ -54,7 +54,6 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     private var symPage = 0
     /** 剪貼簿紀錄 */
     private lateinit var clips: ClipHistory
-    private var clipPage = 0
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
 
     /** 顏文字的小分類：0 = 最近使用、1 以後 = 貓咪、動物… */
@@ -387,11 +386,13 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         // 每一頁有自己的設計（主題工作室分頁設計）：按鍵標上是哪一頁
         val scope = pageScope()
         v.pageScope = scope
+        // 剪貼簿：整份清單順順的上下捲（先設好，按鍵高度才會對）
+        v.scrollRows = if (page == Page.CLIP) Layouts.CLIPS_PER_PAGE else 0
         v.rows = when (page) {
             Page.MAIN -> if (chinese) Layouts.ZHUYIN else Layouts.ENGLISH
             Page.SYMBOL -> Symbols.rows(symbolItems(), Symbols.categories[symCat].wide)
             Page.EMOJI -> if (emojiCat == MINE) MyStickers.rows(this, emojiPage) else Emojis.rows(Emojis.page(emojiItems(), emojiPage))
-            Page.CLIP -> Layouts.clipRows(clips.all(), clipPage)
+            Page.CLIP -> Layouts.clipRows(clips.all())
             Page.NUMPAD -> Layouts.NUMPAD
         }.onPage(scope)
         // 快捷符號列：只在注音、英文鍵盤顯示
@@ -401,8 +402,6 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         v.isPinned = { k -> recentKind()?.let { kind -> k.act == Act.TEXT && k.text in pinned(kind) } == true }
         // 表情符號：滑到一個分類的最後一頁，還可以繼續滑到下一個分類
         v.showClipboard = prefs.clipboardHistory
-        // 剪貼簿：上下滑換頁（像一份清單）；其他頁左右滑
-        v.verticalPaging = page == Page.CLIP
         v.morePagesBefore = page == Page.EMOJI && emojiCat > firstEmojiCat()
         v.morePagesAfter = page == Page.EMOJI && emojiCat >= firstEmojiCat() && emojiCat < Emojis.groups.size + 1
         if (page == Page.SYMBOL && symCat == Symbols.KAOMOJI) {
@@ -430,8 +429,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         } else if (page == Page.CLIP) {
             v.symbolTabs = listOf(CLIP_TAB)
             v.symbolTab = 0
-            v.symbolPageCount = clipPageCount()
-            v.symbolPage = clipPage
+            v.symbolPageCount = 1
+            v.symbolPage = 0
         } else {
             v.symbolTabs = null
         }
@@ -569,8 +568,6 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
         if (page == Page.CLIP && key.act == Act.CLIP) {
             clips.action(action, key.text)
-            // 這一頁刪光了：退回上一頁
-            clipPage = clipPage.coerceAtMost(clipPageCount() - 1)
             refresh()
             return
         }
@@ -733,7 +730,6 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             }
             Act.CLIP_CLEAR -> {
                 clips.clearUnpinned()
-                clipPage = 0
                 refresh()
             }
         }
@@ -881,9 +877,6 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     // ---------- 剪貼簿 ----------
 
-    private fun clipPageCount() =
-        ((clips.all().size + Layouts.CLIPS_PER_PAGE - 1) / Layouts.CLIPS_PER_PAGE).coerceAtLeast(1)
-
     /**
      * 在無痕模式／密碼欄裡看到的剪貼簿內容：記住它，之後回到一般輸入框也不補記
      * （複製的東西會一直留在系統剪貼簿，不擋的話換個 App 打開鍵盤就被記進去了）
@@ -973,7 +966,6 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         if (isComposing) commitComposingAll()
         captureClipboard()
         page = Page.CLIP
-        clipPage = 0
         refresh()
     }
 
@@ -997,11 +989,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
 
     override fun onSymbolSwipe(direction: Int) {
         if (page == Page.NUMPAD) return
-        if (page == Page.CLIP) {
-            val next = (clipPage + direction).coerceIn(0, clipPageCount() - 1)
-            if (next != clipPage) { clipPage = next; haptics.perform(kv, prefs); refresh() }
-            return
-        }
+        if (page == Page.CLIP) return // 剪貼簿是上下捲動，不翻頁
         if (page == Page.EMOJI) {
             // 一個分類滑到底就接到下一個分類（像 Google 的表情鍵盤）
             val count = emojiPageCount()
