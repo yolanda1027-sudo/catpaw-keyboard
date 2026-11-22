@@ -48,7 +48,7 @@ class BgDecalBandTest {
         val dot = Decal("dot", Decal.BG, Decal.SHAPE + "circle", x = 0.5f, y = rowBoundary45 / h45, size = 10 * dp / h45)
         Decals.save(p, listOf(star, dot).map { v45.bandDecal(it) })
         val saved = Decals.load(p)
-        assertEquals("星星在上面那條", 1, saved.first { it.id == "star" }.band)
+        assertEquals("星星在上面那條", 3, saved.first { it.id == "star" }.band)
         assertEquals("圓點在按鍵區", 2, saved.first { it.id == "dot" }.band)
         assertEquals("舊版 App 看的 y 照樣存著", star.y, saved.first { it.id == "star" }.y, 0.001f)
 
@@ -76,7 +76,7 @@ class BgDecalBandTest {
         StudioActivity::class.java.getDeclaredMethod("saveDecals", List::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }.invoke(a, listOf(d), false)
         ShadowLooper.idleMainLooper()
         val saved = Decals.load(Prefs(ctx, ThemeStore.WORK)).single()
-        assertEquals("工作室存檔時記成「上面那條」", 1, saved.band)
+        assertEquals("工作室存檔時記成「上面那條」", 3, saved.band)
     }
 
     private fun keyboardW(widthPx: Int): CatKeyboardView {
@@ -118,5 +118,41 @@ class BgDecalBandTest {
         assertTrue("按鍵變寬了", kr2.width() > kr.width() + 10)
         assertEquals("小愛心離按鍵左邊一樣遠", heartLeftPx, hx.x * kr2.width(), 1f)
         Decals.save(p, emptyList())
+    }
+
+    /** 開關快捷列：最上面那一條的圖案不動，按鍵區的圖案跟著按鍵上下移 */
+    @Test fun quickBarToggleKeepsTopStrip() {
+        val p = Prefs(ctx)
+        fun kb(quick: Boolean): CatKeyboardView {
+            val v = CatKeyboardView(ctx, p, Haptics(ctx))
+            v.quickItems = if (quick) listOf("()", "「」") else emptyList()
+            v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
+            v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+            return v
+        }
+        // 在快捷列開著的鍵盤上設計：眼鏡放在最上面那一條正中間（20dp），葉子放在第一排按鍵上
+        val on = kb(true)
+        val bg = Decal.bgFor("")
+        fun absY(v: CatKeyboardView, d: Decal): Float {
+            val r = CatKeyboardView::class.java.getDeclaredMethod("getBgRect").apply { isAccessible = true }.invoke(v) as android.graphics.RectF
+            val placed = v.placeDecal(d)
+            return r.top + placed.y * r.height()
+        }
+        val rOn = CatKeyboardView::class.java.getDeclaredMethod("getBgRect").apply { isAccessible = true }.invoke(on) as android.graphics.RectF
+        val glassesY = 20 * dp
+        val firstRowY = on.keyRectOf(Layouts.ZHUYIN[0][0])!!.centerY()
+        val glasses = on.encodeDecal(Decal("g", bg, Decal.SHAPE + "star", x = 0.5f, y = (glassesY - rOn.top) / rOn.height(), size = 0.05f))
+        val leaf = on.encodeDecal(Decal("l", bg, Decal.SHAPE + "flower", x = 0.5f, y = (firstRowY - rOn.top) / rOn.height(), size = 0.05f))
+        assertEquals(3, glasses.band)
+        assertEquals(2, leaf.band)
+        // 快捷列關掉：眼鏡還在最上面那一條；葉子跟著第一排按鍵往上
+        val off = kb(false)
+        assertEquals("眼鏡不動", glassesY, absY(off, glasses), 1f)
+        assertEquals("葉子跟著按鍵", off.keyRectOf(Layouts.ZHUYIN[0][0])!!.centerY(), absY(off, leaf), 1f)
+        assertEquals("快捷列開著也一樣", glassesY, absY(on, glasses), 1f)
+        // 舊版存的（band 1，快捷列開著時存：從快捷列下面算，所以是負的）：開關都在原本的地方
+        val legacy = glasses.copy(band = 1, by = (glassesY - 40 * dp) / (40 * dp))
+        assertEquals(glassesY, absY(on, legacy), 1f)
+        assertEquals(glassesY, absY(off, legacy), 1f)
     }
 }

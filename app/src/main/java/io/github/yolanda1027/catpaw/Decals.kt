@@ -52,7 +52,9 @@ data class Decal(
     val outlineInset: Float = 0.09f,
     /**
      * 背景圖案分區記位置：0 = 沒有（照 y、size 佔整個背景的比例，舊的記法）；
-     * 1 = 在最上面那一條（上方列／快捷列，高度固定）；2 = 在按鍵區（跟著按鍵高度變）。
+     * 3 = 在最上面那一條（中／En、選字列，從鍵盤最上緣算，快捷列開關都不會動）；
+     * 2 = 在按鍵區（跟著按鍵高度變，快捷列開著時跟按鍵一起往下）；
+     * 1 = 舊版的最上面那一條（從快捷列下面算，畫的時候換算成 3 的算法）。
      * by：在那一區的幾成高的地方；bs：大小是那一區高度的幾倍。
      * 有分區的話畫的時候照現在的鍵盤重新算 y、size；y、size 也照樣存著，舊版 App 看得懂。
      */
@@ -132,7 +134,7 @@ data class Decal(
                 outlineWidth = f("outlineWidth", 0.06f, 0.005f, 0.3f),
                 outlineStyle = o.optString("outlineStyle", "solid").takeIf { st -> DecalShapes.DASHES.any { it.first == st } } ?: "solid",
                 outlineInset = f("outlineInset", 0.09f, 0f, 0.3f),
-                band = o.optInt("band", 0).takeIf { it in 0..2 } ?: 0,
+                band = o.optInt("band", 0).takeIf { it in 0..3 } ?: 0,
                 by = f("by", 0f, -5f, 6f),
                 bs = f("bs", 0f, 0f, 40f),
                 hx = o.optInt("hx", 0).takeIf { it in 0..3 } ?: 0,

@@ -100,7 +100,7 @@ class CatKeyboardView(
     )
     private var keyH = prefs.keyHeightDp * dp
     // 這些比例是照 Google 注音截圖量的：上方列 40dp，按鍵區上面留 6dp、下面留 10dp
-    private val topH = 40 * dp
+    private val topH = 40f * dp // 跟 TOP_DP 一樣
     private val padTop = 6 * dp
     private val padBottom = 10 * dp
     private val keyRects = ArrayList<KeyRect>()
@@ -914,8 +914,11 @@ class CatKeyboardView(
             val t = topH
             val k = h - t
             if (h > 0f && k > 0f) {
-                d = if (d.band == 1) d.copy(y = d.by * t / h, size = (d.bs * t / h).coerceAtLeast(0.01f))
-                else d.copy(y = (t + d.by * k) / h, size = (d.bs * k / h).coerceAtLeast(0.01f))
+                d = if (d.band == 1 || d.band == 3) {
+                    // 最上面那一條：從鍵盤最上緣算（快捷列開關都不會動）。y 是相對 bgRect（快捷列下面）的，所以扣掉 bgRect.top
+                    val byAbs = if (d.band == 3) d.by else legacyTopBy(d.by)
+                    d.copy(y = (byAbs * t - bgRect.top) / h, size = (d.bs * t / h).coerceAtLeast(0.01f))
+                } else d.copy(y = (t + d.by * k) / h, size = (d.bs * k / h).coerceAtLeast(0.01f))
             }
         }
         if (d.hx != 0) {
@@ -943,7 +946,10 @@ class CatKeyboardView(
             val k = h - t
             if (k > 0f) {
                 val cy = d.y * h
-                d = if (cy < t) d.copy(band = 1, by = cy / t, bs = d.size * h / t)
+                // 圖案中心在鍵盤最上緣算起的位置：在最上面那一條（中／En、選字）裡＝跟著那一條（band 3）；
+                // 不然跟著按鍵區（band 2；在快捷列那一排的也算，快捷列關掉時跟按鍵一起往上）
+                val cyAbs = cy + r.top
+                d = if (cyAbs < t) d.copy(band = 3, by = cyAbs / t, bs = d.size * h / t)
                 else d.copy(band = 2, by = (cy - t) / k, bs = d.size * h / k)
             }
         }
@@ -958,6 +964,13 @@ class CatKeyboardView(
         }
         return d
     }
+
+    /**
+     * 舊的「最上面那一條」（band 1）是從快捷列下面算的，快捷列一開關圖案就上下跑。
+     * 算出來是負的＝那時快捷列開著（圖案在快捷列上面那一條），補回快捷列的高度（跟上方列一樣高 → +1）；
+     * 不是負的＝那時快捷列關著，本來就是從最上緣算的。
+     */
+    private fun legacyTopBy(by: Float) = if (by < 0f) by + QUICK_DP / TOP_DP else by
 
     /** 舊名字（只算背景的分區＋靠邊） */
     fun bandDecal(d: Decal): Decal = if (d.onBackground) encodeDecal(d) else d
@@ -1508,6 +1521,10 @@ class CatKeyboardView(
     /** 手指移動超過這麼多（dp）才算「滑開」 */
     private val POPUP_SLOP = 12f
 
+    /** 上方列（中／En、選字列）、快捷符號列的高度（dp） */
+    private val TOP_DP = 40f
+    private val QUICK_DP = 40f
+
     // ---------- 快捷符號列 ----------
     /** 快捷符號列的內容（空的＝不顯示這一排） */
     var quickItems: List<String> = emptyList()
@@ -1519,7 +1536,7 @@ class CatKeyboardView(
                 invalidate()
             }
         }
-    private val quickH get() = if (quickItems.isEmpty()) 0f else 40 * dp
+    private val quickH get() = if (quickItems.isEmpty()) 0f else QUICK_DP * dp
     private var quickPressed = -1
 
     private fun quickRect(i: Int): RectF {
