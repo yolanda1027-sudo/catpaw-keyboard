@@ -686,7 +686,7 @@ class StudioActivity : Activity() {
             section("這一頁")
             for ((g, first) in groups) {
                 val done = styles.map[KeyStyles.groupIdOf(first)] != null
-                button("✏️ ${g.title}" + if (done) "（已設計）" else "") {
+                button("✏️ ${g.titleOn(page)}" + if (done) "（已設計）" else "") {
                     selected = first
                     groupScope = true
                     refresh()
@@ -714,8 +714,8 @@ class StudioActivity : Activity() {
         kv.editHighlight = if (groupScope) { k -> KeyStyles.groupOf(k) == group } else { k -> KeyStyles.idOf(k) == selId }
 
         // 點按鍵＝只改這一顆；一整類一起改是從工作室首頁的「一整類一起改」進來的
-        header("正在編輯：" + (if (groupScope) group.title else KeyStyles.nameOf(key)))
-        if (groupScope) text("改這裡，這一頁的${group.title.removePrefix("所有")}會一起變（單顆另外改過的地方還是以單顆為準）。", 13f, dim = true)
+        header("正在編輯：" + (if (groupScope) group.titleOn(key.page) else KeyStyles.nameOf(key)))
+        if (groupScope) text("改這裡，這一頁的${group.titleOn(key.page).removePrefix("所有")}會一起變（單顆另外改過的地方還是以單顆為準）。", 13f, dim = true)
         val cid = currentId()!!
 
         val cur = styles.map[currentId()] ?: KeyStyle()
@@ -779,7 +779,7 @@ class StudioActivity : Activity() {
             text("💡 這顆鍵自己還有另外的設定，會優先用它自己的。", 13f, dim = true)
         }
 
-        val what = if (groupScope) group.title else "這顆鍵"
+        val what = if (groupScope) group.titleOn(key.page) else "這顆鍵"
 
         // 被刪掉的字：可以恢復
         if (!groupScope) {
@@ -819,13 +819,13 @@ class StudioActivity : Activity() {
         section("按鍵動畫")
         val own = styles.map[currentId()]?.effect
         text("目前：" + (own?.let { effectName(it) } ?: "跟全部按鍵一樣"), 14f, dim = true)
-        button("✨ 設定${if (groupScope) group.title else "這顆鍵"}的動畫") { animMode = KEY; refresh() }
+        button("✨ 設定${if (groupScope) group.titleOn(key.page) else "這顆鍵"}的動畫") { animMode = KEY; refresh() }
 
         // 其他頁、重來：每個面板都放在最下面
         if (styles.map[cid] != null || decals.any { it.target == cid }) {
             section("其他頁")
             button("📋 這${if (groupScope) "一類" else "顆鍵"}的設計套用到所有頁面") {
-                confirmAllPages(if (groupScope) "「${group.title}」的設計" else "${KeyStyles.nameOf(key)}的設計（含上面的圖案）") { copyKeyToAllPages(cid) }
+                confirmAllPages(if (groupScope) "「${group.titleOn(key.page)}」的設計" else "${KeyStyles.nameOf(key)}的設計（含上面的圖案）") { copyKeyToAllPages(cid) }
             }
         }
         section("重來")
@@ -946,7 +946,7 @@ class StudioActivity : Activity() {
     /** 代號 → 給人看的名字（「所有注音鍵」「刪除鍵」「「ㄅ」鍵」…） */
     private fun nameOfId(id: String): String {
         val base = KeyStyles.baseOf(id)
-        KeyStyles.Group.values().firstOrNull { it.id == base }?.let { return it.title }
+        KeyStyles.Group.values().firstOrNull { it.id == base }?.let { return it.titleOn(KeyStyles.pageOf(id)) }
         val key = when {
             base.startsWith("zy:") -> Key(base.removePrefix("zy:"), Act.ZHUYIN)
             base.startsWith("t:") -> Key(base.removePrefix("t:"), Act.TEXT)
@@ -1515,7 +1515,7 @@ class StudioActivity : Activity() {
         if (group != KeyStyles.Group.ZHUYIN && group != KeyStyles.Group.CHAR && group != KeyStyles.Group.FUNC) return
         val existing = decals.count { it.id.startsWith(copyPrefix(d)) && it.id != d.id }
         section("套用到其他鍵")
-        button("📋 複製到" + group.title + if (existing > 0) "（更新）" else "") { copyToGroup(d, key, group) }
+        button("📋 複製到" + group.titleOn(key.page) + if (existing > 0) "（更新）" else "") { copyToGroup(d, key, group) }
         if (existing > 0) {
             text("已經複製到 $existing 顆鍵。改了這個圖案之後再按一次，其他鍵會一起更新。", 12f, dim = true)
             button("移除複製出去的 $existing 個圖案") {
@@ -2480,7 +2480,7 @@ class StudioActivity : Activity() {
             val key = selected ?: return
             val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
             val (box, rad) = kv.keyImageFrame(key, st) ?: return
-            Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (KeyStyles.baseOf(target).startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == KeyStyles.baseOf(target) }?.title ?: "" else KeyStyles.nameOf(key)) + "的底圖")
+            Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (KeyStyles.baseOf(target).startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == KeyStyles.baseOf(target) }?.titleOn(KeyStyles.pageOf(target)) ?: "" else KeyStyles.nameOf(key)) + "的底圖")
         }
         if (frame.isEmpty) return
         ImageCrop.show(this, bmp, title, frame.width() / frame.height(), corner, fill) { f ->
@@ -2561,7 +2561,7 @@ class StudioActivity : Activity() {
         if (global) kv.editHighlight = null
         val who = when {
             global -> "全部按鍵"
-            groupScope && key != null -> KeyStyles.groupOf(key).title
+            groupScope && key != null -> KeyStyles.groupOf(key).titleOn(key.page)
             key != null -> KeyStyles.nameOf(key)
             else -> ""
         }

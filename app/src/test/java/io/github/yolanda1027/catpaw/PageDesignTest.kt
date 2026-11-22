@@ -229,8 +229,13 @@ class PageDesignTest {
         // 英文分頁：列英文鍵，不列注音鍵
         buttons(a.window.decorView).first { it.text == "英文" }.performClick()
         val en = buttons(a.window.decorView).map { it.text.toString() }
-        assertTrue("英文分頁要有英文鍵：$en", en.any { it.contains("所有英文、數字、符號鍵") })
+        assertTrue("英文分頁要有英文鍵：$en", en.any { it.contains("所有英文字母、標點鍵") })
         assertTrue(en.none { it.contains("所有注音鍵") })
+        // 符號、顏文字分頁：同一類，名字照那一頁寫
+        buttons(a.window.decorView).first { it.text == "符號" }.performClick()
+        assertTrue(buttons(a.window.decorView).any { it.text.toString().contains("所有符號鍵") })
+        buttons(a.window.decorView).first { it.text == "顏文字" }.performClick()
+        assertTrue(buttons(a.window.decorView).any { it.text.toString().contains("所有顏文字、標點鍵") })
         buttons(a.window.decorView).first { it.text == "注音" }.performClick()
         // 點單顆鍵：沒有「只改這一顆／所有注音鍵」的選項
         kv.editPicker!!.invoke(Layouts.ZHUYIN[0][0])

@@ -381,7 +381,21 @@ class KeyStyles(
         FUNC("@func", "所有功能鍵"),
         SPACE("@space", "空白鍵"),
         ENTER("@enter", "Enter 鍵"),
-        CLIP("@clip", "所有剪貼簿項目"),
+        CLIP("@clip", "所有剪貼簿項目");
+
+        /**
+         * 這一類在某一頁上的名字：「英文、數字、符號鍵」這一類在每一頁裝的東西不一樣
+         * （英文頁是字母、符號頁是符號、表情頁是表情…），照那一頁寫才看得懂。
+         */
+        fun titleOn(page: String): String = if (this != CHAR) title else when (page) {
+            "en" -> "所有英文字母、標點鍵"
+            "sym" -> "所有符號鍵"
+            "kao" -> "所有顏文字、標點鍵"
+            "emo" -> "所有表情、標點鍵"
+            "stk" -> "所有貼圖、標點鍵"
+            "num" -> "所有數字、符號鍵"
+            else -> "所有標點鍵"
+        }
     }
 
     /** 這顆鍵最後要長怎樣（沒有任何設定就是 null） */
