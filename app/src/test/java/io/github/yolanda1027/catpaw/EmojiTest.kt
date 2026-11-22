@@ -29,7 +29,7 @@ class EmojiTest {
     @Test fun dataLooksRight() {
         val all = Emojis.groups.flatMap { it.second }
         assertEquals(9, Emojis.groups.size)
-        assertTrue("只有 ${all.size} 個", all.size > 1500)
+        assertTrue("只有 ${all.size} 個", all.size > 1000) // 表情整理工具挑過的（約 1400 個）
         assertEquals(all.size, all.toSet().size) // 沒有重複
         // 不收膚色變化（U+1F3FB–1F3FF），那些另外長按才會有
         assertTrue(all.none { e -> e.codePoints().anyMatch { it in 0x1F3FB..0x1F3FF } })
