@@ -151,9 +151,14 @@ class CatKeyboardView(
 
     /** 符號鍵盤的分類列（null = 不是符號鍵盤）；裡面的 null 代表「最近使用」的時鐘圖示 */
     var symbolTabs: List<String?>? = null
-        set(v) { field = v; invalidate() }
+        set(v) {
+            // 換了一組分類（例如符號 → 顏文字）：從頭開始
+            if (field != v) { tabScroll = 0f; tabEnsure = true; tabScroller.forceFinished(true) }
+            field = v
+            invalidate()
+        }
     var symbolTab = 0
-        set(v) { field = v; invalidate() }
+        set(v) { if (field != v) tabEnsure = true; field = v; invalidate() }
     var symbolPage = 0
         set(v) { field = v; invalidate() }
     var symbolPageCount = 1
@@ -387,6 +392,7 @@ class CatKeyboardView(
         fontSet = loadFonts()
         stripCache = null
         panelCache = null
+        tabCache = null
         keyH = prefs.keyHeightDp * dp
         navBarBg = prefs.navBarKeyboardBg
         requestLayout()
@@ -1683,6 +1689,10 @@ class CatKeyboardView(
             setGridScroll(scroller.currY.toFloat())
             postInvalidateOnAnimation()
         }
+        if (tabScroller.computeScrollOffset()) {
+            tabScroll = tabScroller.currX.toFloat()
+            postInvalidateOnAnimation()
+        }
     }
 
     /** 放開手指：照手指的速度繼續滑一段再慢慢停下來 */
@@ -1738,16 +1748,70 @@ class CatKeyboardView(
         animatePageOffsetTo(0f)
     }
 
+    // ---------- 分類列：放得下就平均分，放不下（例如顏文字）就左右滑 ----------
+    private var tabScroll = 0f
+    /** 下一次畫的時候，把選中的那格捲到看得到的地方 */
+    private var tabEnsure = true
+    private var tabCache: Triple<List<String?>, Float, FloatArray>? = null
+    private val tabScroller = android.widget.OverScroller(context)
+    private var tabPointer = -1
+    private var tabDownX = 0f
+    private var tabDragStart = 0f
+    private var tabDragging = false
+    private var tabVelocity: android.view.VelocityTracker? = null
+
+    private fun tabLabelSize(label: String) = if (label.length > 3) topH * 0.32f else topH * 0.4f
+
+    /** 每一格的左邊（最後多一個＝全部的寬度） */
+    private fun tabEdges(w: Float, tabs: List<String?>): FloatArray {
+        tabCache?.let { if (it.second == w && it.first == tabs) return it.third }
+        val n = tabs.size
+        val text = tabs.map { if (it == null) topH * 0.6f else textWidth(it, tabLabelSize(it)) }
+        val equal = w / n.coerceAtLeast(1)
+        // 全部的字加上一點間隔排得下：照舊平均分（一般符號、表情符號）；排不下（顏文字）才改成可以滑
+        val fits = text.sumOf { (it + 16 * dp).toDouble() } <= w
+        val out = FloatArray(n + 1)
+        for (i in 0 until n) out[i + 1] = out[i] + if (fits) equal else maxOf(48 * dp, text[i] + 32 * dp)
+        tabCache = Triple(tabs, w, out)
+        return out
+    }
+
+    /** 分類列現在是不是可以左右滑（放不下） */
+    internal fun tabsScrollable(): Boolean {
+        val tabs = symbolTabs ?: return false
+        val w = width.toFloat()
+        return w > 0f && tabEdges(w, tabs).last() > w + 0.5f
+    }
+
+    private fun maxTabScroll(): Float {
+        val tabs = symbolTabs ?: return 0f
+        val w = width.toFloat()
+        return (tabEdges(w, tabs).last() - w).coerceAtLeast(0f)
+    }
+
     /** 符號鍵盤：分類列 */
     private fun drawSymbolTabs(c: Canvas, w: Float, tabs: List<String?>) {
-        val tw = w / tabs.size
+        val e = tabEdges(w, tabs)
+        val max = (e.last() - w).coerceAtLeast(0f)
+        if (tabEnsure && symbolTab in tabs.indices) {
+            tabEnsure = false
+            val margin = 28 * dp
+            if (e[symbolTab] - tabScroll < margin) tabScroll = e[symbolTab] - margin
+            if (e[symbolTab + 1] - tabScroll > w - margin) tabScroll = e[symbolTab + 1] - w + margin
+        }
+        tabScroll = tabScroll.coerceIn(0f, max)
+        c.save()
+        c.clipRect(0f, 0f, w, topH)
+        c.translate(-tabScroll, 0f)
         tabs.forEachIndexed { i, label ->
-            val r = RectF(tw * i, 0f, tw * (i + 1), topH)
+            if (e[i + 1] < tabScroll || e[i] > tabScroll + w) return@forEachIndexed
+            val r = RectF(e[i], 0f, e[i + 1], topH)
             if (i == symbolTab) drawTab(c, r)
             val color = if (i == symbolTab) topText else topDim
             if (label == null) theme.drawIcon(c, Icon.CLOCK, r.centerX(), r.centerY(), topH * 0.6f, color)
-            else theme.drawText(c, label, r.centerX(), r.centerY(), if (label.length > 3) topH * 0.32f else topH * 0.4f, color)
+            else theme.drawText(c, label, r.centerX(), r.centerY(), tabLabelSize(label), color)
         }
+        c.restore()
     }
 
     /** 符號鍵盤：最後一排上面的小線，顯示目前在第幾頁 */
@@ -1979,7 +2043,16 @@ class CatKeyboardView(
                 val x = e.getX(i)
                 val y = e.getY(i)
                 if (y < topH) {
-                    onTopBarTap(x)
+                    if (symbolTabs != null && tabsScrollable() && tabPointer < 0) {
+                        // 分類列可以左右滑：先記著，放開時沒滑動才算點一下
+                        tabPointer = e.getPointerId(i)
+                        tabDownX = x
+                        tabDragStart = tabScroll
+                        tabDragging = false
+                        tabScroller.forceFinished(true)
+                        tabVelocity?.recycle()
+                        tabVelocity = android.view.VelocityTracker.obtain().also { it.addMovement(e) }
+                    } else onTopBarTap(x)
                 } else if (y < topH + quickH) {
                     // 快捷符號列：按下去馬上送出
                     val idx = (x / (width.toFloat() / quickItems.size)).toInt().coerceIn(0, quickItems.size - 1)
@@ -2012,6 +2085,23 @@ class CatKeyboardView(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                if (e.getPointerId(e.actionIndex) == tabPointer) {
+                    tabVelocity?.addMovement(e)
+                    if (!tabDragging) onTopBarTap(e.getX(e.actionIndex))
+                    else tabVelocity?.let { vt ->
+                        vt.computeCurrentVelocity(1000)
+                        val vx = vt.getXVelocity(tabPointer)
+                        if (kotlin.math.abs(vx) > 50 * dp) {
+                            tabScroller.fling(tabScroll.toInt(), 0, (-vx).toInt(), 0, 0, maxTabScroll().toInt(), 0, 0)
+                            postInvalidateOnAnimation()
+                        }
+                    }
+                    tabPointer = -1
+                    tabDragging = false
+                    tabVelocity?.recycle()
+                    tabVelocity = null
+                    return true
+                }
                 if (e.getPointerId(e.actionIndex) == emptyPagePointer) emptyPagePointer = -1
                 if (paging && e.getPointerId(e.actionIndex) == pagingPointer) { finishPaging(); return true }
                 if (e.getPointerId(e.actionIndex) == scrollPointer) {
@@ -2023,6 +2113,18 @@ class CatKeyboardView(
                 if (e.getPointerId(e.actionIndex) == pressedPointer) release(cancel = false)
             }
             MotionEvent.ACTION_MOVE -> {
+                // 分類列左右滑
+                val ti = if (tabPointer >= 0) e.findPointerIndex(tabPointer) else -1
+                if (ti >= 0) {
+                    tabVelocity?.addMovement(e)
+                    val dx = e.getX(ti) - tabDownX
+                    if (!tabDragging && kotlin.math.abs(dx) > 8 * dp) tabDragging = true
+                    if (tabDragging) {
+                        tabScroll = (tabDragStart - dx).coerceIn(0f, maxTabScroll())
+                        invalidate()
+                    }
+                    if (pressed == null && !paging) return true
+                }
                 val o = popup
                 val i = e.findPointerIndex(pressedPointer)
                 if (i >= 0 && o == null) lastMoveX = e.getX(i)
@@ -2093,6 +2195,10 @@ class CatKeyboardView(
             }
             MotionEvent.ACTION_CANCEL -> {
                 emptyPagePointer = -1
+                tabPointer = -1
+                tabDragging = false
+                tabVelocity?.recycle()
+                tabVelocity = null
                 if (paging) finishPaging()
                 scrolling = false
                 finishScroll()
@@ -2178,7 +2284,9 @@ class CatKeyboardView(
 
     private fun onTopBarTap(x: Float) {
         symbolTabs?.let { tabs ->
-            val i = (x / (width.toFloat() / tabs.size)).toInt().coerceIn(0, tabs.size - 1)
+            val e = tabEdges(width.toFloat(), tabs)
+            val at = x + tabScroll
+            val i = (1..tabs.size).firstOrNull { at < e[it] }?.minus(1) ?: (tabs.size - 1)
             haptics.perform(this, prefs)
             listener?.onSymbolTab(i)
             return
