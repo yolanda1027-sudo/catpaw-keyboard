@@ -66,6 +66,38 @@ class UserScores(private val file: File?) {
 
     fun userPhrases(): List<Pair<String, String>> = phrases.values.toList()
 
+    /** 這個詞有沒有被記過（選過、或是自己組出來的詞） */
+    fun remembers(e: Entry): Boolean = (bonus[key(e)] ?: 0f) > 0f || phrases.containsKey(key(e))
+
+    /** 記過的自訂詞裡有沒有這幾個字（不管讀音） */
+    fun hasPhraseText(text: String): Boolean = phrases.values.any { it.first == text }
+
+    /**
+     * 忘掉：這幾個詞的選字記憶、自訂詞，還有跟 text 一樣的自訂詞（不管讀音）。
+     * 無痕模式也可以刪。回傳 true 代表真的有刪到東西。
+     */
+    fun forget(entries: List<Entry>, text: String): Boolean {
+        var changed = false
+        // 要忘掉的詞（詞, 讀音）：選項本身的詞，加上跟選項同字的自訂詞
+        val targets = entries.map { it.phrase to it.reading }.toMutableList()
+        targets += phrases.values.filter { it.first == text }
+        for ((p, r) in targets) {
+            if (bonus.remove("$p\t$r") != null) changed = true
+            if (phrases.remove("$p\t$r") != null) changed = true
+            // 組成這個詞的那幾段選過的字也一起忘掉（不然「僿」「的」各自的加分又會拼回「僿的」）
+            val syl = r.split(' ')
+            val parts = bonus.keys.filter { k ->
+                val (bp, br) = k.split('\t').let { it[0] to it.getOrElse(1) { "" } }
+                val bs = br.split(' ')
+                bp.isNotEmpty() && bp.length == bs.size && bp.length < p.length &&
+                    (0..p.length - bp.length).any { i -> p.startsWith(bp, i) && syl.subList(i, i + bs.size) == bs }
+            }
+            if (parts.isNotEmpty()) { parts.forEach { bonus.remove(it) }; changed = true }
+        }
+        if (changed) save()
+        return changed
+    }
+
     fun clearAll() {
         bonus.clear()
         phrases.clear()

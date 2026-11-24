@@ -590,6 +590,33 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         refresh()
     }
 
+    /** 長按選字，正在問「移除記憶？」的那個選項 */
+    private var forgetTarget: Candidate? = null
+
+    override fun onCandidateLongPress(shown: Int) {
+        val e = engine ?: return
+        val index = shownIndex.getOrNull(shown) ?: shown
+        // 只有打注音的選字有記憶（聯想詞、英文建議沒有）
+        val c = candidates.getOrNull(index) ?: return
+        if (e.hasMemory(c)) {
+            forgetTarget = c
+            kv?.forgetPrompt = conv(c.text)
+        } else {
+            android.widget.Toast.makeText(this, "「${conv(c.text)}」是詞庫原本的排序，沒有記憶可以移除", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onForgetAnswer(remove: Boolean) {
+        val c = forgetTarget
+        forgetTarget = null
+        if (!remove || c == null) return
+        val e = engine ?: return
+        if (e.forget(c)) {
+            android.widget.Toast.makeText(this, "已移除「${conv(c.text)}」的選字記憶", android.widget.Toast.LENGTH_SHORT).show()
+            if (!e.isEmpty) updateComposing()
+        }
+    }
+
     override fun onCandidate(shown: Int) {
         val ic = currentInputConnection ?: return
         val index = shownIndex.getOrNull(shown) ?: shown

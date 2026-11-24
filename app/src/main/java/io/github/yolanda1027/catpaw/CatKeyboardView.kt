@@ -37,6 +37,10 @@ class CatKeyboardView(
         fun onToggleSimplified() {}
         /** 長按「最近使用」裡的符號／表情，選了選單上的動作（pin、left、right、remove） */
         fun onItemAction(key: Key, action: String) {}
+        /** 長按選字列上的一個選項 */
+        fun onCandidateLongPress(index: Int) {}
+        /** 「移除記憶？」按了移除（true）或取消（false） */
+        fun onForgetAnswer(remove: Boolean) {}
     }
 
     private class KeyRect(val key: Key, val rect: RectF)
@@ -65,6 +69,7 @@ class CatKeyboardView(
     /** 選字列的內容（空的時候顯示「中 / En」） */
     var candidates: List<String> = emptyList()
         set(v) {
+            if (field != v) forgetPrompt = null // 選項換了：問到一半的「移除記憶？」收掉
             field = v
             candScroll = 0f
             panelScroll = 0f
@@ -79,6 +84,9 @@ class CatKeyboardView(
     private var stripCache: List<RectF>? = null
     private var panelCache: List<RectF>? = null
     private val candPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    /** 「移除記憶？」按了按鈕之後，這次手指放開前的事件都不理 */
+    private var swallowUntilUp = false
 
     // 拖曳選字列／展開面板
     private var dragMode = 0 // 0 = 沒有、1 = 選字列左右滑、2 = 展開面板上下滑
@@ -1886,8 +1894,42 @@ class CatKeyboardView(
         drawPageBar(c, 0f, h / 2, w, h / 2, 1f, 3, vertical = false, maxX = w)
     }
 
+    // ---------- 長按選字：移除選字記憶 ----------
+    /** 要問「移除記憶？」的那個詞（null = 沒有在問） */
+    var forgetPrompt: String? = null
+        set(v) { field = v; invalidate() }
+    private var candLongFired = false
+    private var candLongIndex = -1
+    private val candLongPress = Runnable {
+        if (candLongIndex < 0 || dragMoved) return@Runnable
+        candLongFired = true
+        haptics.perform(this, prefs)
+        listener?.onCandidateLongPress(candLongIndex)
+    }
+
+    /** 「移除」「取消」兩個按鈕的位置 */
+    private fun forgetButtons(w: Float): Pair<RectF, RectF> {
+        val bw = 64 * dp
+        val remove = RectF(w - bw - 4 * dp, 0f, w - 4 * dp, topH)
+        val cancel = RectF(remove.left - bw, 0f, remove.left, topH)
+        return remove to cancel
+    }
+
+    private fun drawForgetPrompt(c: Canvas, w: Float, word: String) {
+        val (remove, cancel) = forgetButtons(w)
+        val size = topH * 0.38f
+        c.save()
+        c.clipRect(0f, 0f, cancel.left, topH)
+        theme.drawTextLeft(c, "移除「$word」的選字記憶？", 12 * dp, topH / 2, size, topText)
+        c.restore()
+        theme.drawText(c, "取消", cancel.centerX(), cancel.centerY(), size, topDim)
+        drawTab(c, remove, padX = 6 * dp, padY = 6 * dp)
+        theme.drawText(c, "移除", remove.centerX(), remove.centerY(), size, topText, bold = true)
+    }
+
     private fun drawTopBar(c: Canvas, w: Float) {
         symbolTabs?.let { drawSymbolTabs(c, w, it); return }
+        forgetPrompt?.let { drawForgetPrompt(c, w, it); return }
         if (candidates.isNotEmpty()) {
             drawCandidateStrip(c, w)
             return
@@ -2030,6 +2072,26 @@ class CatKeyboardView(
         editPicker?.let { pick ->
             parent?.requestDisallowInterceptTouchEvent(true)
             handleEditTouch(e, pick)
+            return true
+        }
+        forgetPrompt?.let { word ->
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+                if (e.y < topH) {
+                    val (remove, cancel) = forgetButtons(width.toFloat())
+                    when {
+                        remove.contains(e.x, e.y) -> { haptics.perform(this, prefs); forgetPrompt = null; listener?.onForgetAnswer(true) }
+                        cancel.contains(e.x, e.y) -> { haptics.perform(this, prefs); forgetPrompt = null; listener?.onForgetAnswer(false) }
+                    }
+                    swallowUntilUp = true
+                    return true
+                }
+                // 按到其他地方：當作取消，照常打字
+                forgetPrompt = null
+                listener?.onForgetAnswer(false)
+            }
+        }
+        if (swallowUntilUp) {
+            if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) swallowUntilUp = false
             return true
         }
         if (handleCandidateTouch(e)) return true
@@ -2225,6 +2287,15 @@ class CatKeyboardView(
                 dragStart = if (dragMode == 2) y else x
                 dragScrollStart = if (dragMode == 2) panelScroll else candScroll
                 dragMoved = false
+                // 長按選項：可以移除選字記憶
+                candLongFired = false
+                candLongIndex = when (dragMode) {
+                    1 -> stripLayout().indexOfFirst { x + candScroll in it.left..it.right }
+                    2 -> if (x < panelLeft) -1 else panelLayout().indexOfFirst { it.contains(x, y + panelScroll) }
+                    else -> -1
+                }
+                handler.removeCallbacks(candLongPress)
+                if (candLongIndex >= 0) handler.postDelayed(candLongPress, prefs.longPressMs.toLong())
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -2232,7 +2303,7 @@ class CatKeyboardView(
                 if (dragMode == 3) return true
                 val pos = if (dragMode == 2) e.y else e.x
                 val delta = pos - dragStart
-                if (kotlin.math.abs(delta) > 8 * dp) dragMoved = true
+                if (kotlin.math.abs(delta) > 8 * dp) { dragMoved = true; handler.removeCallbacks(candLongPress) }
                 if (dragMoved) {
                     if (dragMode == 1) candScroll = (dragScrollStart - delta).coerceIn(0f, maxStripScroll())
                     else panelScroll = (dragScrollStart - delta).coerceIn(0f, maxPanelScroll())
@@ -2244,7 +2315,8 @@ class CatKeyboardView(
                 if (dragMode == 0) return false
                 val mode = dragMode
                 dragMode = 0
-                if (dragMoved) return true
+                handler.removeCallbacks(candLongPress)
+                if (dragMoved || candLongFired) { candLongFired = false; return true }
                 when (mode) {
                     3 -> {
                         haptics.perform(this, prefs)
@@ -2270,6 +2342,8 @@ class CatKeyboardView(
             MotionEvent.ACTION_CANCEL -> {
                 val was = dragMode != 0
                 dragMode = 0
+                handler.removeCallbacks(candLongPress)
+                candLongFired = false
                 return was
             }
         }

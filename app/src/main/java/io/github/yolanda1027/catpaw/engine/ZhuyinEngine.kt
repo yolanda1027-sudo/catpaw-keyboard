@@ -231,6 +231,20 @@ class ZhuyinEngine(private val dict: ZhuyinDict, private val user: UserScores) {
         return out
     }
 
+    /** 這個選項有沒有選字記憶可以刪（長按選字時用） */
+    fun hasMemory(c: Candidate): Boolean =
+        c.entries.any { user.remembers(it) } || user.hasPhraseText(c.text)
+
+    /** 刪掉這個選項的選字記憶：排序回到原本的樣子，自己組的詞也拿掉 */
+    fun forget(c: Candidate): Boolean {
+        val changed = user.forget(c.entries, c.text)
+        if (changed) {
+            dict.setUserPhrases(user.userPhrases())
+            cache.clear()
+        }
+        return changed
+    }
+
     /**
      * 選了一個選項。
      * 全部選完會回傳要送出的整段文字；只選了前半段會回傳 ""（選好的字先留在組字區）。
