@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 桌面小工具「主題工作室」：一個圖示＋名字，點一下打開工作室 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="2dp">
+
+    <ImageView
+        android:id="@+id/widget_icon"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:contentDescription="@string/studio_name"
+        android:src="@mipmap/ic_studio" />
+
+    <TextView
+        android:id="@+id/widget_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:maxLines="1"
+        android:shadowColor="#99000000"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:text="@string/studio_short"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp" />
+</LinearLayout>

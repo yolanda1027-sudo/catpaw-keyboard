@@ -36,19 +36,27 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
-        <!-- 主題工作室：桌面上獨立一個圖示，用起來像另一個 App -->
+        <!-- 主題工作室：從設定、桌面小工具打開；在最近使用的 App 裡像另一個 App（不再有自己的桌面圖示） -->
         <activity
             android:name=".StudioActivity"
-            android:exported="true"
+            android:exported="false"
             android:icon="@mipmap/ic_studio"
             android:label="@string/studio_name"
             android:launchMode="singleTask"
-            android:taskAffinity="${applicationId}.studio">
+            android:taskAffinity="${applicationId}.studio" />
+
+        <!-- 桌面小工具「主題工作室」：需要的人自己加到桌面 -->
+        <receiver
+            android:name=".StudioWidget"
+            android:exported="true"
+            android:label="@string/studio_name">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
-        </activity>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/studio_widget_info" />
+        </receiver>
 
         <service
             android:name=".CatImeService"

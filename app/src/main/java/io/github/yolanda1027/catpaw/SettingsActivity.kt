@@ -291,6 +291,22 @@ class SettingsActivity : Activity() {
         showPage(savedInstanceState?.getString("page") ?: intent?.getStringExtra("page") ?: "home", restoreScroll = savedInstanceState != null)
         // 從下載通知、檔案管理員點主題檔打開（轉螢幕重建時不要再匯入一次）
         if (savedInstanceState == null) openThemeFile(intent)
+        addStudioShortcut()
+    }
+
+    /** 長按桌面上的貓爪鍵盤圖示：多一個「主題工作室」可以直接打開 */
+    private fun addStudioShortcut() {
+        try {
+            val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
+            val s = android.content.pm.ShortcutInfo.Builder(this, "studio")
+                .setShortLabel(getString(R.string.studio_short))
+                .setLongLabel(getString(R.string.studio_name))
+                .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_studio))
+                .setIntent(Intent(this, StudioActivity::class.java).setAction(Intent.ACTION_VIEW))
+                .build()
+            sm.dynamicShortcuts = listOf(s)
+        } catch (_: Exception) {
+        }
     }
 
     /** 別的 App 叫我們打開一個主題檔：到主題頁、照平常匯入的流程問一次 */
@@ -423,6 +439,7 @@ class SettingsActivity : Activity() {
         for (g in groups) {
             section(g)
             for (p in pages.filter { it.listed && it.group == g }) menuItem(p)
+            if (g == "外觀") note("想從桌面直接打開主題工作室：長按桌面空白處 →「小工具」→ 找「貓爪鍵盤」，把「主題工作室」拉到桌面上。也可以長按貓爪鍵盤的圖示，選「主題工作室」。")
         }
 
         // 版本號：回報問題、確認有沒有更新到最新版時看這裡
