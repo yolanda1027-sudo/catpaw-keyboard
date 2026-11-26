@@ -127,8 +127,6 @@ object Fonts {
         File(userDir(ctx), id.removePrefix(USER_PREFIX) + ".name").delete()
         cache.keys.removeAll { it.startsWith("$id@") }
     }
-
-    fun isUser(id: String) = id.startsWith(USER_PREFIX)
 }
 
 /**

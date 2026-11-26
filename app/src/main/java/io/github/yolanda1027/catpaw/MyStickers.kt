@@ -102,8 +102,6 @@ object MyStickers {
 
     fun pageCount(ctx: Context) = ((list(ctx).size + PER_PAGE - 1) / PER_PAGE).coerceAtLeast(1)
 
-    private val bottomCache = HashMap<String, List<List<Key>>>()
-
     /** 一頁排成鍵盤：4 排各 5 個；還沒有貼圖的話放一顆「去上傳」 */
     fun rows(ctx: Context, page: Int): List<List<Key>> {
         val items = list(ctx).drop(page * PER_PAGE).take(PER_PAGE)
@@ -144,7 +142,7 @@ class StickerProvider : ContentProvider() {
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? {
         val f = fileOf(uri) ?: return null
         val cols = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
-        val row = cols.map { if (it == OpenableColumns.SIZE) f.length() else if (it == OpenableColumns.DISPLAY_NAME) f.name else null }
+        val row: List<Any?> = cols.map { if (it == OpenableColumns.SIZE) f.length() else if (it == OpenableColumns.DISPLAY_NAME) f.name else null }
         return MatrixCursor(cols).apply { addRow(row.toTypedArray()) }
     }
 

@@ -83,6 +83,9 @@ App 名稱是「貓爪鍵盤」，只有在測試版的功能確認沒問題之�
 - 本機建置：`./gradlew assembleDebug`
 - 注音引擎測試：`./gradlew testDebugUnitTest --tests '*ZhuyinEngineTest*'`
 - 畫面截圖測試：`./gradlew testDebugUnitTest`，用 Robolectric 把鍵盤畫成 PNG，存到 `app/build/renders/`
+- 表情符號、顏文字：在「表情整理工具」網頁挑選、分類、排順序，讀回資料後用
+  `python3 tools/curator_to_assets.py <讀回來的資料夾> app/src/main/assets` 轉成 `emoji.txt`、`kaomoji.txt`
+  （`tools/build_emoji.py` 只用來產生原始清單，直接輸出到 assets 會蓋掉整理好的版本）
 - 家人版：到 Actions →「Family version」→ Run workflow。「Use workflow from」選哪個分支，
   就把那個分支目前的程式搬到 `family` 分支、打包成正式簽章的 APK，放到 Releases 的「家人版」（連結固定）。
   `family` 分支只會往前走，上面有別的分支沒有的修改時會停下來，不會蓋掉。push 到 `family` 也會自動重新打包

@@ -83,7 +83,6 @@ class CatKeyboardView(
     private var panelScroll = 0f
     private var stripCache: List<RectF>? = null
     private var panelCache: List<RectF>? = null
-    private val candPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
 
     /** 「移除記憶？」按了按鈕之後，這次手指放開前的事件都不理 */
     private var swallowUntilUp = false
@@ -535,7 +534,7 @@ class CatKeyboardView(
                 if (inGrid) {
                     c.save()
                     c.clipRect(0f, if (scrollGrid) topH + quickH else topH, w, gridBottom)
-                    if (verticalPaging) c.translate(0f, pageOffset) else c.translate(pageOffset, 0f)
+                    c.translate(pageOffset, 0f)
                 }
                 val s = effects.scaleFor(kr.rect, now)
                 if (s != 1f) { c.save(); c.scale(s, s, kr.rect.centerX(), kr.rect.centerY()) }
@@ -582,10 +581,10 @@ class CatKeyboardView(
         val native = if (st != null) nativeColors(kr) else null
         // 底框
         var bodyColor: Int? = null
-        if (shaped && st != null && st.bgImage?.ownsShape == true) {
+        if (shaped && st.bgImage?.ownsShape == true) {
             // 照圖片的形狀：只畫圖片（底色、外框都交給圖片自己）
             drawKeyImage(c, kr.rect, st, st.bgImage, isPressed)
-        } else if (shaped && st != null && native != null) {
+        } else if (shaped && native != null) {
             bodyColor = st.bg ?: native.bg.takeIf { native.hasBody }
             if (bodyColor != null) theme.drawStyledBody(c, kr.rect, st.copy(bg = bodyColor), isPressed)
             st.bgImage?.let { drawKeyImage(c, kr.rect, st, it, isPressed) }
@@ -1603,7 +1602,6 @@ class CatKeyboardView(
     private val tabW get() = cw * 0.2f
 
     private var downX = 0f
-    private var downY = 0f
     /** 手指最後在哪（跳出長按選單時記下來，之後用「滑了多少」選） */
     private var lastMoveX = 0f
     /** 動作選單跳出來那時手指的位置 */
@@ -1716,12 +1714,6 @@ class CatKeyboardView(
     var showClipboard = true
         set(v) { if (field != v) { field = v; stripCache = null; invalidate() } }
 
-    /** 上下滑換頁（剪貼簿）：往上滑＝下一頁；其他頁是左右滑 */
-    var verticalPaging = false
-        set(v) { if (field != v) { field = v; pageAnim?.cancel(); pageOffset = 0f } }
-
-    /** 翻頁那一塊（不算最下面那排）的高度：上下滑時，新的一頁從下面推上來這麼多 */
-    private val pagingGridH get() = rowH * gridRowCount + padTop
 
     // ---------- 剪貼簿：整份清單順順的上下捲（不分頁） ----------
     /** 連續捲動時一次看得到幾排；0 = 不捲（其他頁：一頁一頁翻） */
@@ -1791,7 +1783,7 @@ class CatKeyboardView(
     }
 
     /** 這次手指移動在翻頁方向上的距離 */
-    private fun pageDelta(x: Float, y: Float) = if (verticalPaging) y - downY else x - downX
+    private fun pageDelta(x: Float) = x - downX
 
     /** 第一頁之前、最後一頁之後還有沒有東西（表情符號：滑到底接下一個分類） */
     var morePagesBefore = false
@@ -1817,11 +1809,11 @@ class CatKeyboardView(
     private fun finishPaging() {
         paging = false
         pagingPointer = -1
-        val w = if (verticalPaging) pagingGridH else cw
+        val w = cw
         if (canPage(pageOffset) && kotlin.math.abs(pageOffset) > w * 0.22f) {
             val dir = if (pageOffset < 0) 1 else -1
             listener?.onSymbolSwipe(dir)
-            pageOffset += dir * w // 新的一頁先放在旁邊（上下滑：下面），再滑進來
+            pageOffset += dir * w // 新的一頁先放在旁邊，再滑進來
         }
         animatePageOffsetTo(0f)
     }
@@ -1905,13 +1897,6 @@ class CatKeyboardView(
         }
         if (symbolTabs == null || symbolPageCount <= 1) return
         val y = topH + quickH + padTop + rowH * gridRowCount - 1.5f * dp
-        if (verticalPaging) {
-            // 上下滑：右邊一條直的捲軸
-            val top = topH + quickH + padTop
-            val pos = (symbolPage - pageOffset / pagingGridH).coerceIn(0f, (symbolPageCount - 1).toFloat())
-            drawPageBar(c, w - 2.5f * dp, top, w - 2.5f * dp, y, pos, symbolPageCount, vertical = true, maxX = w)
-            return
-        }
         // 跟著手指滑動的進度一起移動
         val pos = (symbolPage - pageOffset / w).coerceIn(0f, (symbolPageCount - 1).toFloat())
         drawPageBar(c, 0f, y, w, y, pos, symbolPageCount, vertical = false, maxX = w)
@@ -2199,7 +2184,6 @@ class CatKeyboardView(
                     val firstTop = topH + quickH + padTop
                     val lastBottom = firstTop + keyAreaH - 1f
                     downX = x
-                    downY = y
                     lastMoveX = x
                     // 剪貼簿：按在清單上，之後上下拖就是捲動；正在滑的時候按一下＝停下來（不算按到）
                     var stopOnly = false
@@ -2266,7 +2250,7 @@ class CatKeyboardView(
                 if (paging) {
                     val pi = e.findPointerIndex(pagingPointer)
                     if (pi >= 0) {
-                        val dx = pageDelta(e.getX(pi), e.getY(pi))
+                        val dx = pageDelta(e.getX(pi))
                         pageOffset = if (canPage(dx)) dx else dx * 0.25f // 沒有下一頁：只能拉一點點
                         invalidate()
                     }
@@ -2290,7 +2274,7 @@ class CatKeyboardView(
                 }
                 val ei = if (pressed == null && emptyPagePointer >= 0) e.findPointerIndex(emptyPagePointer) else -1
                 if (scrollRows == 0 && pressed == null && ei >= 0 && symbolTabs != null) {
-                    val dx = pageDelta(e.getX(ei), e.getY(ei))
+                    val dx = pageDelta(e.getX(ei))
                     if (kotlin.math.abs(dx) > 14 * dp) {
                         pagingPointer = emptyPagePointer
                         emptyPagePointer = -1
@@ -2302,7 +2286,7 @@ class CatKeyboardView(
                     }
                 }
                 if (scrollRows == 0 && o == null && i >= 0 && symbolTabs != null && pressed != null) {
-                    val dx = pageDelta(e.getX(i), e.getY(i))
+                    val dx = pageDelta(e.getX(i))
                     if (kotlin.math.abs(dx) > 14 * dp) {
                         pagingPointer = pressedPointer
                         release(cancel = true) // 開始翻頁，剛剛按的那顆鍵不算

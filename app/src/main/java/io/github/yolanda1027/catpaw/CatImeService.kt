@@ -231,6 +231,8 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         val fromTheme = try {
             val ctx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_DayNight)
+            // 只是讀系統主題原本的導覽列顏色來畫（沒有設定它），舊屬性還是讀得到
+            @Suppress("DEPRECATION")
             val a = ctx.obtainStyledAttributes(intArrayOf(android.R.attr.navigationBarColor))
             try { a.getColor(0, 0) } finally { a.recycle() }
         } catch (_: Exception) { 0 }
@@ -593,11 +595,12 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
     /** 長按選字，正在問「移除記憶？」的那個選項 */
     private var forgetTarget: Candidate? = null
 
-    override fun onCandidateLongPress(shown: Int) {
+    /** @param index 選字列上第幾個（畫面上的順序，要換成 candidates 的位置） */
+    override fun onCandidateLongPress(index: Int) {
         val e = engine ?: return
-        val index = shownIndex.getOrNull(shown) ?: shown
+        val picked = shownIndex.getOrNull(index) ?: index
         // 只有打注音的選字有記憶（聯想詞、英文建議沒有）
-        val c = candidates.getOrNull(index) ?: return
+        val c = candidates.getOrNull(picked) ?: return
         if (e.hasMemory(c)) {
             forgetTarget = c
             kv?.forgetPrompt = conv(c.text)
@@ -617,17 +620,17 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
         }
     }
 
-    override fun onCandidate(shown: Int) {
+    override fun onCandidate(index: Int) {
         val ic = currentInputConnection ?: return
-        val index = shownIndex.getOrNull(shown) ?: shown
+        val picked = shownIndex.getOrNull(index) ?: index
         if (!chinese && candidates.isEmpty() && enSuggest.isNotEmpty()) {
-            pickEnglish(index)
+            pickEnglish(picked)
             return
         }
         justPicked = false
         val e = engine ?: return
         if (candidates.isNotEmpty()) {
-            val c = candidates.getOrNull(index) ?: return
+            val c = candidates.getOrNull(picked) ?: return
             val text = e.select(c)
             // 全部選完才送出（直接打在輸入框模式下，會換掉底線那段）；只選了前半段的話，選好的字先留在組字區
             if (text.isNotEmpty()) ic.commitText(conv(text), 1)
@@ -639,7 +642,7 @@ class CatImeService : InputMethodService(), CatKeyboardView.Listener,
                 updateComposing()
             }
         } else {
-            val text = associated.getOrNull(index) ?: return
+            val text = associated.getOrNull(picked) ?: return
             ic.commitText(conv(text), 1)
             showAssociated(text)
             refresh()

@@ -98,12 +98,6 @@ class UserScores(private val file: File?) {
         return changed
     }
 
-    fun clearAll() {
-        bonus.clear()
-        phrases.clear()
-        save()
-    }
-
     private fun save() {
         val f = file ?: return
         try {

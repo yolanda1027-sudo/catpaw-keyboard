@@ -5,6 +5,10 @@
 
 用法：python3 tools/build_emoji.py <data-by-group.json> <輸出的 emoji.txt>
 
+⚠️ 現在 App 用的 emoji.txt 是用「表情整理工具」挑選、排過順序的（tools/curator_to_assets.py 產生）。
+   這支程式只用來產生「整份原始清單」給整理工具當起點；直接輸出到 app/src/main/assets/emoji.txt
+   會蓋掉整理好的分類和順序。
+
 - 只收 Emoji 15.0 以前的（S24 Ultra 這類 Android 14/15 的手機都顯示得出來，太新的會變方塊）
 - 不收「膚色、髮型」那種零件（Component 分類）
 - 每個分類一段：[分類的圖示] 然後一行，emoji 用空白隔開

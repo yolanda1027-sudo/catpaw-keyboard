@@ -31,7 +31,7 @@ class PageDesignTest {
 
     @Test fun pagesDoNotBorrowFromEachOther() {
         val ks = KeyStyles(mapOf("backspace" to red, "@char" to red, "@func" to red))
-        val symBack = Layouts.SYMBOLS.onPage("sym").flatten().first { it.act == Act.BACKSPACE }
+        val symBack = Symbols.rows(Symbols.categories[1].pages[0], false).onPage("sym").flatten().first { it.act == Act.BACKSPACE }
         assertEquals("sym/backspace", KeyStyles.idOf(symBack))
         assertNull("符號頁的刪除鍵不借注音頁的", ks.resolve(symBack))
         assertNull(ks.resolve(Key("😀", Act.TEXT, page = "emo")))

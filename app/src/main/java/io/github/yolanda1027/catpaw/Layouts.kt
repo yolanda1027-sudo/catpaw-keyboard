@@ -32,7 +32,6 @@ data class Key(
 }
 
 object Layouts {
-    private fun chars(s: String) = s.split(" ").map { Key(it) }
 
     /** "q1" → 字母 q、長按 1（像 Google 注音的英文鍵盤） */
     private fun letterRow(s: String) = s.split(" ").map { Key(it.substring(0, 1), sub = it.substring(1)) }
@@ -90,14 +89,6 @@ object Layouts {
         Key("。"),
         backspace,
         enter,
-    )
-
-    val SYMBOLS: List<List<Key>> = listOf(
-        chars("1 2 3 4 5 6 7 8 9 0"),
-        chars("@ # $ % & - + ( ) /"),
-        chars("* \" ' : ; ! ? _ = ~"),
-        chars("「 」 『 』 、 ： ； ！ ？ …"),
-        pageBottom,
     )
 
     /**
