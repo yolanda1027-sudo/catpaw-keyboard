@@ -373,8 +373,7 @@ class CatKeyboardView(
     /** 畫面上（套了樣式之後）量到的顏色：有底圖的鍵用來決定泡泡、選單的底色 */
     private val styledCache = HashMap<String, KeyColors?>()
     private fun styledColors(kr: KeyRect): KeyColors? {
-        val up = if (kr.key.act == Act.SHIFT && shiftState > 0) KeyStyles.SHIFT_UP else ""
-        val k = KeyStyles.idOf(kr.key) + up + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
+        val k = keyStyles.styleIdOf(kr.key, shiftState) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
         return styledCache.getOrPut(k) { sample(kr, styled = true) }
     }
     private val repeatRunnable = object : Runnable {
@@ -596,7 +595,7 @@ class CatKeyboardView(
         }
         drawOneKey(c, kr, content = false)
         val elems = labelElemsOf(kr).associateBy { "label:" + it.id }
-        val keyId = KeyStyles.idOf(kr.key)
+        val keyId = decalKeyId(kr.key)
         for (id in elementOrder(kr.key)) {
             val e = elems[id]
             if (e != null) drawLabel(c, kr, e, st)
@@ -649,7 +648,7 @@ class CatKeyboardView(
     fun elementOrder(key: Key): List<String> {
         val kr = keyRects.firstOrNull { it.key == key }
         val labels = kr?.let { labelElemsOf(it).map { e -> "label:" + e.id } } ?: emptyList()
-        val keyId = KeyStyles.idOf(key)
+        val keyId = decalKeyId(key)
         val defaults = labels + decals.filter { it.target == keyId }.map { it.id }
         val saved = styleOf(key)?.order ?: return defaults
         // 存過的順序裡已經沒有的（刪掉的圖案）跳過；新加的放最上面
@@ -663,7 +662,7 @@ class CatKeyboardView(
         val kr = keyRects.firstOrNull { it.key == key } ?: return emptyList()
         val st = styleOf(key)
         val r = kr.rect
-        val keyId = KeyStyles.idOf(key)
+        val keyId = decalKeyId(key)
         val labels = labelElemsOf(kr).associateBy { "label:" + it.id }
         return elementOrder(key).mapNotNull { id ->
             val e = labels[id]
@@ -685,7 +684,19 @@ class CatKeyboardView(
 
     /** 這顆鍵現在的寬、高（主題工作室微調用） */
     /** 這顆鍵現在的樣式（英文大寫時，Shift 鍵用「大寫時」的樣子） */
-    private fun styleOf(key: Key): KeyStyle? = keyStyles.resolve(key, shiftState > 0)
+    private fun styleOf(key: Key): KeyStyle? = keyStyles.resolve(key, shiftState)
+
+    /**
+     * 這顆鍵現在要畫哪一套圖案（圖案的 target）：Shift 鍵每個狀態可以有自己的圖案，
+     * 沒有的話往回找（大寫鎖定 → 大寫 → 小寫）
+     */
+    fun decalKeyId(key: Key): String {
+        val base = KeyStyles.idOf(key)
+        if (key.act != Act.SHIFT || shiftState == 0 || decals.isEmpty()) return base
+        if (shiftState >= 2) (base + KeyStyles.SHIFT_LOCK).let { lock -> if (decals.any { it.target == lock }) return lock }
+        val up = base + KeyStyles.SHIFT_UP
+        return if (decals.any { it.target == up }) up else base
+    }
 
     fun keySizeOf(key: Key): Pair<Float, Float>? =
         keyRects.firstOrNull { it.key == key }?.rect?.let { it.width() to it.height() }
@@ -1015,7 +1026,7 @@ class CatKeyboardView(
 
     private fun drawKeyDecals(c: Canvas, kr: KeyRect) {
         if (decals.isEmpty()) return
-        val id = KeyStyles.idOf(kr.key)
+        val id = decalKeyId(kr.key)
         for (d in decals) if (d.target == id) Decals.draw(c, d, kr.rect, kr.rect.height(), decalBitmaps[d.fileName], animOf(d))
     }
 
@@ -1156,7 +1167,8 @@ class CatKeyboardView(
     /** 圖案貼在哪（畫面上的範圍、參考高度）；那顆鍵不在目前的鍵盤上就是 null */
     private fun targetOf(d: Decal): Pair<RectF, Float>? =
         if (d.onBackground) bgRect.let { it to it.height() }
-        else keyRects.firstOrNull { it.key.act != Act.GAP && KeyStyles.idOf(it.key) == d.target }?.let { it.rect to it.rect.height() }
+        // 按鍵上的：只有現在看得到的那一套（Shift 別的狀態的圖案不算）
+        else keyRects.firstOrNull { it.key.act != Act.GAP && decalKeyId(it.key) == d.target }?.let { it.rect to it.rect.height() }
 
     /** 點到的圖案（最上面的那個優先） */
     private fun decalAt(x: Float, y: Float): Decal? {

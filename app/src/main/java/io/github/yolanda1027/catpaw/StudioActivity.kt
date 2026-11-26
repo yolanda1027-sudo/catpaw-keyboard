@@ -44,10 +44,10 @@ class StudioActivity : Activity() {
     private var selected: Key? = null
     /** true = 改「同一類的全部按鍵」，false = 只改選到的這顆 */
     private var groupScope = false
-    /** 改 Shift 鍵「大寫時」的樣子（false = 小寫時，也就是平常的樣子） */
-    private var shiftUp = false
-    /** 現在是不是在改 Shift 的大寫時 */
-    private val editingShiftUp get() = shiftUp && !groupScope && selected?.act == Act.SHIFT
+    /** 改 Shift 鍵哪個狀態的樣子：0 小寫（平常）、1 大寫、2 大寫鎖定 */
+    private var shiftMode = 0
+    /** 現在在改 Shift 的哪個狀態（沒選 Shift 鍵就是 0） */
+    private val editingShift get() = if (!groupScope && selected?.act == Act.SHIFT) shiftMode else 0
     /** 正在編輯哪一頁：zh 注音、en 英文、sym 符號、kao 顏文字、emo 表情、stk 我的貼圖、clip 剪貼簿、num 數字 */
     private var tab = "zh"
     /** 這一頁在主題裡的代號（注音、英文都是 ""） */
@@ -207,7 +207,7 @@ class StudioActivity : Activity() {
                 setMargins(px(6f), px(6f), px(6f), px(26f))
             })
             corner("＋ 加圖案", Gravity.BOTTOM or Gravity.END) {
-                selected?.let { showAddDialog(KeyStyles.idOf(it)) }
+                selected?.let { showAddDialog(decalAddTarget(it)) }
             }
             visibility = View.GONE
         }
@@ -498,14 +498,24 @@ class StudioActivity : Activity() {
         val key = selected ?: return null
         return when {
             groupScope -> KeyStyles.groupIdOf(key)
-            editingShiftUp -> KeyStyles.upIdOf(key)
+            editingShift > 0 -> KeyStyles.stateIdOf(key, editingShift)
             else -> KeyStyles.idOf(key)
         }
     }
 
+    /**
+     * Shift 的大寫、大寫鎖定還沒自己的設定時，第一次改先照「現在看到的那一套」複製一份，
+     * 之後就完全分開（底圖、顏色都可以不一樣，也可以把底圖拿掉）
+     */
+    private fun seedStyle(id: String): KeyStyle? = when {
+        id.endsWith(KeyStyles.SHIFT_LOCK) -> styles.map[id.removeSuffix(KeyStyles.SHIFT_LOCK) + KeyStyles.SHIFT_UP] ?: styles.map[id.removeSuffix(KeyStyles.SHIFT_LOCK)]
+        id.endsWith(KeyStyles.SHIFT_UP) -> styles.map[id.removeSuffix(KeyStyles.SHIFT_UP)]
+        else -> null
+    }
+
     private fun update(change: (KeyStyle) -> KeyStyle?, rebuild: Boolean = true) {
         val id = currentId() ?: return
-        styles = styles.with(id, change(styles.map[id] ?: KeyStyle()))
+        styles = styles.with(id, change(styles.map[id] ?: seedStyle(id) ?: KeyStyle()))
         KeyStyles.save(prefs, styles)
         kv.setKeyStylesLive(styles)
         zoom.invalidate() // 放大的按鍵也要跟著重畫（拖滑桿時不會重建面板）
@@ -514,8 +524,9 @@ class StudioActivity : Activity() {
 
     /** 改「這一顆鍵」自己的樣式（按鍵上的字、順序：不管上面選的是不是整類） */
     private fun updateOwn(key: Key, change: (KeyStyle) -> KeyStyle, rebuild: Boolean = true) {
-        val id = KeyStyles.idOf(key)
-        styles = styles.with(id, change(styles.map[id] ?: KeyStyle()))
+        // Shift 在改大寫／大寫鎖定時：改那個狀態自己的
+        val id = if (key == selected && editingShift > 0) KeyStyles.stateIdOf(key, editingShift) else KeyStyles.idOf(key)
+        styles = styles.with(id, change(styles.map[id] ?: seedStyle(id) ?: KeyStyle()))
         KeyStyles.save(prefs, styles)
         kv.setKeyStylesLive(styles)
         zoom.invalidate()
@@ -660,8 +671,8 @@ class StudioActivity : Activity() {
         commitHistory()
         panel.removeAllViews()
         // 離開 Shift 鍵就回到小寫時；改大寫時的時候，預覽鍵盤也切成大寫
-        if (selected?.act != Act.SHIFT || groupScope) shiftUp = false
-        kv.shiftState = if (editingShiftUp) 1 else 0
+        if (selected?.act != Act.SHIFT || groupScope) shiftMode = 0
+        kv.shiftState = editingShift
         kv.editTopBar = topSelected
         kv.editQuickBar = quickSelected
         // 快捷列在設定裡關著的話，改它的顏色時先顯示出來看
@@ -743,11 +754,11 @@ class StudioActivity : Activity() {
         if (key.act == Act.SHIFT && !groupScope) shiftStateChooser(key)
         val cid = currentId()!!
 
-        val cur = styles.map[currentId()] ?: KeyStyle()
+        val cur = styles.map[cid] ?: seedStyle(cid) ?: KeyStyle()
         // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
         val now = kv.sampleColors(key)
         // 「照圖片的形狀」：底色、外框、圓角都交給圖片，這幾項變灰
-        val eff = if (groupScope) cur else styles.resolve(key, editingShiftUp) ?: cur
+        val eff = if (groupScope) cur else styles.resolve(key, editingShift) ?: cur
         val shapeMode = eff.bgImage?.ownsShape == true
         greyIf(shapeMode) { colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) } }
         imageRow(currentId()!!, "底圖", cur.bgImage)
@@ -830,10 +841,16 @@ class StudioActivity : Activity() {
         if (!groupScope) {
             section("這顆鍵上的圖案")
             text("💡 ${previewWhere}放大的按鍵裡，點一下字（例如主字、小字）也可以移動、換顏色、換上下層、刪除。", 13f, dim = true)
-            decalList(selId)
+            // Shift 的大寫、大寫鎖定：列出現在看得到的那一套；加圖案時先複製一份成自己的
+            val dTarget = kv.decalKeyId(key)
+            if (editingShift > 0 && dTarget != KeyStyles.stateIdOf(key, editingShift) && decals.any { it.target == dTarget }) {
+                text("💡 現在沿用${shiftStateName(KeyStyles.stateIdOf(key, shiftOf(dTarget)))}的圖案，在這裡改會兩邊一起變。想分開：", 13f, dim = true)
+                button("📋 ${shiftStateName(KeyStyles.stateIdOf(key, editingShift))}的圖案另外排（複製一份）") { ensureStateDecals(key); refresh() }
+            }
+            decalList(dTarget) { decalAddTarget(key) }
             val order = kv.elementOrder(key)
             if (order.isNotEmpty()) {
-                val keyDecals = decals.filter { it.target == selId }
+                val keyDecals = decals.filter { it.target == dTarget }
                 arrangeSection(key, order.map { id ->
                     id to if (id.startsWith(LABEL)) labelName(key, id.removePrefix(LABEL))
                     else "${keyDecals.indexOfFirst { it.id == id } + 1}. " + (keyDecals.firstOrNull { it.id == id }?.let { shapeName(it) } ?: "圖案")
@@ -899,38 +916,45 @@ class StudioActivity : Activity() {
     }
 
     /**
-     * Shift 鍵：選要改「小寫時」還是「大寫時」的樣子。
-     * 大寫時沒另外設定＝跟小寫時一樣；設定了的地方才不一樣（例如只換底圖，顏色照小寫時的）。
+     * Shift 鍵：選要改哪個狀態的樣子（小寫時／大寫時／大寫鎖定）。
+     * 還沒另外設定的狀態＝跟前一個一樣（大寫鎖定 → 大寫時 → 小寫時）；
+     * 第一次在那個狀態改東西時，先照現在的樣子複製一份，之後完全分開。
      */
     private fun shiftStateChooser(key: Key) {
-        val upId = KeyStyles.upIdOf(key)
-        val hasUp = styles.map[upId] != null
+        fun has(m: Int) = KeyStyles.stateIdOf(key, m).let { sid -> styles.map[sid] != null || decals.any { it.target == sid } }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, px(6f), 0, px(2f)) }
-        fun choice(label: String, up: Boolean) = row.addView(Button(this).apply {
-            text = label
+        fun choice(label: String, m: Int) = row.addView(Button(this).apply {
+            text = label + if (m > 0 && has(m)) "\n（已設計）" else ""
             isAllCaps = false
-            val on = shiftUp == up
+            textSize = 14f
+            val on = shiftMode == m
             alpha = if (on) 1f else 0.6f
             setTypeface(typeface, if (on) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             if (on) background = GradientDrawable().apply { cornerRadius = 12 * dp; setColor(0x33E8628E); setStroke(px(2f), 0xFFE8628E.toInt()) }
-            setOnClickListener { if (shiftUp != up) { shiftUp = up; refresh() } }
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(3f), 0, px(3f), 0) })
-        choice("小寫時", false)
-        choice("大寫時" + if (hasUp) "（已設計）" else "", true)
+            setOnClickListener { if (shiftMode != m) { shiftMode = m; refresh() } }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(px(3f), 0, px(3f), 0) })
+        choice("小寫時", 0)
+        choice("大寫時", 1)
+        choice("大寫鎖定", 2)
         panel.addView(row)
+        val m = shiftMode
+        val name = listOf("小寫時", "大寫時", "大寫鎖定")[m]
+        val parent = if (m == 2) "大寫時" else "小寫時"
         when {
-            shiftUp && !hasUp -> text("大寫時還沒另外設定，現在跟小寫時一樣。在下面改了的地方，就只有大寫時會變。大寫鎖定也用這個樣子。", 13f, dim = true)
-            shiftUp -> {
-                text("下面改的是大寫時（按了 Shift、大寫鎖定）的樣子；沒改的地方照小寫時的。", 13f, dim = true)
-                button("↺ 大寫時改回跟小寫時一樣") {
-                    styles = styles.with(upId, null)
+            m == 0 -> text("下面改的是平常（小寫時）的樣子。想讓大寫時、大寫鎖定（連按兩下 Shift）長得不一樣，點上面另外設定。", 13f, dim = true)
+            !has(m) -> text("${name}還沒另外設定，現在跟${parent}一樣。在下面改了，就會變成${name}自己的一套（底圖、顏色、圖案都可以完全不一樣）。", 13f, dim = true)
+            else -> {
+                text("下面改的是${name}自己的一套，跟${parent}分開。", 13f, dim = true)
+                button("↺ ${name}改回跟${parent}一樣") {
+                    val sid = KeyStyles.stateIdOf(key, m)
+                    styles = styles.with(sid, null)
                     KeyStyles.save(prefs, styles)
                     kv.setKeyStylesLive(styles)
+                    saveDecals(decals.filter { it.target != sid }, rebuild = false)
                     zoom.invalidate()
                     refresh()
                 }
             }
-            else -> text("下面改的是平常（小寫時）的樣子。想讓大寫時長得不一樣，點「大寫時」另外設定。", 13f, dim = true)
         }
     }
 
@@ -1016,7 +1040,7 @@ class StudioActivity : Activity() {
 
     /** 代號 → 給人看的名字（「所有注音鍵」「刪除鍵」「「ㄅ」鍵」…） */
     private fun nameOfId(id: String): String {
-        if (id.endsWith(KeyStyles.SHIFT_UP)) return nameOfId(id.removeSuffix(KeyStyles.SHIFT_UP)) + "（大寫時）"
+        if (shiftOf(id) > 0) return nameOfId(KeyStyles.stateBaseOf(id)) + "（${shiftStateName(id)}）"
         val base = KeyStyles.baseOf(id)
         KeyStyles.Group.values().firstOrNull { it.id == base }?.let { return it.titleOn(KeyStyles.pageOf(id)) }
         val key = when {
@@ -1053,9 +1077,9 @@ class StudioActivity : Activity() {
 
     /** 跳到那一頁、選好那顆鍵（或那一整類） */
     private fun goKey(id0: String) {
-        // Shift 的「大寫時」：選 Shift 鍵、切到大寫時
-        val up = id0.endsWith(KeyStyles.SHIFT_UP)
-        val id = id0.removeSuffix(KeyStyles.SHIFT_UP)
+        // Shift 的大寫、大寫鎖定：選 Shift 鍵、切到那個狀態
+        val mode = shiftOf(id0)
+        val id = KeyStyles.stateBaseOf(id0)
         val page = KeyStyles.pageOf(id)
         val group = KeyStyles.baseOf(id).startsWith("@")
         for (t in listOf(if (page.isEmpty()) "zh" else page)) {
@@ -1064,7 +1088,7 @@ class StudioActivity : Activity() {
             if (k != null) {
                 selected = k
                 groupScope = group
-                shiftUp = up
+                shiftMode = mode
                 refresh()
                 return
             }
@@ -1114,7 +1138,7 @@ class StudioActivity : Activity() {
             selected = null
         } else {
             bgSelected = false
-            selected = kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target } ?: selected
+            selected = kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == KeyStyles.stateBaseOf(d.target) } ?: selected
         }
         refresh()
     }
@@ -1313,7 +1337,7 @@ class StudioActivity : Activity() {
     private fun shapeName(d: Decal) = if (d.isShape) Decals.SHAPES.firstOrNull { it.first == d.shapeName }?.second ?: "圖案" else "我的圖片"
 
     /** 某個位置上的圖案清單，點了就選到它；最下面有「加圖案」 */
-    private fun decalList(target: String) {
+    private fun decalList(target: String, addTarget: (() -> String)? = null) {
         val mine = decals.filter { it.target == target }
         if (mine.isEmpty()) text("還沒有圖案", 13f, dim = true)
         val bmps = Decals.bitmaps(this, mine)
@@ -1333,7 +1357,33 @@ class StudioActivity : Activity() {
             row.addView(TextView(this).apply { text = "編輯 ›"; textSize = 14f; alpha = 0.7f })
             panel.addView(row)
         }
-        button("＋ 加圖案") { showAddDialog(target) }
+        button("＋ 加圖案") { showAddDialog(addTarget?.invoke() ?: target) }
+    }
+
+    /** Shift 狀態的名字 */
+    private fun shiftStateName(id: String) = when {
+        id.endsWith(KeyStyles.SHIFT_LOCK) -> "大寫鎖定"
+        id.endsWith(KeyStyles.SHIFT_UP) -> "大寫時"
+        else -> "小寫時"
+    }
+    private fun shiftOf(id: String) = when {
+        id.endsWith(KeyStyles.SHIFT_LOCK) -> 2
+        id.endsWith(KeyStyles.SHIFT_UP) -> 1
+        else -> 0
+    }
+
+    /** 加圖案要加到哪：Shift 在改大寫／大寫鎖定時，先把沿用的圖案複製一份成自己的，再加上去 */
+    private fun decalAddTarget(key: Key): String = if (key == selected && editingShift > 0) ensureStateDecals(key) else KeyStyles.idOf(key)
+
+    /** 這個 Shift 狀態還沒有自己的圖案：把現在看得到的那一套複製一份（之後兩邊分開改） */
+    private fun ensureStateDecals(key: Key): String {
+        val sid = KeyStyles.stateIdOf(key, editingShift)
+        if (decals.none { it.target == sid }) {
+            val from = kv.decalKeyId(key)
+            val copies = decals.filter { it.target == from }.map { it.copy(id = Decals.newId(), target = sid) }
+            if (copies.isNotEmpty()) saveDecals(decals + copies, rebuild = false)
+        }
+        return sid
     }
 
     private fun showAddDialog(target: String) {
@@ -1462,7 +1512,7 @@ class StudioActivity : Activity() {
     /** 選到一個圖案時的面板 */
     private fun decalPanel(d: Decal) {
         kv.editHighlight = null
-        val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == d.target }?.let { KeyStyles.nameOf(it) } ?: d.target
+        val where = if (d.onBackground) "鍵盤背景" else kv.rows.flatten().firstOrNull { KeyStyles.idOf(it) == KeyStyles.stateBaseOf(d.target) }?.let { KeyStyles.nameOf(it) + if (shiftOf(d.target) > 0) "（${shiftStateName(d.target)}）" else "" } ?: d.target
         header("正在編輯：${shapeName(d)}")
         text("貼在：$where", 14f, dim = true)
         val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖上面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
@@ -2394,7 +2444,7 @@ class StudioActivity : Activity() {
     private fun fillFrame(target: String): Pair<RectF, Float>? {
         if (KeyStyles.baseOf(target) == KeyStyles.KEYBOARD) return kv.keyboardImageFrame().takeIf { !it.isEmpty }?.let { it to 0f }
         val key = selected ?: return null
-        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShiftUp))
+        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShift))
         val (box, rad) = kv.keyImageFrame(key, st) ?: return null
         return box to rad / minOf(box.width(), box.height())
     }
@@ -2571,7 +2621,7 @@ class StudioActivity : Activity() {
             return
         }
         val key = selected ?: return
-        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShiftUp))
+        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShift))
         val box = kv.keyImageFrame(key, st)?.first ?: return
         // 圖示鍵（表情、刪除…）沒有字：預覽就不寫字（寫名字的話太長，會跑出按鍵外面）
         val label = key.label
@@ -2615,7 +2665,7 @@ class StudioActivity : Activity() {
             Triple(kv.keyboardImageFrame(), 0f, "裁切鍵盤背景圖片")
         } else {
             val key = selected ?: return
-            val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShiftUp))
+            val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShift))
             val (box, rad) = kv.keyImageFrame(key, st) ?: return
             Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (KeyStyles.baseOf(target).startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == KeyStyles.baseOf(target) }?.titleOn(KeyStyles.pageOf(target)) ?: "" else KeyStyles.nameOf(key)) + "的底圖")
         }

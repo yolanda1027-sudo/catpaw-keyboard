@@ -400,20 +400,28 @@ class KeyStyles(
 
     /**
      * 這顆鍵最後要長怎樣（沒有任何設定就是 null）
-     * @param shifted 英文大寫（Shift 按下、大寫鎖定）的時候：Shift 鍵有另外設定「大寫時」的樣子就疊上去，
-     *   沒設定的地方照小寫時的
+     * @param shift 英文的 Shift 狀態：0 小寫、1 大寫、2 大寫鎖定。
+     *   Shift 鍵可以每個狀態各有一套（完全分開，不會混在一起）；
+     *   大寫鎖定沒設定就用大寫的，大寫沒設定就用小寫的
      */
-    fun resolve(key: Key, shifted: Boolean = false): KeyStyle? {
+    fun resolve(key: Key, shift: Int = 0): KeyStyle? {
         if (map.isEmpty()) return null
         // 每一頁只看自己頁的設定（沒設計過的頁＝主題原本的樣子，不借注音鍵盤的）
-        val own = map[idOf(key)]
+        val own = map[styleIdOf(key, shift)]
         val group = map[groupIdOf(key)]
-        var st = when {
+        val st = when {
             own == null -> group
             else -> own.over(group)
         }
-        if (shifted && key.act == Act.SHIFT) map[upIdOf(key)]?.let { st = it.over(st) }
         return st?.takeIf { !it.isEmpty }
+    }
+
+    /** 這個 Shift 狀態實際用哪一套設定的代號（沒另外設定就往回找：大寫鎖定 → 大寫 → 小寫） */
+    fun styleIdOf(key: Key, shift: Int): String {
+        val base = idOf(key)
+        if (key.act != Act.SHIFT || shift <= 0) return base
+        if (shift >= 2 && map.containsKey(base + SHIFT_LOCK)) return base + SHIFT_LOCK
+        return if (map.containsKey(base + SHIFT_UP)) base + SHIFT_UP else base
     }
 
     fun with(id: String, style: KeyStyle?): KeyStyles {
@@ -535,7 +543,14 @@ class KeyStyles(
 
         /** Shift 鍵「大寫時」另外的樣子（存檔裡的代號：en/shift#up） */
         const val SHIFT_UP = "#up"
+        /** Shift 鍵「大寫鎖定」另外的樣子（en/shift#lock） */
+        const val SHIFT_LOCK = "#lock"
         fun upIdOf(key: Key): String = idOf(key) + SHIFT_UP
+        fun lockIdOf(key: Key): String = idOf(key) + SHIFT_LOCK
+        /** 狀態 0／1／2 自己那一套的代號 */
+        fun stateIdOf(key: Key, shift: Int): String = idOf(key) + when (shift) { 1 -> SHIFT_UP; 2 -> SHIFT_LOCK; else -> "" }
+        /** 拿掉 #up、#lock，回到按鍵本身的代號 */
+        fun stateBaseOf(id: String): String = id.removeSuffix(SHIFT_UP).removeSuffix(SHIFT_LOCK)
 
         /** 按鍵所屬那一整類的代號（帶頁面） */
         fun groupIdOf(key: Key): String = scoped(key.page, groupOf(key).id)
