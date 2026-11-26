@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import org.junit.Assert.assertEquals
@@ -62,11 +61,6 @@ class ElementAlignTest {
         assertEquals(80f, sp.getValue("c").first, 0.01f)
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun studioArrangeAndAlign() {
         Prefs(ctx).theme = "classic"

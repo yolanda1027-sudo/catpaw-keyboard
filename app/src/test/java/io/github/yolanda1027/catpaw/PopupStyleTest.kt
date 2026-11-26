@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.RectF
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.json.JSONObject
@@ -85,11 +84,6 @@ class PopupStyleTest {
         assertEquals(gold, b2.getPixel(395, 60))
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun studioPanel() {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()

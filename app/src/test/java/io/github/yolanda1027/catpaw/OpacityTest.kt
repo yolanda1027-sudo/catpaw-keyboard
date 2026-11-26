@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
-import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.TextView
 import org.json.JSONObject
@@ -77,11 +76,6 @@ class OpacityTest {
         assertTrue("背景圖 30%：${Integer.toHexString(gap)}", Color.red(gap) in 60..140)
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun colorDialogReturnsAlpha() {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()

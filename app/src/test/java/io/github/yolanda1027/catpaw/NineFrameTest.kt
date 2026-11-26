@@ -10,7 +10,6 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.net.Uri
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.json.JSONObject
@@ -63,11 +62,6 @@ class NineFrameTest {
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     private fun render(v: View, name: String) {
         Ui.spaceButtons(v, 8)

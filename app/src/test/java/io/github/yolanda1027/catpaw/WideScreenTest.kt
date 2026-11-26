@@ -31,15 +31,11 @@ class WideScreenTest {
         val kv = CatKeyboardView(ctx, p, Haptics(ctx))
         kv.rows = Layouts.ZHUYIN
         kv.quickItems = listOf("，", "。", "？", "！")
-        kv.listener = object : CatKeyboardView.Listener {
+        kv.listener = object : TestListener() {
             override fun onKey(key: Key, longPress: Boolean) { log += key.label }
             override fun onTabChinese() { log += "中" }
             override fun onTabEnglish() { log += "En" }
             override fun onHide() { log += "hide" }
-            override fun onCandidate(index: Int) {}
-            override fun onSymbolTab(index: Int) {}
-            override fun onSymbolSwipe(direction: Int) {}
-            override fun onClipboard() {}
             override fun onQuick(item: String) { log += "quick $item" }
         }
         kv.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)

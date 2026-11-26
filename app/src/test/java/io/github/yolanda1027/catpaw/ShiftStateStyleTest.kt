@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -79,11 +78,6 @@ class ShiftStateStyleTest {
         assertEquals(blue, pixelAt(kv, shift))
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun studioEditsUppercaseSeparately() {
         Prefs(ctx).theme = "magic_yellow"

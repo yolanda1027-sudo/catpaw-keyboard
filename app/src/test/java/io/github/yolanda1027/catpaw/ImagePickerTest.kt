@@ -3,7 +3,6 @@ package io.github.yolanda1027.catpaw
 import android.content.Intent
 import android.provider.MediaStore
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -20,11 +19,6 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
 class ImagePickerTest {
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun intents() {
         assertTrue(ImagePicker.available())

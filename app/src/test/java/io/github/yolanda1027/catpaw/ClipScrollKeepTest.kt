@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.RadioButton
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,16 +36,9 @@ class ClipScrollKeepTest {
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         val swiped = intArrayOf(0)
         val typed = ArrayList<String>()
-        kv.listener = object : CatKeyboardView.Listener {
+        kv.listener = object : TestListener() {
             override fun onKey(key: Key, longPress: Boolean) { typed += key.text.ifEmpty { key.label } }
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
-            override fun onCandidate(index: Int) {}
-            override fun onSymbolTab(index: Int) {}
             override fun onSymbolSwipe(direction: Int) { swiped[0] = direction }
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
         }
         return Triple(kv, swiped, typed)
     }
@@ -126,11 +118,6 @@ class ClipScrollKeepTest {
         assertEquals(1, p.clipKeepHours)
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun settingsChoices() {
         val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "clip")).setup().get()

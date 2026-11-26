@@ -29,16 +29,8 @@ class EnglishLongPressTest {
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
         var got: Key? = null
-        kv.listener = object : CatKeyboardView.Listener {
+        kv.listener = object : TestListener() {
             override fun onKey(key: Key, longPress: Boolean) { got = key }
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
-            override fun onCandidate(index: Int) {}
-            override fun onSymbolTab(index: Int) {}
-            override fun onSymbolSwipe(direction: Int) {}
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
         }
         // a：第二排第一顆（前面空半格），中心 x = 108
         val rowEn = 45f * 5 / 4 * 2.625f

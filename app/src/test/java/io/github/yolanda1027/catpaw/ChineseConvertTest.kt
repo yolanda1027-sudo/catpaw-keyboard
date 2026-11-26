@@ -56,16 +56,8 @@ class ChineseConvertTest {
 
         var toggled = 0
         var picked = -1
-        kv.listener = object : CatKeyboardView.Listener {
-            override fun onKey(key: Key, longPress: Boolean) {}
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
+        kv.listener = object : TestListener() {
             override fun onCandidate(index: Int) { picked = index }
-            override fun onSymbolTab(index: Int) {}
-            override fun onSymbolSwipe(direction: Int) {}
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
             override fun onToggleSimplified() { toggled++ }
         }
         val d = 2.625f

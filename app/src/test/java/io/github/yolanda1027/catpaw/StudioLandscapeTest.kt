@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.ScrollView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -23,11 +22,6 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w891dp-h411dp-land-420dpi")
 class StudioLandscapeTest {
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun sideBySide() {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()

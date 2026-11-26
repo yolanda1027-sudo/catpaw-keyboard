@@ -3,7 +3,6 @@ package io.github.yolanda1027.catpaw
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -24,11 +23,6 @@ import java.util.concurrent.TimeUnit
 class NudgeTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     private fun press(b: View, holdMs: Long) {
         val t = SystemClock.uptimeMillis()

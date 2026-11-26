@@ -90,11 +90,6 @@ class ThemeDeleteTest {
         assertEquals("貓爪肉球", ThemeStore.nameOf(ctx, "catpaw"))
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun listScreenDeleteAndRestore() {
         val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "look")).setup().get()

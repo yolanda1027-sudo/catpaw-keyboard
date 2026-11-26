@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
-import android.view.ViewGroup
 import android.widget.TextView
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -47,11 +46,6 @@ class TopBarStyleTest {
         return b
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun jsonRoundTrip() {
         val ks = KeyStyles(mapOf("zy:ㄅ" to KeyStyle(bg = Color.RED)), style)

@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.net.Uri
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.json.JSONObject
@@ -95,11 +94,6 @@ class PageBarTest {
         assertTrue("有圖示時不畫綠色那段", b2.getPixel(60, y) != green)
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun studioUpload() {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()

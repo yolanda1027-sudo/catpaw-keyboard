@@ -8,7 +8,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.net.Uri
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -43,11 +42,6 @@ class EyedropperTest {
         File("build/renders/$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
     private fun button(v: View, t: String) = find(v) { it is Button && it.text.toString() == t } as Button
 
     @Test fun picksTheExactPixel() {

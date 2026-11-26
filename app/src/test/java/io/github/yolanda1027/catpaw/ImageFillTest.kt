@@ -12,7 +12,6 @@ import android.graphics.Shader
 import android.net.Uri
 import android.view.View
 import android.widget.TextView
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.SeekBar
 import org.json.JSONObject
@@ -88,11 +87,6 @@ class ImageFillTest {
         }
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
     private fun button(v: View, t: String) = (find(v) { it is Button && it.text.toString() == t } as? Button) ?: error("找不到按鈕：$t")
 
     @Test fun coverZoomAndClamp() {

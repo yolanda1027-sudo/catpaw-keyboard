@@ -88,16 +88,8 @@ class EmojiTest {
         val items = Emojis.groups[0].second
         val kv = board("classic", 1, Emojis.pageCount(items) - 1)
         var swiped = 0
-        kv.listener = object : CatKeyboardView.Listener {
-            override fun onKey(key: Key, longPress: Boolean) {}
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
-            override fun onCandidate(index: Int) {}
-            override fun onSymbolTab(index: Int) {}
+        kv.listener = object : TestListener() {
             override fun onSymbolSwipe(direction: Int) { swiped = direction }
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
         }
         val y = kv.measuredHeight * 0.55f
         val t = SystemClock.uptimeMillis()

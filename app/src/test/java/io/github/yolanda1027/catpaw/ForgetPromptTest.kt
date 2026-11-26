@@ -31,16 +31,9 @@ class ForgetPromptTest {
         kv.composing = "ㄙㄞˋㄉㄜ˙"
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
-        kv.listener = object : CatKeyboardView.Listener {
+        kv.listener = object : TestListener() {
             override fun onKey(key: Key, longPress: Boolean) { log += "key" }
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
             override fun onCandidate(index: Int) { log += "pick $index" }
-            override fun onSymbolTab(index: Int) {}
-            override fun onSymbolSwipe(direction: Int) {}
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
             override fun onCandidateLongPress(index: Int) { log += "long $index"; kv.forgetPrompt = kv.candidates[index] }
             override fun onForgetAnswer(remove: Boolean) { log += "answer $remove" }
         }

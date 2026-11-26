@@ -37,16 +37,8 @@ class TabScrollTest {
         kv.symbolTab = sel
         kv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED)
         kv.layout(0, 0, kv.measuredWidth, kv.measuredHeight)
-        kv.listener = object : CatKeyboardView.Listener {
-            override fun onKey(key: Key, longPress: Boolean) {}
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
-            override fun onCandidate(index: Int) {}
+        kv.listener = object : TestListener() {
             override fun onSymbolTab(index: Int) { picked += index }
-            override fun onSymbolSwipe(direction: Int) {}
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
         }
         draw(kv)
         return kv

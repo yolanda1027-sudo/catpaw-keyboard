@@ -28,11 +28,6 @@ import org.robolectric.shadows.ShadowLooper
 class TopBarRecropTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     /** 上方列頁「底色」那一列的「透明」按鈕 */
     private fun clearButton(root: View): Button {

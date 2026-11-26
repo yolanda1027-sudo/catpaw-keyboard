@@ -273,15 +273,7 @@ class RenderTest {
         v.symbolTab = 1
         v.symbolPageCount = cat.pages.size
         v.symbolPage = 0
-        v.listener = object : CatKeyboardView.Listener {
-            override fun onKey(key: Key, longPress: Boolean) {}
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
-            override fun onCandidate(index: Int) {}
-            override fun onSymbolTab(index: Int) {}
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
+        v.listener = object : TestListener() {
             override fun onSymbolSwipe(direction: Int) {
                 v.symbolPage += direction
                 v.rows = Symbols.rows(cat.pages[v.symbolPage], false)

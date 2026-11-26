@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.junit.Assert.assertEquals
@@ -54,11 +53,6 @@ class LicensesPageTest {
         assertEquals(all, used)
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun settingsPage() {
         val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "licenses")).setup().get()

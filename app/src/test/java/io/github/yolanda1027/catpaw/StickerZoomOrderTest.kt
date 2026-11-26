@@ -83,16 +83,8 @@ class StickerZoomOrderTest {
         p.theme = "macaron_butter"
         val kv = CatKeyboardView(ctx, p, Haptics(ctx))
         val sent = ArrayList<Key>()
-        kv.listener = object : CatKeyboardView.Listener {
+        kv.listener = object : TestListener() {
             override fun onKey(key: Key, longPress: Boolean) { sent.add(key) }
-            override fun onTabChinese() {}
-            override fun onTabEnglish() {}
-            override fun onHide() {}
-            override fun onCandidate(index: Int) {}
-            override fun onSymbolTab(index: Int) {}
-            override fun onSymbolSwipe(direction: Int) {}
-            override fun onClipboard() {}
-            override fun onQuick(item: String) {}
         }
         kv.rows = MyStickers.rows(ctx, 0)
         kv.symbolTabs = listOf<String?>(null, "🖼️", "😀")
@@ -126,11 +118,6 @@ class StickerZoomOrderTest {
         assertEquals(name, sent.single().text)
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun settingsArrowsReorder() {
         val a = add(Color.parseColor("#FF8FA9"), "A")

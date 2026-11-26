@@ -8,7 +8,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
 import android.widget.TextView
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import org.json.JSONObject
@@ -95,11 +94,6 @@ class KeyShapeImageTest {
         }
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun jsonKeepsShape() {
         val f = ImageFill("decal_1.png", ImageFill.FIT, shape = true)

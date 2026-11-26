@@ -3,7 +3,6 @@ package io.github.yolanda1027.catpaw
 import android.content.Intent
 import android.net.Uri
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.junit.Assert.assertEquals
@@ -28,11 +27,6 @@ import java.io.File
 class StoreLinkTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun storeButtonOpensBrowser() {
         val a = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", "look")).setup().get()

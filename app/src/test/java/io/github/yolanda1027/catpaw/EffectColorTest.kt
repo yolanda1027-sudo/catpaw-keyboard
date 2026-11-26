@@ -3,7 +3,6 @@ package io.github.yolanda1027.catpaw
 import android.graphics.Color
 import android.graphics.RectF
 import android.view.View
-import android.view.ViewGroup
 import android.widget.TextView
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -64,11 +63,6 @@ class EffectColorTest {
         assertEquals("paw" to mint, back)
     }
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun studioColorRow() {
         val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()

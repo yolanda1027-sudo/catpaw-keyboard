@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.junit.Assert.assertEquals
@@ -32,11 +31,6 @@ import java.io.File
 class ModeConfirmTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     private fun upload(a: StudioActivity): AlertDialog {
         (views(a.window.decorView).first { it is Button && it.text.toString() == "📷 上傳圖片" } as Button).performClick()

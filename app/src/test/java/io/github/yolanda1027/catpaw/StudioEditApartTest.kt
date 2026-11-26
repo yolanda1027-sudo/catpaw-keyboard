@@ -2,7 +2,6 @@ package io.github.yolanda1027.catpaw
 
 import android.graphics.Color
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,11 +24,6 @@ import org.robolectric.shadows.ShadowToast
 class StudioEditApartTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
 
     @Test fun editAnotherThemeWithoutApplying() {
         val live = Prefs(ctx)

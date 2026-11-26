@@ -59,11 +59,6 @@ class SubColorTest {
         }
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun groupPanelHasSubColorRow() {
         Prefs(ctx).theme = "classic"

@@ -10,7 +10,6 @@ import android.graphics.RectF
 import android.net.Uri
 import android.view.View
 import android.widget.TextView
-import android.view.ViewGroup
 import android.widget.Button
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -81,11 +80,6 @@ class ImageStretchTest {
         }
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     private fun shot(v: View, name: String) {
         v.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY))

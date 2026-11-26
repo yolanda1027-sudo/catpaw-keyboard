@@ -2,7 +2,6 @@ package io.github.yolanda1027.catpaw
 
 import android.content.Intent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.Switch
@@ -25,11 +24,6 @@ import org.robolectric.annotation.GraphicsMode
 class SettingsLayoutTest {
     private val ctx = RuntimeEnvironment.getApplication()
 
-    private fun views(v: View, out: MutableList<View> = ArrayList()): List<View> {
-        out += v
-        if (v is ViewGroup) for (i in 0 until v.childCount) views(v.getChildAt(i), out)
-        return out
-    }
     private fun texts(a: SettingsActivity) = views(a.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }
     private fun open(id: String) = Robolectric.buildActivity(SettingsActivity::class.java, Intent().putExtra("page", id)).setup().get()
     private fun show(a: SettingsActivity, id: String) =

@@ -102,11 +102,6 @@ class KeyBorderStyleTest {
         assertFalse(lineAt(b2, st2, 1f))
     }
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     /** 這個 view 自己或上面幾層有沒有被變灰 */
     private fun greyed(v: View): Boolean {

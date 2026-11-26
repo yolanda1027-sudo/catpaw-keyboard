@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import org.json.JSONObject
@@ -30,11 +29,6 @@ class LabelDeleteTest {
     private val ctx = RuntimeEnvironment.getApplication()
     private val xKey = Layouts.ZHUYIN[3][3] // ㄒ（小字 v）
 
-    private fun find(v: View, pred: (View) -> Boolean): View? {
-        if (pred(v)) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), pred)?.let { return it }
-        return null
-    }
 
     @Test fun jsonRoundTrip() {
         val ls = LabelStyle(alpha = 0.4f, hidden = true)
