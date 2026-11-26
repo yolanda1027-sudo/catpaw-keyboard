@@ -44,6 +44,10 @@ class StudioActivity : Activity() {
     private var selected: Key? = null
     /** true = 改「同一類的全部按鍵」，false = 只改選到的這顆 */
     private var groupScope = false
+    /** 改 Shift 鍵「大寫時」的樣子（false = 小寫時，也就是平常的樣子） */
+    private var shiftUp = false
+    /** 現在是不是在改 Shift 的大寫時 */
+    private val editingShiftUp get() = shiftUp && !groupScope && selected?.act == Act.SHIFT
     /** 正在編輯哪一頁：zh 注音、en 英文、sym 符號、kao 顏文字、emo 表情、stk 我的貼圖、clip 剪貼簿、num 數字 */
     private var tab = "zh"
     /** 這一頁在主題裡的代號（注音、英文都是 ""） */
@@ -492,7 +496,11 @@ class StudioActivity : Activity() {
     /** 目前在改的是哪個代號（單顆鍵或一整類） */
     private fun currentId(): String? {
         val key = selected ?: return null
-        return if (groupScope) KeyStyles.groupIdOf(key) else KeyStyles.idOf(key)
+        return when {
+            groupScope -> KeyStyles.groupIdOf(key)
+            editingShiftUp -> KeyStyles.upIdOf(key)
+            else -> KeyStyles.idOf(key)
+        }
     }
 
     private fun update(change: (KeyStyle) -> KeyStyle?, rebuild: Boolean = true) {
@@ -651,6 +659,9 @@ class StudioActivity : Activity() {
         }
         commitHistory()
         panel.removeAllViews()
+        // 離開 Shift 鍵就回到小寫時；改大寫時的時候，預覽鍵盤也切成大寫
+        if (selected?.act != Act.SHIFT || groupScope) shiftUp = false
+        kv.shiftState = if (editingShiftUp) 1 else 0
         kv.editTopBar = topSelected
         kv.editQuickBar = quickSelected
         // 快捷列在設定裡關著的話，改它的顏色時先顯示出來看
@@ -729,13 +740,14 @@ class StudioActivity : Activity() {
         // 點按鍵＝只改這一顆；一整類一起改是從工作室首頁的「一整類一起改」進來的
         header("正在編輯：" + (if (groupScope) group.titleOn(key.page) else KeyStyles.nameOf(key)))
         if (groupScope) text("改這裡，這一頁的${group.titleOn(key.page).removePrefix("所有")}會一起變（單顆另外改過的地方還是以單顆為準）。", 13f, dim = true)
+        if (key.act == Act.SHIFT && !groupScope) shiftStateChooser(key)
         val cid = currentId()!!
 
         val cur = styles.map[currentId()] ?: KeyStyle()
         // 沒自訂的顏色：用這顆鍵現在畫面上的顏色
         val now = kv.sampleColors(key)
         // 「照圖片的形狀」：底色、外框、圓角都交給圖片，這幾項變灰
-        val eff = if (groupScope) cur else styles.resolve(key) ?: cur
+        val eff = if (groupScope) cur else styles.resolve(key, editingShiftUp) ?: cur
         val shapeMode = eff.bgImage?.ownsShape == true
         greyIf(shapeMode) { colorRow("底色", cur.bg, now?.bg ?: Color.WHITE, allowTransparent = true) { v -> update({ it.copy(bg = v) }) } }
         imageRow(currentId()!!, "底圖", cur.bgImage)
@@ -886,6 +898,42 @@ class StudioActivity : Activity() {
         }
     }
 
+    /**
+     * Shift 鍵：選要改「小寫時」還是「大寫時」的樣子。
+     * 大寫時沒另外設定＝跟小寫時一樣；設定了的地方才不一樣（例如只換底圖，顏色照小寫時的）。
+     */
+    private fun shiftStateChooser(key: Key) {
+        val upId = KeyStyles.upIdOf(key)
+        val hasUp = styles.map[upId] != null
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, px(6f), 0, px(2f)) }
+        fun choice(label: String, up: Boolean) = row.addView(Button(this).apply {
+            text = label
+            isAllCaps = false
+            val on = shiftUp == up
+            alpha = if (on) 1f else 0.6f
+            setTypeface(typeface, if (on) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            if (on) background = GradientDrawable().apply { cornerRadius = 12 * dp; setColor(0x33E8628E); setStroke(px(2f), 0xFFE8628E.toInt()) }
+            setOnClickListener { if (shiftUp != up) { shiftUp = up; refresh() } }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(3f), 0, px(3f), 0) })
+        choice("小寫時", false)
+        choice("大寫時" + if (hasUp) "（已設計）" else "", true)
+        panel.addView(row)
+        when {
+            shiftUp && !hasUp -> text("大寫時還沒另外設定，現在跟小寫時一樣。在下面改了的地方，就只有大寫時會變。大寫鎖定也用這個樣子。", 13f, dim = true)
+            shiftUp -> {
+                text("下面改的是大寫時（按了 Shift、大寫鎖定）的樣子；沒改的地方照小寫時的。", 13f, dim = true)
+                button("↺ 大寫時改回跟小寫時一樣") {
+                    styles = styles.with(upId, null)
+                    KeyStyles.save(prefs, styles)
+                    kv.setKeyStylesLive(styles)
+                    zoom.invalidate()
+                    refresh()
+                }
+            }
+            else -> text("下面改的是平常（小寫時）的樣子。想讓大寫時長得不一樣，點「大寫時」另外設定。", 13f, dim = true)
+        }
+    }
+
     private fun section(s: String) = text(s, 17f, bold = true).setPadding(0, px(22f), 0, px(4f))
 
     /** 每個面板最上面：「← 返回」（回上一層，跟按手機的返回一樣）＋正在編輯什麼 */
@@ -968,6 +1016,7 @@ class StudioActivity : Activity() {
 
     /** 代號 → 給人看的名字（「所有注音鍵」「刪除鍵」「「ㄅ」鍵」…） */
     private fun nameOfId(id: String): String {
+        if (id.endsWith(KeyStyles.SHIFT_UP)) return nameOfId(id.removeSuffix(KeyStyles.SHIFT_UP)) + "（大寫時）"
         val base = KeyStyles.baseOf(id)
         KeyStyles.Group.values().firstOrNull { it.id == base }?.let { return it.titleOn(KeyStyles.pageOf(id)) }
         val key = when {
@@ -1003,7 +1052,10 @@ class StudioActivity : Activity() {
     }
 
     /** 跳到那一頁、選好那顆鍵（或那一整類） */
-    private fun goKey(id: String) {
+    private fun goKey(id0: String) {
+        // Shift 的「大寫時」：選 Shift 鍵、切到大寫時
+        val up = id0.endsWith(KeyStyles.SHIFT_UP)
+        val id = id0.removeSuffix(KeyStyles.SHIFT_UP)
         val page = KeyStyles.pageOf(id)
         val group = KeyStyles.baseOf(id).startsWith("@")
         for (t in listOf(if (page.isEmpty()) "zh" else page)) {
@@ -1012,6 +1064,7 @@ class StudioActivity : Activity() {
             if (k != null) {
                 selected = k
                 groupScope = group
+                shiftUp = up
                 refresh()
                 return
             }
@@ -2341,7 +2394,7 @@ class StudioActivity : Activity() {
     private fun fillFrame(target: String): Pair<RectF, Float>? {
         if (KeyStyles.baseOf(target) == KeyStyles.KEYBOARD) return kv.keyboardImageFrame().takeIf { !it.isEmpty }?.let { it to 0f }
         val key = selected ?: return null
-        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
+        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShiftUp))
         val (box, rad) = kv.keyImageFrame(key, st) ?: return null
         return box to rad / minOf(box.width(), box.height())
     }
@@ -2518,7 +2571,7 @@ class StudioActivity : Activity() {
             return
         }
         val key = selected ?: return
-        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
+        val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShiftUp))
         val box = kv.keyImageFrame(key, st)?.first ?: return
         // 圖示鍵（表情、刪除…）沒有字：預覽就不寫字（寫名字的話太長，會跑出按鍵外面）
         val label = key.label
@@ -2562,7 +2615,7 @@ class StudioActivity : Activity() {
             Triple(kv.keyboardImageFrame(), 0f, "裁切鍵盤背景圖片")
         } else {
             val key = selected ?: return
-            val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key))
+            val st = (styles.map[target] ?: KeyStyle()).over(styles.resolve(key, editingShiftUp))
             val (box, rad) = kv.keyImageFrame(key, st) ?: return
             Triple(box, if (fill.shape) 0f else rad / minOf(box.width(), box.height()), "裁切" + (if (KeyStyles.baseOf(target).startsWith("@")) KeyStyles.Group.values().firstOrNull { it.id == KeyStyles.baseOf(target) }?.titleOn(KeyStyles.pageOf(target)) ?: "" else KeyStyles.nameOf(key)) + "的底圖")
         }

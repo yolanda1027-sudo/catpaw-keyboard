@@ -281,7 +281,7 @@ class CatKeyboardView(
         val o = popup ?: return
         val rowH = if (o.actions != null) keyH * 0.62f else keyH
         val kr = popupKr
-        val st = kr?.let { keyStyles.resolve(it.key) }
+        val st = kr?.let { styleOf(it.key) }
         val ps = keyStyles.popup?.takeIf { it.menuSet }
         val styled = kr != null && st != null && st.customizedLook
         if (!styled && ps == null) {
@@ -320,14 +320,14 @@ class CatKeyboardView(
     /** 主題工作室顯示用：長按這顆鍵時選單的顏色（底色、選中那格、字、選中那格的字） */
     fun popupMenuColors(key: Key?): IntArray {
         val kr = key?.let { k -> keyRects.firstOrNull { it.key == k } }
-        val st = kr?.let { keyStyles.resolve(it.key) }
+        val st = kr?.let { styleOf(it.key) }
         return menuColors(kr, st, kr != null && st != null && st.customizedLook)
     }
 
     /** 主題工作室顯示用：按這顆鍵時泡泡的顏色（底色、字） */
     fun bubbleColors(key: Key?): IntArray {
         val kr = key?.let { k -> keyRects.firstOrNull { it.key == k } }
-        val st = kr?.let { keyStyles.resolve(it.key) }
+        val st = kr?.let { styleOf(it.key) }
         val ps = keyStyles.popup
         val col = if (kr != null && st != null && st.customizedLook) lookOf(kr, st) else Look(theme.previewBg, theme.previewText, null)
         return intArrayOf(ps?.bubbleBg ?: col.bg, ps?.bubbleText ?: col.text)
@@ -373,7 +373,8 @@ class CatKeyboardView(
     /** 畫面上（套了樣式之後）量到的顏色：有底圖的鍵用來決定泡泡、選單的底色 */
     private val styledCache = HashMap<String, KeyColors?>()
     private fun styledColors(kr: KeyRect): KeyColors? {
-        val k = KeyStyles.idOf(kr.key) + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
+        val up = if (kr.key.act == Act.SHIFT && shiftState > 0) KeyStyles.SHIFT_UP else ""
+        val k = KeyStyles.idOf(kr.key) + up + "@" + kr.rect.width().toInt() + "x" + kr.rect.height().toInt()
         return styledCache.getOrPut(k) { sample(kr, styled = true) }
     }
     private val repeatRunnable = object : Runnable {
@@ -536,7 +537,7 @@ class CatKeyboardView(
     private fun drawOneKey(c: Canvas, kr: KeyRect, content: Boolean = true, styled: Boolean = true) {
         val isPressed = kr === pressed
         val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
-        val st = if (styled) keyStyles.resolve(kr.key) else null
+        val st = if (styled) styleOf(kr.key) else null
         val shaped = st?.isShaped == true
         val split = !content || sticker != null || shaped || (st != null && (st.text != null || st.hideLabel == true))
         if (!split) {
@@ -586,7 +587,7 @@ class CatKeyboardView(
      * 調過的話：字一個一個分開畫（可以移動、縮放、旋轉、換色），跟圖案照順序一層一層疊。
      */
     private fun drawKeyFull(c: Canvas, kr: KeyRect) {
-        val st = keyStyles.resolve(kr.key)
+        val st = styleOf(kr.key)
         val sticker = StickerSlot.of(kr.key)?.let { stickers[it] }
         if (st == null || sticker != null || (st.labels.isNullOrEmpty() && st.order == null)) {
             drawOneKey(c, kr)
@@ -605,7 +606,7 @@ class CatKeyboardView(
 
     /** 這顆鍵上的字（藏起來的話就沒有） */
     private fun labelElemsOf(kr: KeyRect): List<KbTheme.LabelElem> {
-        val st = keyStyles.resolve(kr.key)
+        val st = styleOf(kr.key)
         if (st?.hideLabel == true) return emptyList()
         theme.fonts = fontSet
         // 主題工作室裡刪掉的字：不畫、也選不到
@@ -614,7 +615,7 @@ class CatKeyboardView(
 
     /** 這顆鍵上被刪掉的字（"main"、"sub"…），主題工作室的面板顯示「恢復」用 */
     fun hiddenLabels(key: Key): List<String> =
-        keyStyles.resolve(key)?.labels?.filterValues { it.hidden }?.keys?.toList() ?: emptyList()
+        styleOf(key)?.labels?.filterValues { it.hidden }?.keys?.toList() ?: emptyList()
 
     /** 這個字現在的顏色：自己設的 > 按鍵的文字顏色 > 主題原本的顏色 */
     private fun labelColor(kr: KeyRect, id: String, st: KeyStyle?): Int {
@@ -650,7 +651,7 @@ class CatKeyboardView(
         val labels = kr?.let { labelElemsOf(it).map { e -> "label:" + e.id } } ?: emptyList()
         val keyId = KeyStyles.idOf(key)
         val defaults = labels + decals.filter { it.target == keyId }.map { it.id }
-        val saved = keyStyles.resolve(key)?.order ?: return defaults
+        val saved = styleOf(key)?.order ?: return defaults
         // 存過的順序裡已經沒有的（刪掉的圖案）跳過；新加的放最上面
         return saved.filter { it in defaults } + defaults.filter { it !in saved }
     }
@@ -660,7 +661,7 @@ class CatKeyboardView(
 
     fun keyElements(key: Key): List<KeyElement> {
         val kr = keyRects.firstOrNull { it.key == key } ?: return emptyList()
-        val st = keyStyles.resolve(key)
+        val st = styleOf(key)
         val r = kr.rect
         val keyId = KeyStyles.idOf(key)
         val labels = labelElemsOf(kr).associateBy { "label:" + it.id }
@@ -683,6 +684,9 @@ class CatKeyboardView(
     }
 
     /** 這顆鍵現在的寬、高（主題工作室微調用） */
+    /** 這顆鍵現在的樣式（英文大寫時，Shift 鍵用「大寫時」的樣子） */
+    private fun styleOf(key: Key): KeyStyle? = keyStyles.resolve(key, shiftState > 0)
+
     fun keySizeOf(key: Key): Pair<Float, Float>? =
         keyRects.firstOrNull { it.key == key }?.rect?.let { it.width() to it.height() }
 
@@ -693,7 +697,7 @@ class CatKeyboardView(
         val e = labelElemsOf(kr).firstOrNull { it.id == name } ?: return null
         val r = kr.rect
         val (w, _) = theme.elemSize(e)
-        val old = keyStyles.resolve(key)?.labels?.get(name)
+        val old = styleOf(key)?.labels?.get(name)
         return LabelStyle(
             dx = d.x - (e.cx - r.left) / r.width(),
             dy = d.y - (e.cy - r.top) / r.height(),
@@ -706,7 +710,7 @@ class CatKeyboardView(
     /** 主題工作室：這個字現在畫面上的顏色 */
     fun labelColorOf(key: Key, id: String): Int? {
         val kr = keyRects.firstOrNull { it.key == key } ?: return null
-        return labelColor(kr, id, keyStyles.resolve(key))
+        return labelColor(kr, id, styleOf(key))
     }
 
     /** 每顆鍵在主題原本樣子下的顏色（量一次就記住，換主題或大小時清掉） */
@@ -1028,7 +1032,7 @@ class CatKeyboardView(
     }
 
     /** 這顆鍵要用的動畫：主題工作室有單獨設定就用它，不然用全部按鍵共用的 */
-    fun effectFor(key: Key): KeyEffect = keyStyles.resolve(key)?.effect ?: globalEffect
+    fun effectFor(key: Key): KeyEffect = styleOf(key)?.effect ?: globalEffect
 
     private fun playEffect(kr: KeyRect) {
         val e = effectFor(kr.key)
@@ -2009,7 +2013,7 @@ class CatKeyboardView(
 
     /** 放大字泡泡：有設「泡泡」顏色就用那個；不然改過的鍵長得跟鍵一樣、沒改過的照主題 */
     private fun drawBubble(c: Canvas, box: RectF, kr: KeyRect?, label: String) {
-        val st = kr?.let { keyStyles.resolve(it.key) }
+        val st = kr?.let { styleOf(it.key) }
         val ps = keyStyles.popup?.takeIf { it.bubbleSet }
         val styled = kr != null && st != null && st.customizedLook
         if (ps?.bubbleBg != null) {

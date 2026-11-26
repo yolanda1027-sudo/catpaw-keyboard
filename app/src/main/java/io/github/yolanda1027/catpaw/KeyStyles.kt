@@ -398,16 +398,21 @@ class KeyStyles(
         }
     }
 
-    /** 這顆鍵最後要長怎樣（沒有任何設定就是 null） */
-    fun resolve(key: Key): KeyStyle? {
+    /**
+     * 這顆鍵最後要長怎樣（沒有任何設定就是 null）
+     * @param shifted 英文大寫（Shift 按下、大寫鎖定）的時候：Shift 鍵有另外設定「大寫時」的樣子就疊上去，
+     *   沒設定的地方照小寫時的
+     */
+    fun resolve(key: Key, shifted: Boolean = false): KeyStyle? {
         if (map.isEmpty()) return null
         // 每一頁只看自己頁的設定（沒設計過的頁＝主題原本的樣子，不借注音鍵盤的）
         val own = map[idOf(key)]
         val group = map[groupIdOf(key)]
-        val st = when {
+        var st = when {
             own == null -> group
             else -> own.over(group)
         }
+        if (shifted && key.act == Act.SHIFT) map[upIdOf(key)]?.let { st = it.over(st) }
         return st?.takeIf { !it.isEmpty }
     }
 
@@ -527,6 +532,10 @@ class KeyStyles(
             Act.TEXT -> "t:" + key.label
             else -> key.act.name.lowercase()
         })
+
+        /** Shift 鍵「大寫時」另外的樣子（存檔裡的代號：en/shift#up） */
+        const val SHIFT_UP = "#up"
+        fun upIdOf(key: Key): String = idOf(key) + SHIFT_UP
 
         /** 按鍵所屬那一整類的代號（帶頁面） */
         fun groupIdOf(key: Key): String = scoped(key.page, groupOf(key).id)
