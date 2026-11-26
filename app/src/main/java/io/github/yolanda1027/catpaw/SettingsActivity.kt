@@ -66,10 +66,7 @@ class SettingsActivity : Activity() {
             text = "選圖片"
             isAllCaps = false
             setOnClickListener {
-                val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "image/*"
-                }
+                val i = ImagePicker.intent()
                 @Suppress("DEPRECATION")
                 startActivityForResult(i, REQ_STICKER + slot.ordinal)
             }
@@ -1166,11 +1163,7 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         button("＋ 上傳圖片（可以一次選好幾張）") {
-            val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "image/*"
-                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            }
+            val i = ImagePicker.intent(multiple = true)
             @Suppress("DEPRECATION")
             startActivityForResult(i, REQ_MY_STICKER)
         }

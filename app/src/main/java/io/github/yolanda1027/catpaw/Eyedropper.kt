@@ -57,7 +57,7 @@ object Eyedropper {
     /** 挑一張圖（結果要由 Activity 的 onActivityResult 轉給 [onResult]） */
     fun pickImage(a: Activity, done: (Bitmap?) -> Unit) {
         pending = done
-        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*")
+        val i = ImagePicker.intent()
         try {
             @Suppress("DEPRECATION")
             a.startActivityForResult(i, REQ_IMAGE)

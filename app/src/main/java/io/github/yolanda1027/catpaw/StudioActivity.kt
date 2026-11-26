@@ -1414,10 +1414,7 @@ class StudioActivity : Activity() {
             setOnClickListener {
                 dialog?.dismiss()
                 pendingTarget = target
-                val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                    type = "image/*"
-                }
+                val i = ImagePicker.intent()
                 @Suppress("DEPRECATION")
                 startActivityForResult(i, REQ_IMAGE)
             }
@@ -2176,10 +2173,7 @@ class StudioActivity : Activity() {
             setOnClickListener { onClick() }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(3f), px(2f), px(3f)) })
         b(if (cur.thumb == null) "📷 上傳小圖示" else "📷 換一張") {
-            val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                type = "image/*"
-            }
+            val i = ImagePicker.intent()
             @Suppress("DEPRECATION")
             startActivityForResult(i, REQ_PAGE_THUMB)
         }
@@ -2275,10 +2269,7 @@ class StudioActivity : Activity() {
             setOnClickListener { onClick() }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(3f), px(2f), px(3f)) })
         fb(if (hasFrame) "📷 換一張" else "📷 上傳圖片") {
-            val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                type = "image/*"
-            }
+            val i = ImagePicker.intent()
             @Suppress("DEPRECATION")
             startActivityForResult(i, REQ_QUICK_FRAME)
         }
@@ -2383,10 +2374,7 @@ class StudioActivity : Activity() {
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(2f), px(3f), px(2f), px(3f)) })
         b(if (fill == null) "📷 上傳圖片" else "📷 換一張") {
             pendingFill = target
-            val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                type = "image/*"
-            }
+            val i = ImagePicker.intent()
             @Suppress("DEPRECATION")
             startActivityForResult(i, REQ_FILL)
         }
@@ -2819,10 +2807,7 @@ class StudioActivity : Activity() {
             text = "📷 選圖片"
             isAllCaps = false
             setOnClickListener {
-                val i = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                    type = "image/*"
-                }
+                val i = ImagePicker.intent()
                 @Suppress("DEPRECATION")
                 startActivityForResult(i, REQ_EFFECT_IMAGE)
             }
