@@ -1391,6 +1391,9 @@ class StudioActivity : Activity() {
         text("貼在：$where", 14f, dim = true)
         val tip = "👆 拖中間＝移動、拖四個角＝放大縮小、拖四邊的小膠囊＝只改寬或只改高、拖上面的圓圈＝旋轉；框上面的小工具可以複製、翻轉、換上下層、刪除"
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
+        section("微調")
+        text("按一下移一點點；按住不放會一直移，越來越快", 13f, dim = true)
+        nudgeButtons(d.id)
         section("對齊")
         text("對齊$where" + (if (d.onBackground) "" else "（按鍵看得到的那一塊）"), 13f, dim = true)
         alignButtons(1, distribute = false) { op -> doAlign(if (d.onBackground) null else selected, listOf(d.id), op) }
@@ -1437,6 +1440,61 @@ class StudioActivity : Activity() {
             decalSel = null
             saveDecals(decals.filter { it.id != d.id })
         }
+    }
+
+    /**
+     * 微調：← ↑ ↓ → 四個鍵。按一下移 1dp；按住不放會一直移，按久了變快（每次 3dp）。
+     * 放開才存檔、重畫面板（按住的時候面板不能重建，不然按著的按鈕會不見）。
+     */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun nudgeButtons(id: String) {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        fun key(label: String, desc: String, dx: Int, dy: Int) = row.addView(Button(this).apply {
+            text = label
+            textSize = 20f
+            contentDescription = desc
+            var started = 0L
+            var moved = false
+            fun step(done: Boolean) {
+                val held = android.os.SystemClock.uptimeMillis() - started
+                val n = if (held > 1200) 3f else 1f
+                val unit = resources.displayMetrics.density * n
+                if (kv.nudgeDecal(id, dx * unit, dy * unit, done)) moved = true
+                zoom.invalidate()
+            }
+            val repeat = object : Runnable {
+                override fun run() {
+                    step(false)
+                    handler.postDelayed(this, 45)
+                }
+            }
+            // 讀螢幕（TalkBack）點兩下：移一點點
+            setOnClickListener { if (kv.nudgeDecal(id, dx * resources.displayMetrics.density, dy * resources.displayMetrics.density, true)) zoom.invalidate() }
+            setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        v.isPressed = true
+                        started = android.os.SystemClock.uptimeMillis()
+                        moved = false
+                        step(false)
+                        handler.postDelayed(repeat, 400)
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        v.isPressed = false
+                        handler.removeCallbacks(repeat)
+                        // 放開：存檔（移動量 0，只是告訴它「好了」）
+                        if (moved) kv.nudgeDecal(id, 0f, 0f, true)
+                    }
+                }
+                true
+            }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(px(3f), 0, px(3f), 0) })
+        key("←", "往左移", -1, 0)
+        key("↑", "往上移", 0, -1)
+        key("↓", "往下移", 0, 1)
+        key("→", "往右移", 1, 0)
+        panel.addView(row)
     }
 
     /**

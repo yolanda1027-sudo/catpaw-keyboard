@@ -1237,6 +1237,18 @@ class CatKeyboardView(
 
     private fun currentDecal(): Decal? = decalEditId?.let { id -> decals.firstOrNull { it.id == id } }
 
+    /**
+     * 主題工作室「微調」：把圖案往右移 dx、往下移 dy（px，正 = 右／下）。
+     * done = 放開方向鍵了（存檔）。回傳 false 代表找不到這個圖案。
+     */
+    fun nudgeDecal(id: String, dx: Float, dy: Float, done: Boolean): Boolean {
+        val d = decals.firstOrNull { it.id == id } ?: return false
+        val r = targetOf(d)?.first ?: return false
+        if (r.width() <= 0f || r.height() <= 0f) return false
+        replaceDecal(d.copy(x = d.x + dx / r.width(), y = d.y + dy / r.height()), done)
+        return true
+    }
+
     private fun replaceDecal(d0: Decal, done: Boolean) {
         // 手指拖過了：位置以畫面上的為準，分區、靠邊等存檔時再重算
         val d = d0.copy(band = 0, hx = 0)
