@@ -529,6 +529,13 @@ class SettingsActivity : Activity() {
         note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
         slider("鍵盤最下面多留空間", 0, 40, prefs.bottomPadDp, " dp") { prefs.bottomPadDp = it }
         note("把手勢提示條關掉之後，如果左下的「切換輸入法」、右下的「收起鍵盤」按鈕蓋到按鍵，把這個調高一點（大約 20～30）。一般不用動。")
+        root.addView(Switch(this).apply {
+            text = "平板、手機橫放時，按鍵放中間"
+            isChecked = prefs.wideCenter
+            setOnCheckedChangeListener { _, b -> prefs.wideCenter = b }
+            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+        })
+        note("開著（預設）＝螢幕很寬時，按鍵區照手機的比例放在中間，兩邊露出鍵盤背景，主題的圖不會被拉扁。關掉＝按鍵拉滿整個寬（按鍵會變得很寬）。手機直放時沒有差別。")
     }
 
     // ---------- 主題匯入／匯出 ----------

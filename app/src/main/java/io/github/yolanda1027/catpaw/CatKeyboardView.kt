@@ -265,12 +265,12 @@ class CatKeyboardView(
         // 動作選單的字比較多（「釘選」「解除釘選」），每格寬一點（但不要太寬，「取消」才對得準手指）；
         // 但不能比「螢幕寬 ÷ 選項數」寬（剪貼簿那種整排寬的鍵，選單才放得進畫面）
         val raw = if (o.actions != null) max(kr.rect.width(), keyH * 1.3f) else kr.rect.width()
-        val optW = if (o.actions != null) min(raw, min(keyH * 1.75f, width.toFloat() / o.items.size)) else min(raw, width.toFloat() / o.items.size)
+        val optW = if (o.actions != null) min(raw, min(keyH * 1.75f, cw / o.items.size)) else min(raw, cw / o.items.size)
         val w = optW * o.items.size
         // 預設的選項剛好在手指正上方（動作選單：剪貼簿那種整排寬的鍵，要對準手指，不是對準鍵的中間）
         val anchor = if (o.actions != null) downX else kr.rect.centerX()
         var left = anchor - optW * (o.default + 0.5f)
-        left = left.coerceIn(0f, max(0f, width - w))
+        left = left.coerceIn(0f, max(0f, cw - w))
         // 整個選單浮在按鍵上面（像 Google 注音），手指才不會擋到選項；太上面放不下才往下壓
         val bottom = kr.rect.top - keyH * 0.3f
         val top = max(-floatH, bottom - keyH * 1.15f)
@@ -420,11 +420,29 @@ class CatKeyboardView(
         panelCache = null
     }
 
+    // ---------- 寬螢幕（平板、手機橫放）：按鍵區不拉滿，放中間 ----------
+    /** 按鍵區左右各空多少（寬螢幕置中時；手機直放是 0） */
+    private var sidePad = 0f
+    /** 按鍵區的寬度（手機直放＝整個寬） */
+    private val cw get() = (width - 2 * sidePad).coerceAtLeast(0f)
+    /** 按鍵區的寬度（主題工作室用） */
+    val contentWidth: Float get() = cw
+    /** 寬螢幕時按鍵區最寬多少：照按鍵高度算，讓每顆鍵的比例接近手機（預設按鍵高度約 495dp） */
+    private val maxContentW get() = keyH * WIDE_RATIO
+
+    /** 鍵盤寬 screenW 的時候，按鍵區實際多寬（主題工作室預覽「手機橫放時」用） */
+    fun contentWidthFor(screenW: Float): Float = if (prefs.wideCenter && screenW > maxContentW) maxContentW else screenW
+
+    private fun updateSidePad() {
+        sidePad = if (prefs.wideCenter && width > maxContentW) (width - maxContentW) / 2 else 0f
+    }
+
     private fun layoutKeys() {
         keyRects.clear()
+        updateSidePad()
         // 量好的按鍵顏色不用清：記的時候已經帶著「哪一頁的哪顆鍵、多大」，換頁回來還能用
         //（換主題、改設計時 reloadPrefs 會清）
-        val w = width.toFloat()
+        val w = cw
         bottomRowFirst = 0
         if (w <= 0f) return
         // 連續捲動（剪貼簿）：上面那幾排跟著捲動的位置往上移；最下面那排固定
@@ -457,9 +475,10 @@ class CatKeyboardView(
     // ---------- 畫圖 ----------
 
     override fun onDraw(c: Canvas) {
-        val w = width.toFloat()
+        val fullW = width.toFloat()
         theme.fonts = fontSet
-        if (reading.isNotEmpty()) drawReadingBox(c)
+        if (reading.isNotEmpty()) { c.save(); c.translate(sidePad, 0f); drawReadingBox(c); c.restore() }
+        var w = fullW
         c.save()
         c.translate(0f, floatH) // 下面全部用「鍵盤本體」的座標畫
         theme.resetPaints() // 上一張畫面留下的透明度、遮罩清掉（不然背景有時候會整片透明）
@@ -478,6 +497,10 @@ class CatKeyboardView(
         }
         drawTopBarBg(c, w)
         keyStyles.keyboardImageFor(pageScope)?.let { ImageFill.draw(c, it, keyboardImageFrame(), null, fillBitmap(it.img), fillAnim(it)) }
+        // 背景、背景圖鋪滿整個寬；其他（上方列的字、快捷列、按鍵、圖案）畫在中間的按鍵區
+        c.save()
+        c.translate(sidePad, 0f)
+        w = cw
         drawBgDecals(c, front = false)
         // 選字列用「選字字體」，「中 / En」和分類列用按鍵字體
         drawTopBar(c, w)
@@ -521,6 +544,7 @@ class CatKeyboardView(
             drawPreview(c, w)
             if (effects.active(now)) postInvalidateOnAnimation()
         }
+        c.restore() // 按鍵區
         c.restore()
     }
 
@@ -942,7 +966,7 @@ class CatKeyboardView(
      * 快捷列開著時，按鍵整個往下移一條，背景圖案也跟著往下移，才會一直貼在同一顆鍵旁邊，
      * 大小也不會因為多了一條而變。
      */
-    private val bgRect get() = RectF(0f, quickH, width.toFloat(), kbH)
+    private val bgRect get() = RectF(0f, quickH, cw, kbH)
 
     /**
      * 把圖案放到現在的鍵盤上：
@@ -1252,7 +1276,7 @@ class CatKeyboardView(
         for (id in decalMarkIds) decals.firstOrNull { it.id == id && onMyBg(it) }?.let { d -> geoOf(d)?.let { decalHandles.drawMark(c, d, it) } }
         val d = currentDecal() ?: return
         val g = geoOf(d) ?: return
-        decalHandles.draw(c, d, g, width.toFloat(), kbH)
+        decalHandles.draw(c, d, g, cw, kbH)
     }
 
     private fun currentDecal(): Decal? = decalEditId?.let { id -> decals.firstOrNull { it.id == id } }
@@ -1417,7 +1441,7 @@ class CatKeyboardView(
 
     private fun drawEditHighlight(c: Canvas) {
         if (editTopBar || (editQuickBar && quickH > 0f)) {
-            val r = (if (editTopBar) RectF(0f, 0f, width.toFloat(), topH) else RectF(0f, topH, width.toFloat(), topH + quickH)).apply { inset(2f * dp, 2f * dp) }
+            val r = (if (editTopBar) RectF(0f, 0f, cw, topH) else RectF(0f, topH, cw, topH + quickH)).apply { inset(2f * dp, 2f * dp) }
             editPaint.color = android.graphics.Color.WHITE
             editPaint.pathEffect = null
             editPaint.strokeWidth = 4.5f * dp
@@ -1464,13 +1488,13 @@ class CatKeyboardView(
 
     /** 展開面板裡每個選項的位置（還沒加上捲動） */
     /** 展開面板左邊那一欄（放「簡」切換鍵）；設定裡關掉切換鍵就沒有這欄 */
-    private val panelLeft get() = if (prefs.showScToggle && isChinese) width / 7f else 0f // 英文建議字不用「簡」
+    private val panelLeft get() = if (prefs.showScToggle && isChinese) cw / 7f else 0f // 英文建議字不用「簡」
 
     /** 「簡」切換鍵的位置：左邊那一欄的最下面 */
     private fun scToggleRect() = RectF(0f, kbH - padBottom - panelRowH, panelLeft, kbH - padBottom)
 
     private fun panelLayout(): List<RectF> = panelCache ?: run {
-        val w = width.toFloat()
+        val w = cw
         val left = panelLeft
         val cell = (w - left) / 6f
         val size = keyH * 0.42f
@@ -1487,7 +1511,7 @@ class CatKeyboardView(
 
     private fun maxStripScroll(): Float {
         val last = stripLayout().lastOrNull() ?: return 0f
-        return max(0f, last.right + 6 * dp - (width - expandW))
+        return max(0f, last.right + 6 * dp - (cw - expandW))
     }
 
     private fun maxPanelScroll(): Float {
@@ -1564,7 +1588,7 @@ class CatKeyboardView(
         }
     }
 
-    private val tabW get() = width * 0.2f
+    private val tabW get() = cw * 0.2f
 
     private var downX = 0f
     private var downY = 0f
@@ -1576,6 +1600,8 @@ class CatKeyboardView(
     private var popupMoved = false
     /** 手指移動超過這麼多（dp）才算「滑開」 */
     private val POPUP_SLOP = 12f
+    /** 寬螢幕時按鍵區最寬＝按鍵高度的幾倍（手機直放大約 9 倍；11 倍＝按鍵比手機寬兩成左右，不會扁） */
+    private val WIDE_RATIO = 11f
 
     /** 上方列（中／En、選字列）、快捷符號列的高度（dp） */
     private val TOP_DP = 40f
@@ -1596,7 +1622,7 @@ class CatKeyboardView(
     private var quickPressed = -1
 
     private fun quickRect(i: Int): RectF {
-        val w = width.toFloat() / quickItems.size.coerceAtLeast(1)
+        val w = cw / quickItems.size.coerceAtLeast(1)
         return RectF(w * i, topH + 3 * dp, w * (i + 1), topH + quickH - 1 * dp)
     }
 
@@ -1608,7 +1634,7 @@ class CatKeyboardView(
         val qs = keyStyles.quick
         // 整列的底色
         qs?.strip?.takeIf { android.graphics.Color.alpha(it) > 0 }?.let {
-            c.drawRect(0f, topH, width.toFloat(), topH + quickH, android.graphics.Paint().apply { color = it })
+            c.drawRect(-sidePad, topH, cw + sidePad, topH + quickH, android.graphics.Paint().apply { color = it }) // 整條（含兩邊）
         }
         val native = if (qs != null) quickNative() else null
         quickItems.forEachIndexed { i, item ->
@@ -1657,7 +1683,7 @@ class CatKeyboardView(
     /** 快捷列現在實際的顏色（主題工作室顯示用） */
     fun quickBarColors(): QuickBarStyle {
         val qs = keyStyles.quick
-        val n = quickNative() ?: nativeColors(KeyRect(Key("@quick", Act.TEXT, style = Style.FUNC), RectF(0f, 0f, width / 8f, 40 * dp)))
+        val n = quickNative() ?: nativeColors(KeyRect(Key("@quick", Act.TEXT, style = Style.FUNC), RectF(0f, 0f, cw / 8f, 40 * dp)))
         return QuickBarStyle(
             strip = qs?.strip ?: theme.bg,
             bg = qs?.bg ?: n?.bg ?: theme.bg,
@@ -1779,7 +1805,7 @@ class CatKeyboardView(
     private fun finishPaging() {
         paging = false
         pagingPointer = -1
-        val w = if (verticalPaging) pagingGridH else width.toFloat()
+        val w = if (verticalPaging) pagingGridH else cw
         if (canPage(pageOffset) && kotlin.math.abs(pageOffset) > w * 0.22f) {
             val dir = if (pageOffset < 0) 1 else -1
             listener?.onSymbolSwipe(dir)
@@ -1819,13 +1845,13 @@ class CatKeyboardView(
     /** 分類列現在是不是可以左右滑（放不下） */
     internal fun tabsScrollable(): Boolean {
         val tabs = symbolTabs ?: return false
-        val w = width.toFloat()
+        val w = cw
         return w > 0f && tabEdges(w, tabs).last() > w + 0.5f
     }
 
     private fun maxTabScroll(): Float {
         val tabs = symbolTabs ?: return 0f
-        val w = width.toFloat()
+        val w = cw
         return (tabEdges(w, tabs).last() - w).coerceAtLeast(0f)
     }
 
@@ -2091,12 +2117,14 @@ class CatKeyboardView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        // 換成「鍵盤本體」的座標（扣掉上方透明區域）
-        e.offsetLocation(0f, -floatH)
+        // 換成「鍵盤本體」的座標（扣掉上方透明區域；寬螢幕再扣掉左邊空的那塊）
+        e.offsetLocation(-sidePad, -floatH)
         try {
+            // 寬螢幕：按在兩邊空白的地方不算（不然按到左邊會變成「中」）
+            if (e.actionMasked == MotionEvent.ACTION_DOWN && sidePad > 0f && (e.x < 0f || e.x > cw)) return true
             return handleTouch(e)
         } finally {
-            e.offsetLocation(0f, floatH)
+            e.offsetLocation(sidePad, floatH)
         }
     }
 
@@ -2109,7 +2137,7 @@ class CatKeyboardView(
         forgetPrompt?.let { word ->
             if (e.actionMasked == MotionEvent.ACTION_DOWN) {
                 if (e.y < topH) {
-                    val (remove, cancel) = forgetButtons(width.toFloat())
+                    val (remove, cancel) = forgetButtons(cw)
                     when {
                         remove.contains(e.x, e.y) -> { haptics.perform(this, prefs); forgetPrompt = null; listener?.onForgetAnswer(true) }
                         cancel.contains(e.x, e.y) -> { haptics.perform(this, prefs); forgetPrompt = null; listener?.onForgetAnswer(false) }
@@ -2149,7 +2177,7 @@ class CatKeyboardView(
                     } else onTopBarTap(x)
                 } else if (y < topH + quickH) {
                     // 快捷符號列：按下去馬上送出
-                    val idx = (x / (width.toFloat() / quickItems.size)).toInt().coerceIn(0, quickItems.size - 1)
+                    val idx = (x / (cw / quickItems.size)).toInt().coerceIn(0, quickItems.size - 1)
                     haptics.perform(this, prefs)
                     quickPressed = idx
                     invalidate()
@@ -2310,7 +2338,7 @@ class CatKeyboardView(
                 val x = e.x
                 val y = e.y
                 dragMode = when {
-                    y < topH && x >= width - expandW -> 3 // 展開箭頭
+                    y < topH && x >= cw - expandW -> 3 // 展開箭頭
                     y < topH -> 1
                     expanded -> 2
                     else -> 0
@@ -2390,7 +2418,7 @@ class CatKeyboardView(
 
     private fun onTopBarTap(x: Float) {
         symbolTabs?.let { tabs ->
-            val e = tabEdges(width.toFloat(), tabs)
+            val e = tabEdges(cw, tabs)
             val at = x + tabScroll
             val i = (1..tabs.size).firstOrNull { at < e[it] }?.minus(1) ?: (tabs.size - 1)
             haptics.perform(this, prefs)
@@ -2402,8 +2430,8 @@ class CatKeyboardView(
         when {
             x < tabW -> { haptics.perform(this, prefs); l.onTabChinese() }
             x < tabW * 2 -> { haptics.perform(this, prefs); l.onTabEnglish() }
-            x > width - tabW * 0.8f -> { haptics.perform(this, prefs); l.onHide() }
-            x > width - tabW * 1.6f && showClipboard -> { haptics.perform(this, prefs); l.onClipboard() }
+            x > cw - tabW * 0.8f -> { haptics.perform(this, prefs); l.onHide() }
+            x > cw - tabW * 1.6f && showClipboard -> { haptics.perform(this, prefs); l.onClipboard() }
         }
     }
 

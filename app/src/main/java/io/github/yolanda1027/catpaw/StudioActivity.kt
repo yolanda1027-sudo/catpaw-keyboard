@@ -2344,7 +2344,7 @@ class StudioActivity : Activity() {
         // 預覽的字：第一個不是箭頭的快捷符號（箭頭太小看不出來）
         val items = prefs.quickList().map { it.replace("|", "") }
         val label = items.firstOrNull { it.none { ch -> ch in "⇤⇥◀▶←→" } } ?: items.firstOrNull() ?: "()"
-        val buttonW = kv.width.toFloat() / items.size.coerceAtLeast(1) - 6 * resources.displayMetrics.density
+        val buttonW = kv.contentWidth / items.size.coerceAtLeast(1) - 6 * resources.displayMetrics.density
         NineSliceDialog.show(this, bmp, f, label, kv.quickBarColors().text ?: Color.BLACK, buttonW) { done ->
             if (done != null) setQuick({ it.copy(frame = done) })
         }
@@ -2455,13 +2455,14 @@ class StudioActivity : Activity() {
 
     /**
      * 手機轉橫的時候，框會變寬幾倍：鍵盤的寬度變成螢幕的長邊，高度不變（按鍵高度一樣）。
-     * 按鍵之間的空隙是固定的 dp，所以按鍵本身變寬的倍數比螢幕再多一點點。
+     * 背景照整個寬鋪；按鍵區太寬時會放中間、限制寬度（設定裡「按鍵放中間」），按鍵只變寬一點。
+     * 按鍵之間的空隙是固定的 dp，所以按鍵本身變寬的倍數比按鍵區再多一點點。
      */
     private fun landscapeWidth(frame: RectF, isKeyboard: Boolean): Float {
         val dm = resources.displayMetrics
         val long = maxOf(dm.widthPixels, dm.heightPixels).toFloat()
         val short = minOf(dm.widthPixels, dm.heightPixels).toFloat()
-        val ratio = long / short
+        val ratio = if (isKeyboard) long / short else kv.contentWidthFor(long) / kv.contentWidthFor(short)
         if (isKeyboard) return frame.width() * ratio
         val gap = 5 * dm.density // 一顆鍵左右的空隙（大約）
         return (frame.width() + gap) * ratio - gap
