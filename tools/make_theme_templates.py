@@ -80,17 +80,47 @@ def draw_top_zhen(d, a, title, sel):
     d.text(((tab * 2 + W - tab * 1.2 - TOP * 0.3) / 2, TOP / 2), f"{title}・上方列 1080×{round(TOP)}", font=f(23), fill=COL["top"] + (a,), anchor="mm")
 
 
-def draw_top_tabs(d, a, tabs, sel):
-    """其他頁：分類列，每一格一樣寬"""
-    tw = W / len(tabs)
+# 分類列排不下、可以左右滑的頁（跟 App 一樣：每格照字寬，不再平均分）
+SCROLL_TABS = {"kaomoji"}
+
+
+def tab_widths(d, tabs):
+    """照 App 的算法：字寬（「最近」是時鐘圖示、「返回」是 ◁）＋左右各 16dp，最少 48dp"""
+    out = []
+    for t in tabs:
+        if t == "最近":
+            tw = TOP * 0.6
+        else:
+            label = "◁" if t == "返回" else t
+            size = TOP * (0.32 if len(label) > 3 else 0.4)
+            bb = d.textbbox((0, 0), label, font=f(size))
+            tw = bb[2] - bb[0]
+        out.append(max(48 * DP, tw + 32 * DP))
+    return out
+
+
+def draw_top_tabs(d, a, tabs, sel, scroll=False):
+    """其他頁：分類列。平常每一格一樣寬；排不下的（顏文字）每格照字寬、可以左右滑"""
+    widths = tab_widths(d, tabs) if scroll else [W / len(tabs)] * len(tabs)
+    x0 = 0
     for i, t in enumerate(tabs):
-        x0 = tw * i
+        tw = widths[i]
+        if x0 >= W:
+            break
         if i == sel:
-            d.rounded_rectangle((x0 + 3 * DP, 6 * DP, x0 + tw - 3 * DP, TOP - 6 * DP), radius=10, outline=COL["top"] + (a,), width=3)
+            d.rounded_rectangle((x0 + 3 * DP, 6 * DP, min(W - 1, x0 + tw - 3 * DP), TOP - 6 * DP), radius=10, outline=COL["top"] + (a,), width=3)
         elif i > 0:
             d.line((x0, TOP * 0.3, x0, TOP * 0.7), fill=COL["top"] + (120,), width=1)
         d.text((x0 + tw / 2, TOP / 2), t, font=fit_text(d, t, tw - 10, 30), fill=COL["top"] + (a,), anchor="mm")
+        x0 += tw
+    if scroll:
+        # 右邊淡出＋箭頭：後面還有
+        for k in range(40):
+            d.line((W - 40 + k, 2, W - 40 + k, TOP - 2), fill=(255, 255, 255, int(6 * k)), width=1)
+        d.text((W - 16, TOP / 2), "›", font=f(36), fill=COL["top"] + (a,), anchor="mm")
+        return f"分類列 1080×{round(TOP)}，排不下：每格照字寬（約 {round(min(widths[2:] or widths))} 寬），左右滑看其他分類"
     # 尺寸寫在最下面那條（上方列整條都是分類，沒地方寫）
+    tw = widths[0]
     return f"分類列 1080×{round(TOP)}，每格 {round(tw)} 寬" if len(tabs) > 1 else f"上方列 1080×{round(TOP)}"
 
 
@@ -109,7 +139,7 @@ def draw(name, page, quick, file, overlay):
     if page["tabs"] == "zhen":
         draw_top_zhen(d, a, TITLES[name], 1 if name == "english" else 0)
     else:
-        top_note = draw_top_tabs(d, a, page["tabs"], SELECTED_TAB.get(name, 0))
+        top_note = draw_top_tabs(d, a, page["tabs"], SELECTED_TAB.get(name, 0), scroll=name in SCROLL_TABS)
 
     y = TOP
     if quick:
