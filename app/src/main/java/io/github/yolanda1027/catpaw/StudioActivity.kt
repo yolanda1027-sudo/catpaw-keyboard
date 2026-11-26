@@ -867,6 +867,16 @@ class StudioActivity : Activity() {
             val pct = { v: Int -> if (v == 0) "0（原位置）" else (if (v > 0) "+$v%" else "$v%") }
             slider("左右（往右是 +）", (ls.dx * 100).roundToInt().coerceIn(-50, 50), -50, 50, pct) { v -> live { it.copy(dx = v / 100f) } }
             slider("上下（往下是 +）", (ls.dy * 100).roundToInt().coerceIn(-50, 50), -50, 50, pct) { v -> live { it.copy(dy = v / 100f) } }
+            // 微調：跟單顆鍵一樣一次 1dp（照選到的那顆鍵的大小換算），放開才重畫面板、更新上面的滑桿
+            text("微調（按住不放會一直移）", 15f).setPadding(0, px(10f), 0, px(2f))
+            val ref = selected
+            nudgeButtons { dx, dy, done ->
+                val (w, h) = ref?.let { kv.keySizeOf(it) } ?: return@nudgeButtons false
+                if (w <= 0f || h <= 0f) return@nudgeButtons false
+                if (dx != 0f || dy != 0f) live { it.copy(dx = (it.dx + dx / w).coerceIn(-0.5f, 0.5f), dy = (it.dy + dy / h).coerceIn(-0.5f, 0.5f)) }
+                if (done) refresh()
+                true
+            }
             slider("大小", (ls.scale * 100).roundToInt().coerceIn(30, 300), 30, 300, { "$it%" }) { v -> live { it.copy(scale = v / 100f) } }
             if (ls.dx != 0f || ls.dy != 0f || ls.scale != 1f) button("↺ ${title}回到原本的位置和大小") {
                 live { it.copy(dx = 0f, dy = 0f, scale = 1f) }
@@ -1483,7 +1493,7 @@ class StudioActivity : Activity() {
                 }
             }
             // 讀螢幕（TalkBack）點兩下：移一點點
-            setOnClickListener { if (move(dx * resources.displayMetrics.density, dy * resources.displayMetrics.density, true)) zoom.invalidate() }
+            setOnClickListener { if (move(dx * resources.displayMetrics.density, dy * resources.displayMetrics.density, true)) { zoom.invalidate(); commitHistory() } }
             setOnTouchListener { v, e ->
                 when (e.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
@@ -1497,7 +1507,7 @@ class StudioActivity : Activity() {
                         v.isPressed = false
                         handler.removeCallbacks(repeat)
                         // 放開：存檔（移動量 0，只是告訴它「好了」）
-                        if (moved) move(0f, 0f, true)
+                        if (moved) { move(0f, 0f, true); commitHistory() } // 放開＝上一步可以退回的一步
                     }
                 }
                 true

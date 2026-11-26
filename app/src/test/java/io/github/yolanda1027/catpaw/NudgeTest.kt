@@ -94,4 +94,31 @@ class NudgeTest {
         // 面板還在編輯這個小字
         assertTrue(views(a.window.decorView).any { it is android.widget.TextView && it.text.toString().startsWith("正在編輯：小字") })
     }
+
+    @Test fun arrowsMoveWholeGroupLabels() {
+        val p = Prefs(ctx)
+        p.theme = "magic_yellow"
+        val xKey = Layouts.ZHUYIN[3][3]
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        kv.editPicker!!.invoke(xKey)
+        ShadowLooper.idleMainLooper()
+        // 切到「整類一起改」
+        StudioActivity::class.java.getDeclaredField("groupScope").apply { isAccessible = true }.set(a, true)
+        StudioActivity::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }.invoke(a)
+        ShadowLooper.idleMainLooper()
+        val gid = KeyStyles.groupIdOf(xKey)
+        fun label(n: String) = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map[gid]?.labels?.get(n) ?: LabelStyle()
+        fun arrows(desc: String) = views(a.window.decorView).filter { it is Button && it.contentDescription == desc }
+        // 主字、小字各有一組方向鍵
+        assertEquals(2, arrows("往右移").size)
+        press(arrows("往右移")[0], 50)
+        assertTrue("主字 dx = ${label("main").dx}", label("main").dx > 0f && label("main").dx < 0.05f)
+        assertEquals(0f, label("sub").dx, 0.0001f)
+        // 小字往上按住：一直移，最多到 -50%
+        press(arrows("往上移")[1], 3000)
+        assertTrue("小字 dy = ${label("sub").dy}", label("sub").dy < -0.1f && label("sub").dy >= -0.5f)
+        // 上面的滑桿也跟著更新
+        assertTrue(views(a.window.decorView).any { it is android.widget.TextView && it.text.toString().startsWith("左右（往右是 +）：+") })
+    }
 }
