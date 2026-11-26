@@ -514,6 +514,19 @@ class StudioActivity : Activity() {
         if (rebuild) refresh()
     }
 
+    /** 微調按鍵上的字：往右 dx、往下 dy（px）。done = 放開方向鍵了（重畫面板） */
+    private fun nudgeLabel(key: Key, name: String, dx: Float, dy: Float, done: Boolean): Boolean {
+        val (w, h) = kv.keySizeOf(key) ?: return false
+        if (w <= 0f || h <= 0f) return false
+        if (dx != 0f || dy != 0f) {
+            val cur = styles.map[KeyStyles.idOf(key)]?.labels?.get(name) ?: styles.resolve(key)?.labels?.get(name) ?: LabelStyle()
+            setLabelStyle(key, name, cur.copy(dx = cur.dx + dx / w, dy = cur.dy + dy / h), rebuild = false)
+        }
+        if (done) refresh()
+        zoom.invalidate()
+        return true
+    }
+
     private fun setLabelStyle(key: Key, name: String, ls: LabelStyle?, rebuild: Boolean = true) = updateOwn(key, { st ->
         val m = (st.labels ?: emptyMap()).toMutableMap()
         if (ls == null || ls.isEmpty) m.remove(name) else m[name] = ls
@@ -1393,7 +1406,7 @@ class StudioActivity : Activity() {
         text(tip, 14f).setPadding(0, px(8f), 0, px(4f))
         section("微調")
         text("按一下移一點點；按住不放會一直移，越來越快", 13f, dim = true)
-        nudgeButtons(d.id)
+        nudgeButtons { dx, dy, done -> kv.nudgeDecal(d.id, dx, dy, done) }
         section("對齊")
         text("對齊$where" + (if (d.onBackground) "" else "（按鍵看得到的那一塊）"), 13f, dim = true)
         alignButtons(1, distribute = false) { op -> doAlign(if (d.onBackground) null else selected, listOf(d.id), op) }
@@ -1447,7 +1460,7 @@ class StudioActivity : Activity() {
      * 放開才存檔、重畫面板（按住的時候面板不能重建，不然按著的按鈕會不見）。
      */
     @android.annotation.SuppressLint("ClickableViewAccessibility")
-    private fun nudgeButtons(id: String) {
+    private fun nudgeButtons(move: (dx: Float, dy: Float, done: Boolean) -> Boolean) {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         fun key(label: String, desc: String, dx: Int, dy: Int) = row.addView(Button(this).apply {
@@ -1460,7 +1473,7 @@ class StudioActivity : Activity() {
                 val held = android.os.SystemClock.uptimeMillis() - started
                 val n = if (held > 1200) 3f else 1f
                 val unit = resources.displayMetrics.density * n
-                if (kv.nudgeDecal(id, dx * unit, dy * unit, done)) moved = true
+                if (move(dx * unit, dy * unit, done)) moved = true
                 zoom.invalidate()
             }
             val repeat = object : Runnable {
@@ -1470,7 +1483,7 @@ class StudioActivity : Activity() {
                 }
             }
             // 讀螢幕（TalkBack）點兩下：移一點點
-            setOnClickListener { if (kv.nudgeDecal(id, dx * resources.displayMetrics.density, dy * resources.displayMetrics.density, true)) zoom.invalidate() }
+            setOnClickListener { if (move(dx * resources.displayMetrics.density, dy * resources.displayMetrics.density, true)) zoom.invalidate() }
             setOnTouchListener { v, e ->
                 when (e.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
@@ -1484,7 +1497,7 @@ class StudioActivity : Activity() {
                         v.isPressed = false
                         handler.removeCallbacks(repeat)
                         // 放開：存檔（移動量 0，只是告訴它「好了」）
-                        if (moved) kv.nudgeDecal(id, 0f, 0f, true)
+                        if (moved) move(0f, 0f, true)
                     }
                 }
                 true
@@ -1675,6 +1688,9 @@ class StudioActivity : Activity() {
         header("正在編輯：" + labelName(key, name))
         text("貼在：" + KeyStyles.nameOf(key), 14f, dim = true)
         text("👆 拖中間或下面的十字＝移動、拖四個角＝放大縮小、拖上面的圓圈＝旋轉；框上面的小工具可以換顏色、換上下層、重設、刪除", 14f).setPadding(0, px(8f), 0, px(4f))
+        section("微調")
+        text("按一下移一點點；按住不放會一直移，越來越快", 13f, dim = true)
+        nudgeButtons { dx, dy, done -> nudgeLabel(key, name, dx, dy, done) }
         section("對齊")
         text("對齊${KeyStyles.nameOf(key)}（按鍵看得到的那一塊）", 13f, dim = true)
         alignButtons(1, distribute = false) { op -> doAlign(key, listOf(LABEL + name), op) }

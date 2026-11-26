@@ -65,4 +65,33 @@ class NudgeTest {
         press(arrow("往左移"), 1000)
         assertTrue("按住移了 ${before - cur().x}", before - cur().x > step * 10)
     }
+
+    @Test fun arrowsMoveKeyLabel() {
+        val p = Prefs(ctx)
+        p.theme = "magic_yellow"
+        val xKey = Layouts.ZHUYIN[3][3] // ㄒ（小字 v）
+        val a = Robolectric.buildActivity(StudioActivity::class.java).setup().get()
+        val kv = StudioActivity::class.java.getDeclaredField("kv").apply { isAccessible = true }.get(a) as CatKeyboardView
+        kv.editPicker!!.invoke(xKey)
+        ShadowLooper.idleMainLooper()
+        // 選到小字 v
+        StudioActivity::class.java.getDeclaredField("decalSel").apply { isAccessible = true }.set(a, "label:sub")
+        StudioActivity::class.java.getDeclaredMethod("refresh").apply { isAccessible = true }.invoke(a)
+        ShadowLooper.idleMainLooper()
+        fun arrow(desc: String) = views(a.window.decorView).first { it is Button && it.contentDescription == desc }
+        fun cur() = KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄒ"]?.labels?.get("sub") ?: LabelStyle()
+        fun subX() = kv.keyElements(xKey).first { it.decal.id == "label:sub" }.decal.x
+        val x0 = subX()
+        press(arrow("往右移"), 50)
+        assertTrue("dx = ${cur().dx}", cur().dx > 0f && cur().dx < 0.05f)
+        assertEquals(0f, cur().dy, 0.0001f)
+        assertTrue(subX() > x0)
+        // 主字沒動
+        assertTrue(KeyStyles.load(Prefs(ctx, ThemeStore.WORK)).map["zy:ㄒ"]?.labels?.get("main") == null)
+        // 按住往下：一直移
+        press(arrow("往下移"), 1000)
+        assertTrue("dy = ${cur().dy}", cur().dy > 0.1f)
+        // 面板還在編輯這個小字
+        assertTrue(views(a.window.decorView).any { it is android.widget.TextView && it.text.toString().startsWith("正在編輯：小字") })
+    }
 }

@@ -682,6 +682,10 @@ class CatKeyboardView(
         }
     }
 
+    /** 這顆鍵現在的寬、高（主題工作室微調用） */
+    fun keySizeOf(key: Key): Pair<Float, Float>? =
+        keyRects.firstOrNull { it.key == key }?.rect?.let { it.width() to it.height() }
+
     /** 編輯框拖完的「字」換回這個字的位置、大小、角度（顏色照舊） */
     fun labelStyleFrom(key: Key, d: Decal): LabelStyle? {
         val kr = keyRects.firstOrNull { it.key == key } ?: return null
