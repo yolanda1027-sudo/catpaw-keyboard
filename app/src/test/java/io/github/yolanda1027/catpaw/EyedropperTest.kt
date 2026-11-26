@@ -118,7 +118,7 @@ class EyedropperTest {
         f.outputStream().use { img.compress(Bitmap.CompressFormat.PNG, 100, it) }
         button(cd.window!!.decorView, "🖼️ 從圖片汲色").performClick()
         val req = shadowOf(a).nextStartedActivityForResult
-        assertEquals(Intent.ACTION_OPEN_DOCUMENT, req.intent.action)
+        assertEquals(android.provider.MediaStore.ACTION_PICK_IMAGES, req.intent.action) // 相片挑選器（按一次返回就關掉）
         assertEquals(Eyedropper.REQ_IMAGE, req.requestCode)
         shadowOf(a).receiveResult(req.intent, android.app.Activity.RESULT_OK, Intent().setData(Uri.fromFile(f)))
         ShadowLooper.idleMainLooper()
