@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** 平板、手機橫放：按鍵區照手機的比例放中間，兩邊露出背景；設定可以關掉 */
+/** 平板、手機橫放：鍵盤跟手機直放一樣大、放中間，兩邊露出背景；平板照按鍵高度等比例放大 */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
@@ -24,10 +24,10 @@ class WideScreenTest {
     private val dp = 2.625f
     private val log = ArrayList<String>()
 
-    private fun board(widthPx: Int, center: Boolean = true): CatKeyboardView {
+    private fun board(widthPx: Int, keyHeightDp: Int = 45): CatKeyboardView {
         val p = Prefs(ctx)
-        p.wideCenter = center
         p.theme = "magic_yellow"
+        p.keyHeightDp = keyHeightDp
         val kv = CatKeyboardView(ctx, p, Haptics(ctx))
         kv.rows = Layouts.ZHUYIN
         kv.quickItems = listOf("，", "。", "？", "！")
@@ -58,15 +58,16 @@ class WideScreenTest {
         assertEquals(1080f, kv.contentWidth, 0.5f)
     }
 
-    @Test fun tabletCentered() {
-        val kv = board(2560)
+    @Test fun phoneLandscapeSameAsPortrait() {
+        val portrait = board(1080)
+        val kv = board(2340) // 同一支手機轉橫
         val cw = kv.contentWidth
-        // 按鍵區大約是按鍵高度 45dp 的 11 倍，放中間
-        assertEquals(45 * dp * 11f, cw, 1f)
-        val pad = (2560 - cw) / 2
-        // 按鍵只比手機寬兩成左右（手機上一格 108，不會變超寬）
-        val (kw, _) = kv.keySizeOf(Layouts.ZHUYIN[1][0])!!
-        assertTrue("注音鍵寬 $kw", kw < 108 * 1.25f)
+        // 按鍵區跟直放一樣寬（這支手機直放的寬），每顆鍵大小幾乎一樣
+        val shortSide = minOf(ctx.resources.displayMetrics.widthPixels, ctx.resources.displayMetrics.heightPixels).toFloat()
+        assertEquals(shortSide, cw, 0.5f)
+        assertEquals(portrait.keySizeOf(Layouts.ZHUYIN[1][0])!!.first, kv.keySizeOf(Layouts.ZHUYIN[1][0])!!.first, 1f)
+        assertEquals(portrait.keySizeOf(Layouts.ZHUYIN[1][0])!!.second, kv.keySizeOf(Layouts.ZHUYIN[1][0])!!.second, 0.01f)
+        val pad = (2340 - cw) / 2
         // 點按鍵區裡的「中」：有反應
         val topY = kv.floatH + 20 * dp
         tap(kv, pad + cw * 0.1f, topY)
@@ -74,21 +75,30 @@ class WideScreenTest {
         // 點兩邊空白的地方：沒反應（不會變成「中」、不會收鍵盤）
         log.clear()
         tap(kv, pad / 2, topY)
-        tap(kv, 2560 - pad / 2, topY)
+        tap(kv, 2340 - pad / 2, topY)
         tap(kv, pad / 2, kv.measuredHeight * 0.6f)
         assertEquals(emptyList<String>(), log)
         // 快捷列第一顆：在按鍵區的左邊
         tap(kv, pad + cw * 0.1f, kv.floatH + 40 * dp + 20 * dp)
         assertEquals(listOf("quick ，"), log)
-        val bmp = Bitmap.createBitmap(2560, kv.measuredHeight, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(2340, kv.measuredHeight, Bitmap.Config.ARGB_8888)
         kv.draw(Canvas(bmp))
         File("build/renders").mkdirs()
-        File("build/renders/wide-tablet.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File("build/renders/wide-landscape.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    @Test fun canTurnOff() {
-        val kv = board(2560, center = false)
-        assertEquals(2560f, kv.contentWidth, 0.5f)
-        Prefs(ctx).wideCenter = true
+    /** 平板（短邊 800dp）：照一般手機的比例；按鍵高度調高，整個鍵盤等比例放大 */
+    @Test @Config(qualifiers = "w1280dp-h800dp-xhdpi")
+    fun tabletFollowsKeyHeight() {
+        val d = 2f
+        val kv = board(2560)
+        assertEquals(45 * d * 411f / 45f, kv.contentWidth, 1f)
+        val big = board(2560, keyHeightDp = 60)
+        assertEquals(60 * d * 411f / 45f, big.contentWidth, 1f)
+        // 等比例：寬高比跟預設一樣
+        val (w1, h1) = kv.keySizeOf(Layouts.ZHUYIN[1][0])!!
+        val (w2, h2) = big.keySizeOf(Layouts.ZHUYIN[1][0])!!
+        assertEquals(w1 / h1, w2 / h2, 0.01f)
+        Prefs(ctx).keyHeightDp = 45
     }
 }

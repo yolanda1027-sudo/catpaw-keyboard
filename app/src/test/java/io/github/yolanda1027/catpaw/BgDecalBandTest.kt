@@ -89,7 +89,9 @@ class BgDecalBandTest {
     }
 
     /** 左右靠邊：換到比較寬的手機，角落的葉子還是貼著角落，小獾還是在正中間；按鍵左上角的小愛心也一樣 */
-    @Test fun edgesStayOnWiderPhone() {
+    // 寬 1300 的手機：螢幕本身就這麼寬（直放），不是手機轉橫
+    @Test @Config(qualifiers = "w496dp-h891dp-420dpi")
+    fun edgesStayOnWiderPhone() {
         val p = Prefs(ctx)
         val v = keyboardW(1080)
         val h = 40 * dp + 6 * dp + 45 * 5 * dp + 10 * dp

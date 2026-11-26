@@ -427,14 +427,26 @@ class CatKeyboardView(
     private val cw get() = (width - 2 * sidePad).coerceAtLeast(0f)
     /** 按鍵區的寬度（主題工作室用） */
     val contentWidth: Float get() = cw
-    /** 寬螢幕時按鍵區最寬多少：照按鍵高度算，讓每顆鍵的比例接近手機（預設按鍵高度約 495dp） */
-    private val maxContentW get() = keyH * WIDE_RATIO
+    /** 按鍵區左邊在畫面上的哪裡（keyRectOf 的座標要加上這個才是畫面座標） */
+    val contentLeft: Float get() = sidePad
+    /**
+     * 寬螢幕時按鍵區最寬多少：跟手機直放一樣大，主題才不會變形。
+     * - 手機（短邊不到 600dp）：就是這支手機直放時的寬度 → 轉橫後按鍵跟直放一模一樣
+     * - 平板、折疊機打開：照一般手機的比例（寬 ≈ 按鍵高度 × 9.13，預設 45dp 時約 411dp）；
+     *   想大一點就調高「按鍵高度」，整個鍵盤等比例放大
+     */
+    private val maxContentW: Float get() {
+        val dm = resources.displayMetrics
+        val short = minOf(dm.widthPixels, dm.heightPixels).toFloat()
+        return if (short < 600 * dp) short else keyH * PHONE_RATIO
+    }
 
     /** 鍵盤寬 screenW 的時候，按鍵區實際多寬（主題工作室預覽「手機橫放時」用） */
-    fun contentWidthFor(screenW: Float): Float = if (prefs.wideCenter && screenW > maxContentW) maxContentW else screenW
+    fun contentWidthFor(screenW: Float): Float = minOf(screenW, maxContentW)
 
     private fun updateSidePad() {
-        sidePad = if (prefs.wideCenter && width > maxContentW) (width - maxContentW) / 2 else 0f
+        // 只差一點點（導覽列、圓角讓寬度差幾個像素）就不要留邊
+        sidePad = if (width > maxContentW + 8 * dp) (width - maxContentW) / 2 else 0f
     }
 
     private fun layoutKeys() {
@@ -1600,8 +1612,8 @@ class CatKeyboardView(
     private var popupMoved = false
     /** 手指移動超過這麼多（dp）才算「滑開」 */
     private val POPUP_SLOP = 12f
-    /** 寬螢幕時按鍵區最寬＝按鍵高度的幾倍（手機直放大約 9 倍；11 倍＝按鍵比手機寬兩成左右，不會扁） */
-    private val WIDE_RATIO = 11f
+    /** 一般手機直放時，鍵盤寬是按鍵高度的幾倍（S24 Ultra：411dp ÷ 45dp） */
+    private val PHONE_RATIO = 411f / 45f
 
     /** 上方列（中／En、選字列）、快捷符號列的高度（dp） */
     private val TOP_DP = 40f

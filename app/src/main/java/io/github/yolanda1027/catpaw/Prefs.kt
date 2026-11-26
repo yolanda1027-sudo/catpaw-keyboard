@@ -144,15 +144,6 @@ class Prefs(context: Context, val file: String = ThemeStore.LIVE) {
         get() = sp.getInt("bottom_pad_dp", 0)
         set(v) = sp.edit().putInt("bottom_pad_dp", v).apply()
 
-    /**
-     * 寬螢幕（平板、手機橫放、折疊機打開）時，按鍵區不拉滿、放在中間（預設開）。
-     * 關掉＝跟以前一樣拉滿整個寬（按鍵會變很寬）。
-     */
-    var wideCenter: Boolean
-        // 跟主題無關的手機設定：一律存在正在用的那份（工作室的工作副本也讀得到）
-        get() = app.getSharedPreferences(ThemeStore.LIVE, Context.MODE_PRIVATE).getBoolean("wide_center", true)
-        set(v) = app.getSharedPreferences(ThemeStore.LIVE, Context.MODE_PRIVATE).edit().putBoolean("wide_center", v).apply()
-
     /** 剪貼簿沒釘選的紀錄留多久（小時）：1、8、12、24、72、168、336 */
     var clipKeepHours: Int
         get() = sp.getInt("clip_keep_hours", 1).takeIf { it in ClipHistory.KEEP_HOURS } ?: 1

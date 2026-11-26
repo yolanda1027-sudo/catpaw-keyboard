@@ -57,7 +57,7 @@ class StudioLandscapeTest {
         val k = stage.scaleY
         // kv 在 stage 裡的座標 → 縮放（以 stage 上緣中間為中心）→ 畫面
         val stageLoc = IntArray(2).also { (left).getLocationInWindow(it) }
-        val sx = stageLoc[0] + stage.pivotX + (kv.left + r.centerX() - stage.pivotX) * k
+        val sx = stageLoc[0] + stage.pivotX + (kv.left + kv.contentLeft + r.centerX() - stage.pivotX) * k
         val sy = stageLoc[1] + (kv.top + r.centerY() + kv.floatH) * k
         val t = SystemClock.uptimeMillis()
         root.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, sx, sy, 0))
