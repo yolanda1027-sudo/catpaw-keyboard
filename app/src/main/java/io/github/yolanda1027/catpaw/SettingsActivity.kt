@@ -251,27 +251,32 @@ class SettingsActivity : Activity() {
         val group: String = "",
     )
 
-    /** 首頁的三區（照這個順序） */
-    private val groups = listOf("外觀", "打字", "其他")
+    /** 首頁的幾區（照這個順序） */
+    private val groups = listOf("外觀", "打字", "版面", "其他")
 
     private val pages = listOf(
-        PageInfo("look", "🎨 主題", "選主題、匯入主題檔、按鍵高度、功能鍵貼圖、圖片存法", true, group = "外觀"),
-        PageInfo("studio", "🖌️ 主題工作室", "點按鍵改樣子：底圖、顏色、圖案、背景", false, group = "外觀"),
-        PageInfo("effect", "✨ 按鍵動畫", "彈一下、愛心、蝴蝶、魔法火花…", true, group = "外觀"),
-        PageInfo("font", "🔤 字體", "中文、注音、英文各用不同字體，也可以上傳自己的", true, group = "外觀"),
+        PageInfo("look", "🎨 主題", "換主題、匯入、下載區；目前主題的按鍵高度、功能鍵貼圖", true, group = "外觀"),
+        PageInfo("studio", "🖌️ 主題工作室", "點按鍵改樣子：底圖、顏色、圖案、背景（也可以加到桌面）", false, group = "外觀"),
+        PageInfo("font", "🔤 字體", "跟著主題：中文、注音、英文各用不同字體，也可以上傳自己的", true, group = "外觀"),
+        PageInfo("effect", "✨ 按鍵動畫", "跟著主題：彈一下、愛心、蝴蝶、魔法火花…", true, group = "外觀"),
         PageInfo("haptic", "🎵 手感", "震動、長按時間、按下時放大的字", false, group = "打字"),
         PageInfo("candidate", "📝 選字與記憶", "組字方式、簡體／繁體、英文建議字、清除學習紀錄", false, group = "打字"),
         PageInfo("quick", "⌨ 快捷符號列", "一鍵打出成對符號、移動游標", true, group = "打字"),
         PageInfo("clip", "📋 剪貼簿", "剪貼簿紀錄開關、留多久、釘選的順序、清除", false, group = "打字"),
         PageInfo("mystickers", "🖼️ 我的貼圖", "上傳自己的圖片，在表情鍵盤裡用", false, group = "打字"),
-        PageInfo("tips", "💡 小提示", "一些好用的小技巧", false, group = "其他"),
+        PageInfo("layout", "📐 鍵盤大小與位置", "按鍵高度、最下面留空間、導覽列底色、平板和橫放", true, group = "版面"),
+        PageInfo("tips", "💡 小提示", "打字的小技巧、桌面小工具", false, group = "其他"),
         PageInfo("privacy", "🔒 隱私權", "打的字只留在手機裡：存了什麼、怎麼刪", false, group = "其他"),
         PageInfo("licenses", "📜 開放原始碼授權", "注音詞庫、繁簡對照表、表情符號、字體的授權", false, group = "其他"),
         // 從「主題」頁跳進來，不列在首頁
         PageInfo("color", "🖌 自訂配色", "自己調鍵盤的 5 個顏色", true, parent = "look", listed = false),
+        PageInfo("stickers", "🖼️ 功能鍵貼圖", "Enter、刪除、空白、?123、表情 換成圖片", true, parent = "look", listed = false),
     )
 
-    private fun parentOf(id: String) = pages.firstOrNull { it.id == id }?.parent ?: "home"
+    /** 從別頁的捷徑點進來的（例如主題頁的「字體」）：按返回回到那一頁，不回首頁 */
+    private var backTo: Pair<String, String>? = null
+
+    private fun parentOf(id: String) = backTo?.takeIf { it.first == id }?.second ?: pages.firstOrNull { it.id == id }?.parent ?: "home"
     private var scroll: ScrollView? = null
 
     /** 每一頁滑到哪裡（按返回回到上一層、同一頁重新整理時，接著停在原本的位置） */
@@ -370,11 +375,15 @@ class SettingsActivity : Activity() {
         old?.let { o -> scroll?.let { scrollMemory[o] = it.scrollY } }
         val goingBack = restoreScroll || id == old || (old != null && id == parentOf(old))
         if (!goingBack) scrollMemory.remove(id)
+        // 捷徑的返回只用一次：離開那一頁（回去或去別頁）就恢復平常的上一層
+        if (backTo != null && id != backTo!!.first) backTo = null
         page = id
         val info = pages.firstOrNull { it.id == id }
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         preview = null
         status = null
+        enableButton = null
+        switchButton = null
         if (info?.preview == true) {
             val v = CatKeyboardView(this, prefs, haptics)
             // 預覽裡放幾個選字，才看得到「選字字體」
@@ -411,6 +420,8 @@ class SettingsActivity : Activity() {
             "tips" -> pageTips()
             "licenses" -> pageLicenses()
             "privacy" -> pagePrivacy()
+            "layout" -> pageLayout()
+            "stickers" -> pageStickers()
             else -> pageHome()
         }
         updateStatus()
@@ -420,14 +431,19 @@ class SettingsActivity : Activity() {
     private fun pageHome() {
         title("🐾 貓爪鍵盤")
 
+        // 開始使用：已經在用就只留一行；還沒啟用、還沒切換過去才顯示 ① ②
         section("開始使用")
         status = note("")
-        button("① 到系統設定啟用「${getString(R.string.ime_name)}」") {
-            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
-        }
-        button("② 切換成貓爪鍵盤") {
-            getSystemService(InputMethodManager::class.java).showInputMethodPicker()
-        }
+        enableButton = Button(this).apply {
+            text = "① 到系統設定啟用「${getString(R.string.ime_name)}」"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
+        }.also { root.addView(it) }
+        switchButton = Button(this).apply {
+            text = "② 切換成貓爪鍵盤"
+            isAllCaps = false
+            setOnClickListener { getSystemService(InputMethodManager::class.java).showInputMethodPicker() }
+        }.also { root.addView(it) }
 
         section("試打區")
         root.addView(EditText(this).apply {
@@ -439,7 +455,6 @@ class SettingsActivity : Activity() {
         for (g in groups) {
             section(g)
             for (p in pages.filter { it.listed && it.group == g }) menuItem(p)
-            if (g == "外觀") note("想從桌面直接打開主題工作室：長按桌面空白處 →「小工具」→ 找「貓爪鍵盤」，把「主題工作室」拉到桌面上。也可以長按貓爪鍵盤的圖示，選「主題工作室」。")
         }
 
         // 版本號：回報問題、確認有沒有更新到最新版時看這裡
@@ -520,6 +535,17 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, b -> prefs.preview = b }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
+    }
+
+    /** 鍵盤大小與位置：按鍵高度（跟著主題）、最下面留空間、導覽列底色、平板和橫放 */
+    private fun pageLayout() {
+        subTitle("按鍵高度")
+        themeBanner("按鍵高度")
+        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（一般手機鍵盤約 45）") { prefs.keyHeightDp = it }
+
+        subTitle("最下面")
+        slider("鍵盤最下面多留空間", 0, 40, prefs.bottomPadDp, " dp") { prefs.bottomPadDp = it }
+        note("把手勢提示條關掉之後，如果左下的「切換輸入法」、右下的「收起鍵盤」按鈕蓋到按鍵，把這個調高一點（大約 20～30）。一般不用動。")
         root.addView(Switch(this).apply {
             text = "最下面的導覽列也塗上鍵盤底色"
             isChecked = prefs.navBarKeyboardBg
@@ -527,9 +553,29 @@ class SettingsActivity : Activity() {
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
         note("關掉（預設）＝導覽列用系統原本的顏色，跟其他鍵盤一樣。")
-        slider("鍵盤最下面多留空間", 0, 40, prefs.bottomPadDp, " dp") { prefs.bottomPadDp = it }
-        note("把手勢提示條關掉之後，如果左下的「切換輸入法」、右下的「收起鍵盤」按鈕蓋到按鍵，把這個調高一點（大約 20～30）。一般不用動。")
-        note("平板、手機橫放時：鍵盤跟手機直放一樣大、放在中間，兩邊露出鍵盤背景，主題的圖不會被拉扁。想在平板上大一點，把主題頁的「按鍵高度」調高，整個鍵盤會等比例放大。")
+
+        subTitle("平板、手機橫放")
+        note("螢幕很寬時，鍵盤跟手機直放一樣大、放在中間，兩邊露出鍵盤背景，主題的圖不會被拉扁。想在平板上大一點，把上面的「按鍵高度」調高，整個鍵盤會等比例放大。")
+    }
+
+    /**
+     * 跟著主題存的設定（字體、按鍵動畫、按鍵高度、功能鍵貼圖）：頁面上寫清楚是存在哪個主題，
+     * 免得換了主題以為設定不見了
+     */
+    private fun themeBanner(what: String) {
+        val name = ThemeStore.nameOf(this, ThemeStore.activeId(prefs))
+        root.addView(TextView(this).apply {
+            text = "🎨 ${what}存在目前的主題「$name」裡，換主題會用那個主題自己的。"
+            textSize = 13f
+            val pad = (10 * dp).toInt()
+            setPadding(pad, (8 * dp).toInt(), pad, (8 * dp).toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 10 * dp
+                setColor(0x14E8628E)
+            }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = (8 * dp).toInt()
+        })
     }
 
     // ---------- 主題匯入／匯出 ----------
@@ -650,7 +696,44 @@ class SettingsActivity : Activity() {
 
     private fun pageTheme() {
         val active = ThemeStore.activeId(prefs)
-        // 最常用的兩個動作放最上面
+        // 1. 目前主題：最常用的（在工作室編輯、按鍵高度）放最上面，包成一張卡片
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = (14 * dp).toInt()
+            setPadding(pad, (4 * dp).toInt(), pad, pad)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 14 * dp
+                setColor(0x14E8628E)
+            }
+        }
+        root.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (8 * dp).toInt()
+        })
+        val outerRoot = root
+        root = card // 下面這幾個加到卡片裡
+        section("目前主題：" + ThemeStore.nameOf(this, active))
+        note("這個主題記得自己的配色、按鍵高度、字體、按鍵動畫、功能鍵貼圖，還有在工作室做的設計。")
+        button("🖌️ 在主題工作室編輯 ›") { openStudio() }
+        if (prefs.theme == "custom") button("🖌 調整自訂配色 ›") { showPage("color") }
+        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（一般手機鍵盤約 45）") { prefs.keyHeightDp = it }
+        val links = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, (6 * dp).toInt(), 0, 0) }
+        for ((label, id) in listOf("🔤 字體" to "font", "✨ 按鍵動畫" to "effect", "🖼️ 功能鍵貼圖" to "stickers")) {
+            links.addView(Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 13f
+                minWidth = 0
+                minimumWidth = 0
+                setPadding((6 * dp).toInt(), 0, (6 * dp).toInt(), 0)
+                // 從這裡點進去的，按返回回到主題頁
+                setOnClickListener { backTo = id to "look"; showPage(id) }
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        root.addView(links)
+        root = outerRoot
+
+        // 2. 換主題、加主題
+        section("換主題")
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun topBtn(label: String, onClick: () -> Unit) = top.addView(Button(this).apply {
             text = label
@@ -703,7 +786,6 @@ class SettingsActivity : Activity() {
             root.addView(line)
         }
         // 不分內建、自己做的：一份清單（自己做的、匯入的放前面）
-        subTitle("主題")
         (all.filter { !it.builtIn } + all.filter { it.builtIn }).forEach { row(it) }
         val hidden = ThemeStore.BUILT_IN.map { it.first }.filter { it in ThemeStore.hiddenBuiltIns(prefs) }
         if (hidden.isNotEmpty()) root.addView(Button(this).apply {
@@ -712,19 +794,8 @@ class SettingsActivity : Activity() {
             setOnClickListener { restoreBuiltInDialog(hidden) }
         })
 
-        // 正在用的主題自己的細節（存在主題裡）
-        section("目前主題：" + ThemeStore.nameOf(this, active))
-        slider("按鍵高度", 36, 64, prefs.keyHeightDp, " dp（一般手機鍵盤約 45）") { prefs.keyHeightDp = it }
-        if (prefs.theme == "custom") root.addView(Button(this).apply {
-            text = "🖌 調整自訂配色 ›"
-            isAllCaps = false
-            setOnClickListener { showPage("color") }
-        })
-        button("🖌️ 在主題工作室編輯 ›") { openStudio() }
-        subTitle("功能鍵貼圖")
-        pageSticker()
-
-        // 主題圖片的存法（所有主題共用，不跟著主題換）
+        // 3. 進階：主題圖片的存法（所有主題共用，不跟著主題換）
+        section("進階")
         subTitle("圖片存法")
         radios(
             listOf(
@@ -866,6 +937,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageFont() {
+        themeBanner("字體選擇")
         note("照文字種類分三組，可以各用不同字體。例如注音鍵上的「ㄅ」用注音字體、下面的小「1」用英文字體。")
         subTitle("中文字體（選字列、中文字、全形標點「」，。）")
         radios(Fonts.options(this), prefs.zhFont) { prefs.zhFont = it }
@@ -912,15 +984,19 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageEffect() {
+        themeBanner("按鍵動畫")
         note("選好之後，在上面的預覽鍵盤按按看。")
         radios(PressEffects.ALL, prefs.pressEffect) { prefs.pressEffect = it }
         note("想自己決定動畫怎麼動、飛出什麼、什麼顏色，或只讓某幾顆鍵用特別的動畫，到主題工作室調：")
         button("🎨 打開主題工作室") { startActivity(Intent(this, StudioActivity::class.java).putExtra(StudioActivity.EXTRA_FROM_SETTINGS, true)) }
     }
 
-    private fun pageSticker() {
-        note("從相簿選圖片貼在功能鍵上（去背的 PNG 效果最好）。圖片會縮小後存在 App 裡，相簿的原圖刪掉也沒關係。")
+    private fun pageStickers() {
+        themeBanner("功能鍵貼圖")
+        note("從相簿選圖片貼在功能鍵上（去背的 PNG 效果最好），圖片會縮放到按鍵裡面。圖片會縮小後存在 App 裡，相簿的原圖刪掉也沒關係。")
         for (slot in StickerSlot.values()) stickerRow(slot)
+        note("想要更多變化（圖片超出按鍵、會動的 GIF、Shift 大小寫不同），用主題工作室在那顆鍵上加圖案：")
+        button("🖌️ 打開主題工作室") { openStudio() }
     }
 
     private fun pageColor() {
@@ -1228,21 +1304,44 @@ class SettingsActivity : Activity() {
     }
 
     private fun pageTips() {
-        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・分段選字：選好的字會先留在注音小框框，全部選完才送出；按刪除鍵會先把選好的字退回成注音\n・長按注音鍵會跳出選單，手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫\n・符號鍵盤可以左右滑換頁")
+        subTitle("打字")
+        note("・不打聲調也可以：ㄋㄧㄏㄠ → 你好\n・選錯被記住的字：打字時長按選字列上那個詞，按「移除」就會忘掉\n・選字列可以左右滑，按右邊的箭頭可以展開全部選項\n・分段選字：選好的字會先留在注音小框框，全部選完才送出；按刪除鍵會先把選好的字退回成注音\n・長按注音鍵會跳出選單，手指左右滑選大寫、注音符號或小寫／數字，放開就直接打出來\n・長按空白鍵可以切換到其他輸入法\n・按住刪除鍵會連續刪除\n・英文模式點兩下 Shift 會鎖定大寫\n・符號鍵盤可以左右滑換頁；剪貼簿上下滑看更多紀錄")
+        subTitle("主題工作室")
+        note("・想從桌面直接打開：長按桌面空白處 →「小工具」→ 找「貓爪鍵盤」，把「主題工作室」拉到桌面上\n・也可以長按桌面上貓爪鍵盤的圖示，選「主題工作室」\n・手機轉橫時，鍵盤預覽在左、設定在右，編輯區比較大")
+        subTitle("平板、手機橫放")
+        note("・鍵盤跟手機直放一樣大、放在中間，主題的圖不會被拉扁\n・想大一點：「鍵盤大小與位置」裡把按鍵高度調高，整個鍵盤等比例放大")
     }
 
     // ---------- 快捷符號列（一個按鈕一行） ----------
 
     private fun pageQuick() {
+        // 下面的編輯區：開關關著時變淡（還是可以先改好）
+        val editor = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val offNote = TextView(this).apply {
+            text = "快捷符號列現在關著，打開上面的開關才會顯示在鍵盤上（下面可以先改好）。"
+            textSize = 13f
+            setPadding(0, 0, 0, (6 * dp).toInt())
+        }
+        fun dim(on: Boolean) {
+            editor.alpha = if (on) 1f else 0.45f
+            offNote.visibility = if (on) View.GONE else View.VISIBLE
+        }
         root.addView(Switch(this).apply {
             text = "在按鍵上面多一排快捷符號"
             isChecked = prefs.quickBar
-            setOnCheckedChangeListener { _, b -> prefs.quickBar = b }
+            setOnCheckedChangeListener { _, b -> prefs.quickBar = b; dim(b) }
             setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
         })
+        root.addView(offNote)
+        root.addView(editor)
+        dim(prefs.quickBar)
+        val outerRoot = root
+        root = editor // 下面的東西都放進編輯區
         note("每一行是一個按鈕，最多 ${Prefs.MAX_QUICK} 個：\n・兩個字（像 () 或 「」）：一次打出一組，游標停在中間；先選取文字再按會把它包起來\n・用 | 標游標位置，例如 **|**\n・⇤ 跳到最前面、⇥ 跳到最後面、◀ ▶ 游標左右移一格\n・取消勾選＝暫時不顯示，不用刪掉")
 
         val items = prefs.quickEntries().toMutableList()
+        // 改了就存（跟其他頁一樣，不用按儲存）；還沒填字的空白按鈕先不存
+        fun persist() = prefs.setQuickEntries(items.filter { it.text.isNotBlank() })
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(list)
         lateinit var addButton: Button
@@ -1266,7 +1365,7 @@ class SettingsActivity : Activity() {
                 }
                 row.addView(android.widget.CheckBox(this).apply {
                     isChecked = q.on
-                    setOnCheckedChangeListener { _, b -> items[i] = items[i].copy(on = b) }
+                    setOnCheckedChangeListener { _, b -> items[i] = items[i].copy(on = b); persist() }
                 })
                 row.addView(EditText(this).apply {
                     setText(q.text)
@@ -1278,16 +1377,17 @@ class SettingsActivity : Activity() {
                         override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                         override fun afterTextChanged(s: android.text.Editable?) {
                             items[i] = items[i].copy(text = s?.toString()?.replace(" ", "") ?: "")
+                            persist()
                         }
                     })
                 }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 row.addView(smallButton("↑") {
-                    if (i > 0) { items.add(i - 1, items.removeAt(i)); render() }
+                    if (i > 0) { items.add(i - 1, items.removeAt(i)); persist(); render() }
                 })
                 row.addView(smallButton("↓") {
-                    if (i < items.size - 1) { items.add(i + 1, items.removeAt(i)); render() }
+                    if (i < items.size - 1) { items.add(i + 1, items.removeAt(i)); persist(); render() }
                 })
-                row.addView(smallButton("刪除") { items.removeAt(i); render() })
+                row.addView(smallButton("刪除") { items.removeAt(i); persist(); render() })
                 list.addView(row)
             }
             addButton.isEnabled = items.size < Prefs.MAX_QUICK
@@ -1304,7 +1404,7 @@ class SettingsActivity : Activity() {
         val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for ((sym, desc) in listOf("⇤" to "最前", "⇥" to "最後", "◀" to "左移", "▶" to "右移")) {
             chips.addView(smallButton("$sym $desc") {
-                if (items.size < Prefs.MAX_QUICK) { items.add(Prefs.QuickEntry(sym, true)); render() }
+                if (items.size < Prefs.MAX_QUICK) { items.add(Prefs.QuickEntry(sym, true)); persist(); render() }
                 else android.widget.Toast.makeText(this, "最多 ${Prefs.MAX_QUICK} 個", android.widget.Toast.LENGTH_SHORT).show()
             })
         }
@@ -1315,26 +1415,13 @@ class SettingsActivity : Activity() {
             setPadding(0, (16 * dp).toInt(), 0, 0)
         }
         actions.addView(Button(this).apply {
-            text = "儲存"
+            text = "↺ 恢復預設的按鈕"
             isAllCaps = false
-            setOnClickListener {
-                val cleaned = items.filter { it.text.isNotBlank() }
-                prefs.setQuickEntries(cleaned)
-                items.clear(); items.addAll(cleaned); render()
-                android.widget.Toast.makeText(this@SettingsActivity, "已儲存", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        })
-        actions.addView(Button(this).apply {
-            text = "取消"
-            isAllCaps = false
-            setOnClickListener { items.clear(); items.addAll(prefs.quickEntries()); render() }
-        })
-        actions.addView(Button(this).apply {
-            text = "恢復預設"
-            isAllCaps = false
-            setOnClickListener { items.clear(); items.addAll(Prefs.defaultQuickEntries()); render() }
+            setOnClickListener { items.clear(); items.addAll(Prefs.defaultQuickEntries()); persist(); render() }
         })
         root.addView(actions)
+        note("改了就會存，不用按儲存。")
+        root = outerRoot
         render()
     }
 
@@ -1354,6 +1441,10 @@ class SettingsActivity : Activity() {
         if (hasFocus) updateStatus() // 從輸入法選單回來時更新
     }
 
+    /** 首頁的 ①、② 按鈕（用不到的時候藏起來） */
+    private var enableButton: Button? = null
+    private var switchButton: Button? = null
+
     private fun updateStatus() {
         val status = status ?: return
         val imm = getSystemService(InputMethodManager::class.java)
@@ -1365,6 +1456,8 @@ class SettingsActivity : Activity() {
             enabled -> "已啟用，再按 ② 切換過去就可以用了"
             else -> "還沒啟用，先按 ①，在清單裡打開「${getString(R.string.ime_name)}」"
         }
+        enableButton?.visibility = if (enabled) View.GONE else View.VISIBLE
+        switchButton?.visibility = if (current) View.GONE else View.VISIBLE
     }
 
     // ---------- 小工具 ----------
@@ -1387,7 +1480,7 @@ class SettingsActivity : Activity() {
     /** 隱私權：App 裡的簡短版，完整版在 docs/privacy-policy.md（商店頁填的也是那個網址） */
     private fun pagePrivacy() {
         note("🐾 貓爪鍵盤沒有網路權限，不能連上網路，所以你打的字、設定和圖片都只留在這支手機裡，不會傳給任何人（包括我們）。沒有廣告、沒有追蹤、不用註冊。")
-        note("手機裡會存的東西：\n・選字記憶（你挑過的字、英文常打的字）\n・剪貼簿紀錄（最多 20 筆，沒釘選的 1 小時後自動刪掉）\n・最近用過的符號、表情\n・設定、主題，還有你自己選的圖片和字體")
+        note("手機裡會存的東西：\n・選字記憶（你挑過的字、英文常打的字）\n・剪貼簿紀錄（最多 20 筆，沒釘選的預設 1 小時後自動刪掉，可以在剪貼簿頁改）\n・最近用過的符號、表情\n・設定、主題，還有你自己選的圖片和字體")
         note("特別不記的：\n・密碼欄位\n・無痕模式（例如瀏覽器的無痕分頁）\n・標成機密的剪貼簿內容（例如密碼管理 App 複製的）")
         note("Android 的系統備份可能會把設定、主題和選字記憶備份到你自己的 Google 帳號（我們看不到），剪貼簿紀錄不會備份。解除安裝貓爪鍵盤，所有資料都會一起刪掉。")
         button("清除學習紀錄…") { showPage("candidate") }
